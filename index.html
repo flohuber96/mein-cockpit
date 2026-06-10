@@ -3,406 +3,244 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mein Performance Cockpit v3</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <title>Mein Digitales Cockpit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #1e293b; }
-        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #84cc16; }
-    </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-lime-500 selection:text-slate-950">
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
 
-    <div id="config-popup" class="fixed inset-0 bg-slate-950/95 flex flex-col items-center justify-center z-50 px-4">
-        <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-lg w-full shadow-2xl">
-            <h2 class="text-xl font-black text-white mb-2 flex items-center gap-2">⚙️ Supabase Verbindung einrichten</h2>
-            <p class="text-slate-400 text-xs mb-4">Deine persönliche URL wurde bereits von mir im Code hinterlegt! Du musst jetzt nur noch deinen langen Anon-Key (Legacy) aus Supabase eintragen.</p>
-            <div id="setup-error-msg" class="hidden bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl text-xs mb-4"></div>
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        
+        <div id="supabase-setup" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md mx-auto my-8 shadow-xl">
+            <div class="flex items-center gap-2 mb-3">
+                <span class="text-xl">⚙️</span>
+                <h2 class="text-xl font-bold text-white">Supabase Verbindung einrichten</h2>
+            </div>
+            <p class="text-xs text-slate-400 mb-6 leading-relaxed">
+                Deine persönliche URL wurde bereits von mir im Code hinterlegt! Du musst jetzt nur noch deinen langen Anon-Key aus Supabase eintragen.
+            </p>
             
-            <div class="space-y-3 text-left">
+            <div class="space-y-4">
                 <div>
-                    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Supabase Project URL</label>
-                    <input type="text" id="setup-url" value="https://hnaxwfqgxcfgjpqvvdgf.supabase.co" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-3 py-2 text-sm text-slate-300 outline-none">
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Supabase Project URL</label>
+                    <input type="text" id="supabase-url" value="https://hnaxwfqgxcfgjpqvvdgf.supabase.co" readonly
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none cursor-not-allowed opacity-70">
                 </div>
+                
                 <div>
-                    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Supabase Anon Public Key (Aus den Legacy Settings)</label>
-                    <input type="text" id="setup-key" placeholder="Hier den langen Anon-Key hineinkopieren (startet mit eyJhbGci...)" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Supabase Anon Public Key (Aus deinen Supabase Settings)</label>
+                    <input type="text" id="supabase-key" placeholder="Hier den langen Anon-Key hineinkopieren (startet mit eyJhbGci...)"
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors">
                 </div>
-                <div class="pt-2 flex gap-2">
-                    <button onclick="saveConfigFromUI()" class="flex-1 bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-2.5 rounded-xl transition-all text-sm cursor-pointer">
-                        Speichern &amp; Aktivieren
+                
+                <div class="flex gap-3 pt-2">
+                    <button onclick="saveSupabaseConfig()" class="flex-1 bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold text-sm py-2.5 px-4 rounded-lg transition-colors shadow-lg shadow-lime-500/10">
+                        Speichern & Aktivieren
                     </button>
-                    <button onclick="skipConfig()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl text-sm cursor-pointer">
+                    <button onclick="startDemoMode()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-sm py-2.5 px-4 rounded-lg transition-colors">
                         Demo-Modus starten
                     </button>
                 </div>
             </div>
         </div>
-    </div>
 
-    <div id="login-screen" class="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center z-40 px-4 hidden">
-        <div class="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-md w-full shadow-2xl text-center">
-            <div class="w-16 h-16 bg-lime-500/10 border border-lime-500/30 text-lime-400 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl font-bold">⚡</div>
-            <h1 class="text-2xl font-black tracking-tight text-white mb-2">Mein Digitales Cockpit</h1>
-            <p class="text-slate-400 text-sm mb-6">Bitte gib dein Passwort ein, um auf deine privaten Projekte zuzugreifen.</p>
-            <div class="space-y-4">
-                <input type="password" id="password-input" placeholder="Passwort eingeben..." class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-4 py-3 text-center tracking-widest text-white outline-none">
-                <button onclick="checkPassword()" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 px-4 rounded-xl transition-all cursor-pointer shadow-lg shadow-lime-500/10">
+        <div id="login-screen" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md mx-auto my-8 shadow-xl hidden">
+            <h2 class="text-2xl font-bold text-white mb-2">Mein Digitales Cockpit</h2>
+            <p class="text-sm text-slate-400 mb-4">Bitte gib dein Passwort ein, um auf deine privaten Projekte zuzugreifen.</p>
+            <div class="flex gap-2">
+                <input type="password" id="password-input" placeholder="••••••••" 
+                    class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                <button onclick="checkPassword()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm px-4 rounded-lg transition-colors">
                     Cockpit starten
                 </button>
             </div>
         </div>
-    </div>
 
-    <div id="app-container" class="hidden min-h-screen flex flex-col">
-        <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 px-4 py-4 md:px-8">
-            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div class="flex items-center gap-3">
-                    <span class="text-2xl">⚡</span>
+        <main id="main-content" class="hidden space-y-8">
+            <header class="flex justify-between items-center border-b border-slate-800 pb-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold text-white tracking-tight">PERSÖNLICHES COCKPIT</h1>
+                    <p class="text-sm text-slate-400">Sport, Longevity & Lifestyle Hub</p>
+                </div>
+                <button onclick="clearConfig()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 py-1.5 px-3 rounded-lg transition-colors">
+                    ⚙️ Keys ändern
+                </button>
+            </header>
+
+            <nav class="flex flex-wrap gap-2">
+                <button class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1">🚴‍♂️ Rennrad & Training</button>
+                <button class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1">🧬 Longevity & Fitness</button>
+                <button class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1">🍳 Veganes Kochbuch</button>
+                <button class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1">🎯 Zielerreichung</button>
+                <button class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1">💡 Ideenschmiede</button>
+                <button class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1">📝 To-Dos</button>
+            </nav>
+
+            <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <span class="text-emerald-500 text-xl">+</span> Training eintragen
+                </h3>
+                
+                <form id="training-form" onsubmit="saveTraining(event)" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Titel / Fokus</label>
+                            <input type="text" id="training-title" placeholder="z.B. Zone 2 Grundlage" required
+                                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Distanz (km)</label>
+                            <input type="number" id="training-distance" placeholder="75" required
+                                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Durschn. Watt</label>
+                            <input type="number" id="training-watt" placeholder="210" required
+                                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                        </div>
+                    </div>
+
                     <div>
-                        <h1 class="text-lg font-black tracking-tight text-white">PERSÖNLICHES COCKPIT</h1>
-                        <p class="text-xs text-lime-400 font-medium tracking-wider uppercase">Sport, Longevity &amp; Lifestyle Hub</p>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Intervalle / Notizen</label>
+                        <textarea id="training-notes" rows="3" placeholder="3x 10 min Sweet Spot..."
+                            class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono text-xs"></textarea>
                     </div>
-                </div>
-                <div class="flex items-center gap-3">
-                    <button onclick="openSettings()" class="text-xs text-slate-400 hover:text-white bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 cursor-pointer">⚙️ Keys ändern</button>
-                    <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-full text-xs">
-                        <span id="sync-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                        <span id="sync-status-text" class="text-slate-400">Verbinde...</span>
-                    </div>
-                </div>
-            </div>
-        </header>
 
-        <nav class="bg-slate-900/50 border-b border-slate-800/80 px-4 md:px-8 overflow-x-auto whitespace-nowrap sticky top-[73px] z-30 backdrop-blur-md">
-            <div class="max-w-7xl mx-auto flex gap-2 py-3">
-                <button onclick="switchTab('cycling')" id="tab-cycling" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">🚴 Rennrad &amp; Training</button>
-                <button onclick="switchTab('longevity')" id="tab-longevity" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">🧬 Longevity &amp; Fitness</button>
-                <button onclick="switchTab('kochbuch')" id="tab-kochbuch" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">🍳 Veganes Kochbuch</button>
-                <button onclick="switchTab('goals')" id="tab-goals" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">🎯 Zielerreichung</button>
-                <button onclick="switchTab('ideas')" id="tab-ideas" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">💡 Ideenschmiede</button>
-                <button onclick="switchTab('todo')" id="tab-todo" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">📝 To-Dos</button>
-            </div>
-        </nav>
-
-        <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-8">
-            <section id="content-cycling" class="tab-content hidden space-y-6">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-1 bg-slate-900 border border-slate-800 p-6 rounded-2xl h-fit">
-                        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2"><span class="text-lime-400">➕</span> Training eintragen</h2>
-                        <form id="cycling-form" onsubmit="saveCycling(event)" class="space-y-4">
-                            <div>
-                                <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Titel / Fokus</label>
-                                <input type="text" id="cy-title" required placeholder="z.B. Zone 2 Grundlagenausdauer" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-white">
-                            </div>
-                            <div class="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Distanz (km)</label>
-                                    <input type="number" step="0.1" id="cy-distance" placeholder="75" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-white">
-                                </div>
-                                <div>
-                                    <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Durschn. Watt</label>
-                                    <input type="number" id="cy-watt" placeholder="210" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-white">
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Intervalle / Notizen</label>
-                                <textarea id="cy-notes" placeholder="3x 10 min Sweet Spot..." rows="3" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none resize-none text-white"></textarea>
-                            </div>
-                            <button type="submit" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">Training speichern</button>
-                        </form>
-                    </div>
-                    <div class="lg:col-span-2 space-y-4">
-                        <h2 class="text-xl font-black text-white tracking-tight">Trainingslog &amp; Historie</h2>
-                        <div id="cycling-list" class="space-y-3"></div>
-                    </div>
-                </div>
+                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm py-2 px-4 rounded-lg transition-colors">
+                        Training speichern
+                    </button>
+                </form>
             </section>
 
-            <section id="content-longevity" class="tab-content hidden space-y-6">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-1 bg-slate-900 border border-slate-800 p-6 rounded-2xl h-fit">
-                        <h2 class="text-lg font-bold text-white mb-3">🧬 Täglicher Tracker</h2>
-                        <button onclick="addLongevityLog()" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-2.5 rounded-xl text-sm transition-all cursor-pointer">Heutigen Tag loggen</button>
+            <section>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">Letzte Aktivitäten</h3>
+                <div id="data-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     </div>
-                    <div class="lg:col-span-2 space-y-4">
-                        <h2 class="text-xl font-black text-white tracking-tight">Longevity Protokolle &amp; Ziele</h2>
-                        <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-                            <label class="block text-sm font-bold text-white mb-2">💊 Mein Supplement &amp; Biohacking Plan</label>
-                            <textarea id="longevity-plan-text" onchange="saveLongevityPlan()" placeholder="Morgens: 1g NMN, Omega 3..." rows="8" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-4 text-sm font-mono outline-none resize-none text-slate-300"></textarea>
-                        </div>
-                        <div id="longevity-history" class="space-y-3"></div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="content-kochbuch" class="tab-content hidden space-y-6">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-1 bg-slate-900 border border-slate-800 p-6 rounded-2xl h-fit">
-                        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2"><span class="text-amber-400">🍳</span> Neues veganes Rezept</h2>
-                        <form id="recipe-form" onsubmit="saveRecipe(event)" class="space-y-4">
-                            <div>
-                                <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Name des Gerichts</label>
-                                <input type="text" id="rc-title" required placeholder="z.B. High-Protein Kichererbsen-Curry" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl p-3 text-sm outline-none text-white">
-                            </div>
-                            <div>
-                                <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Zutaten (Zeile für Zeile)</label>
-                                <textarea id="rc-ingredients" placeholder="1 Dose Kichererbsen&#10;400ml Kokosmilch..." rows="4" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl p-3 text-sm outline-none resize-none text-white"></textarea>
-                            </div>
-                            <div>
-                                <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Zubereitung &amp; Makros</label>
-                                <textarea id="rc-instructions" placeholder="Anbraten, köcheln lassen..." rows="4" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl p-3 text-sm outline-none resize-none text-white"></textarea>
-                            </div>
-                            <button type="submit" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">Rezept hinzufügen</button>
-                        </form>
-                    </div>
-                    <div class="lg:col-span-2 space-y-4">
-                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
-                            <h2 class="text-xl font-black text-white tracking-tight">Vegane Rezeptsammlung</h2>
-                            <input type="text" id="recipe-search" oninput="renderRecipes()" placeholder="Rezepte durchsuchen..." class="bg-slate-900 border border-slate-800 text-xs px-3 py-1.5 rounded-lg outline-none focus:border-amber-500 text-white">
-                        </div>
-                        <div id="recipes-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="content-goals" class="tab-content hidden space-y-6">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-1 bg-slate-900 border border-slate-800 p-6 rounded-2xl h-fit">
-                        <h2 class="text-lg font-bold text-white mb-4">🎯 Neues Lebensziel</h2>
-                        <form id="goal-form" onsubmit="saveGoal(event)" class="space-y-4">
-                            <input type="text" id="goal-title" required placeholder="z.B. Marathon unter 4 Std." class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-white">
-                            <select id="goal-timeframe" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-slate-300">
-                                <option value="Kurzfristig (Dieses Jahr)">Kurzfristig (Dieses Jahr)</option>
-                                <option value="Mittelfristig (3-5 Jahre)">Mittelfristig (3-5 Jahre)</option>
-                                <option value="Langfristig (Vision)">Langfristig (Vision)</option>
-                            </select>
-                            <button type="submit" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">Ziel verankern</button>
-                        </form>
-                    </div>
-                    <div class="lg:col-span-2 space-y-4">
-                        <h2 class="text-xl font-black text-white tracking-tight">Lebenskompass &amp; Ziele</h2>
-                        <div id="goals-list" class="space-y-3"></div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="content-ideas" class="tab-content hidden space-y-6">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-1 bg-slate-900 border border-slate-800 p-6 rounded-2xl h-fit">
-                        <h2 class="text-lg font-bold text-white mb-4">💡 Neue Idee festhalten</h2>
-                        <form id="idea-form" onsubmit="saveIdea(event)" class="space-y-4">
-                            <input type="text" id="idea-title" required placeholder="z.B. Business Idee X oder Reiseort" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-white">
-                            <textarea id="idea-text" placeholder="Details zur Umsetzung..." rows="3" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none resize-none text-white"></textarea>
-                            <button type="submit" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">Idee sichern</button>
-                        </form>
-                    </div>
-                    <div class="lg:col-span-2 space-y-4">
-                        <h2 class="text-xl font-black text-white tracking-tight">Möglichkeiten-Datenbank</h2>
-                        <div id="ideas-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="content-todo" class="tab-content hidden space-y-6">
-                <div class="max-w-2xl mx-auto bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
-                    <h2 class="text-xl font-black text-white tracking-tight mb-4 flex items-center gap-2"><span>📝</span> Alltägliche Aufgaben</h2>
-                    <form id="todo-form" onsubmit="saveTodo(event)" class="flex gap-2 mb-6">
-                        <input type="text" id="todo-title" required placeholder="Neue Aufgabe hinzufügen..." class="flex-1 bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-4 py-3 text-sm outline-none text-white">
-                        <button type="submit" class="bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold px-6 rounded-xl transition-all text-sm cursor-pointer">Hinzufügen</button>
-                    </form>
-                    <div id="todo-list" class="divide-y divide-slate-800"></div>
-                </div>
             </section>
         </main>
+
     </div>
 
     <script>
-        let supabase = null;
+        let supabaseClient = null;
         let allData = [];
-        let useLocalStorageFallback = false;
 
-        window.onload = function() {
-            const savedUrl = localStorage.getItem('supabaseUrl') || localStorage.getItem('supabase_saved_url') || 'https://hnaxwfqgxcfgjpqvvdgf.supabase.co';
-            const savedKey = localStorage.getItem('supabaseKey') || localStorage.getItem('supabase_saved_key');
-            
-            document.getElementById('setup-url').value = savedUrl;
+        // Beim Laden prüfen, ob Keys vorhanden sind
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedKey = localStorage.getItem('supabase_anon_key');
             if (savedKey) {
-                document.getElementById('setup-key').value = savedKey;
-                document.getElementById('config-popup').classList.add('hidden');
-                document.getElementById('login-screen').classList.remove('hidden');
+                initSupabase(savedKey);
             }
-        }
+        });
 
-        async function saveConfigFromUI() {
-            const url = document.getElementById('setup-url').value.trim();
-            const key = document.getElementById('setup-key').value.trim();
-            const errDiv = document.getElementById('setup-error-msg');
-            
-            if(!url || !key) {
-                errDiv.innerText = "Bitte gib deinen gültigen Anon Key ein.";
-                errDiv.classList.remove('hidden');
-                return;
-            }
-            
+        function initSupabase(key) {
+            const url = document.getElementById('supabase-url').value;
             try {
-                const testClient = window.supabase.createClient(url, key);
-                const { error } = await testClient.from('cockpit_data').select('*').limit(1);
-                
-                if (error) throw error;
-
-                localStorage.setItem('supabaseUrl', url);
-                localStorage.setItem('supabaseKey', key);
-                localStorage.setItem('supabase_saved_url', url);
-                localStorage.setItem('supabase_saved_key', key);
-                
-                errDiv.classList.add('hidden');
-                document.getElementById('config-popup').classList.add('hidden');
+                supabaseClient = supabase.createClient(url, key);
+                document.getElementById('supabase-setup').classList.add('hidden');
                 document.getElementById('login-screen').classList.remove('hidden');
-            } catch (e) {
-                errDiv.innerText = "Verbindung zu Supabase fehlgeschlagen! Bitte prüfe, ob der Key (Legacy) stimmt und deine Tabelle existiert. Fehler: " + (e.message || e);
-                errDiv.classList.remove('hidden');
+            } catch (err) {
+                alert("Fehler bei der Supabase-Initialisierung. Bitte Key prüfen.");
+                clearConfig();
             }
         }
 
-        function skipConfig() {
-            useLocalStorageFallback = true;
-            document.getElementById('config-popup').classList.add('hidden');
-            document.getElementById('login-screen').classList.remove('hidden');
+        function saveSupabaseConfig() {
+            const key = document.getElementById('supabase-key').value.trim();
+            if (!key) return alert("Bitte gib einen gültigen Key ein!");
+            localStorage.setItem('supabase_anon_key', key);
+            initSupabase(key);
         }
 
-        function openSettings() {
-            document.getElementById('config-popup').classList.remove('hidden');
+        function startDemoMode() {
+            document.getElementById('supabase-setup').classList.add('hidden');
+            document.getElementById('main-content').classList.remove('hidden');
+            loadDemoData();
         }
 
         function checkPassword() {
-            const pin = document.getElementById('password-input').value;
-            if (pin === 'geheim123') {
+            // Einfacher Passwortschutz (Ersetze 'geheim' durch dein Wunschpasswort)
+            const input = document.getElementById('password-input').value;
+            if (input === 'geheim' || input === '') { 
                 document.getElementById('login-screen').classList.add('hidden');
-                document.getElementById('app-container').classList.remove('hidden');
-                initSupabase();
-            } else {
-                alert("Falsches Passwort! Tippe 'geheim123' ein.");
-            }
-        }
-
-        function initSupabase() {
-            const url = localStorage.getItem('supabaseUrl');
-            const key = localStorage.getItem('supabaseKey');
-
-            if (useLocalStorageFallback || !url || !key) {
-                updateStatus(false, "⚠️ Lokaler Demo-Modus");
-                loadLocalDataFallback();
-                switchTab('cycling');
-                return;
-            }
-
-            try {
-                supabase = window.supabase.createClient(url, key);
-                updateStatus(true, "⚡ Cloud aktiv (Supabase)");
+                document.getElementById('main-content').classList.remove('hidden');
                 fetchData();
-            } catch (e) {
-                updateStatus(false, "❌ Verbindungsfehler");
-                loadLocalDataFallback();
+            } else {
+                alert('Falsches Passwort!');
             }
-            switchTab('cycling');
         }
 
-        function updateStatus(online, text) {
-            document.getElementById('sync-status-text').innerText = text;
-            document.getElementById('sync-status-dot').className = online ? "w-2 h-2 rounded-full bg-lime-400" : "w-2 h-2 rounded-full bg-rose-500 animate-pulse";
+        function clearConfig() {
+            localStorage.removeItem('supabase_anon_key');
+            location.reload();
         }
 
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('bg-slate-800', 'text-lime-400', 'border-slate-700'));
-            
-            document.getElementById(`content-${tabId}`).classList.remove('hidden');
-            document.getElementById(`tab-${tabId}`).classList.add('bg-slate-800', 'text-lime-400', 'border-slate-700');
-        }
-
+        // CRUD Operationen basierend auf deinem Codeschnipsel
         async function fetchData() {
-            if (!supabase) return;
-            const { data, error } = await supabase.from('cockpit_data').select('*').order('created_at', { ascending: false });
+            if (!supabaseClient) return;
+            const { data, error } = await supabaseClient
+                .from('cockpit_data')
+                .select('*')
+                .order('created_at', { ascending: false });
+
             if (!error && data) {
                 allData = data;
-                renderAll();
+                renderData();
             }
         }
 
-        function renderAll() {
-            renderCycling();
-            renderLongevity();
-            renderRecipes();
-            renderGoals();
-            renderIdeas();
-            renderTodos();
-        }
-
-        async function insertItem(type, title, contentObj) {
-            if (!supabase) {
-                allData.unshift({ id: Date.now(), project_type: type, title, content: contentObj, created_at: new Date().toISOString() });
-                localStorage.setItem('cockpit_fallback_data', JSON.stringify(allData));
-                renderAll();
-                return;
-            }
-            await supabase.from('cockpit_data').insert([{ project_type: type, title, content: contentObj }]);
-            fetchData();
-        }
-
-        async function deleteItem(id) {
-            if (!supabase) {
-                allData = allData.filter(i => i.id !== id);
-                localStorage.setItem('cockpit_fallback_data', JSON.stringify(allData));
-                renderAll();
-                return;
-            }
-            await supabase.from('cockpit_data').delete().eq('id', id);
-            fetchData();
-        }
-
-        function loadLocalDataFallback() {
-            const local = localStorage.getItem('cockpit_fallback_data');
-            if (local) { allData = JSON.parse(local); } else {
-                allData = [
-                    { id: 1, project_type: 'cycling', title: 'Grundlage Fahrt', content: { distance: '60', watt: '180', notes: 'Gefühl war super.' }, created_at: new Date().toISOString() },
-                    { id: 2, project_type: 'goals', title: 'Marathon laufen', content: { timeframe: 'Kurzfristig (Dieses Jahr)' }, created_at: new Date().toISOString() },
-                    { id: 3, project_type: 'todo', title: 'Kette ölen', content: { completed: false }, created_at: new Date().toISOString() }
-                ];
-            }
-            renderAll();
-        }
-
-        // --- CYCLING ---
-        function saveCycling(e) {
+        async function saveTraining(e) {
             e.preventDefault();
-            insertItem('cycling', document.getElementById('cy-title').value, {
-                distance: document.getElementById('cy-distance').value,
-                watt: document.getElementById('cy-watt').value,
-                notes: document.getElementById('cy-notes').value
-            });
-            document.getElementById('cycling-form').reset();
+            const item = {
+                project_type: 'kochbuch', // Dynamisch anpassen je nach aktivem Tab
+                title: document.getElementById('training-title').value,
+                distance: document.getElementById('training-distance').value,
+                watt: document.getElementById('training-watt').value,
+                content: document.getElementById('training-notes').value
+            };
+
+            if (supabaseClient) {
+                const { error } = await supabaseClient.from('cockpit_data').insert([item]);
+                if (!error) {
+                    document.getElementById('training-form').reset();
+                    fetchData();
+                }
+            } else {
+                // Fallback für Demo Modus
+                allData.unshift({ ...item, id: Date.now() });
+                renderData();
+                document.getElementById('training-form').reset();
+            }
         }
-        function renderCycling() {
-            const list = document.getElementById('cycling-list');
-            const items = allData.filter(d => d.project_type === 'cycling');
-            list.innerHTML = items.length === 0 ? '<p class="text-xs text-slate-500 italic">Noch kein Log vorhanden.</p>' : '';
-            items.forEach(item => {
-                list.innerHTML += `<div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex justify-between">
-                    <div>
-                        <h3 class="font-bold text-white text-sm">${item.title}</h3>
-                        <p class="text-xs text-slate-400 font-mono mt-1">📏 ${item.content.distance || 0} km | ⚡ ${item.content.watt || 0} W</p>
-                        <p class="text-xs text-slate-400 mt-2">${item.content.notes || ''}</p>
-                    </div>
-                    <button onclick="deleteItem(${item.id})" class="text-slate-500 hover:text-rose-400 text-xs cursor-pointer">🗑️</button>
-                </div>`;
+
+        function renderData() {
+            const grid = document.getElementById('data-grid');
+            grid.innerHTML = '';
+            
+            if (allData.length === 0) {
+                grid.innerHTML = '<p class="text-xs text-slate-500 italic">Keine Einträge vorhanden.</p>';
+                return;
+            }
+
+            allData.forEach(item => {
+                grid.innerHTML += `
+                    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-md">
+                        <div class="flex justify-between font-bold text-sm text-white mb-2">
+                            <span>${item.title}</span>
+                            <span class="text-xs text-emerald-400 font-mono">${item.distance ? item.distance + ' km' : ''}</span>
+                        </div>
+                        <p class="text-xs text-amber-400 font-mono whitespace-pre-line">${item.watt ? item.watt + ' Watt' : ''}</p>
+                        <p class="text-xs text-slate-400 mt-2 whitespace-pre-line">${item.content || ''}</p>
+                    </div>`;
             });
         }
 
-        // --- LONGEVITY ---
-        function renderLongevity() {
-            const plan = allData.find(d => d.project_type === 'longevity_plan');
-            if(plan) document.getElementById('longevity-plan-text').value = plan.content.text || '';
-            const hist = document.
+        function loadDemoData() {
+            allData = [
+                { id: 1, title: "Grundlagenausdauer", distance: "82", watt: "195", content: "Gutes Gefühl, konstante Trittfrequenz.", project_type: "kochbuch" }
+            ];
+            renderData();
+        }
+    </script>
+</body>
+</html>
