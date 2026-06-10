@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mein Performance Cockpit v3</title>
+
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <style>
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
@@ -13,27 +15,34 @@
         ::-webkit-scrollbar-thumb:hover { background: #84cc16; }
     </style>
 </head>
+
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-lime-500 selection:text-slate-950">
 
     <div id="config-popup" class="fixed inset-0 bg-slate-950/95 flex flex-col items-center justify-center z-50 px-4">
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-lg w-full shadow-2xl">
             <h2 class="text-xl font-black text-white mb-2 flex items-center gap-2">⚙️ Supabase Verbindung einrichten</h2>
-            <p class="text-slate-400 text-xs mb-4">Deine persönliche URL wurde bereits von mir im Code hinterlegt! Du musst jetzt nur noch deinen langen Anon-Key (Legacy) aus Supabase eintragen.</p>
+            <p class="text-slate-400 text-xs mb-4">
+                Deine persönliche URL wurde bereits im Code hinterlegt. Trage jetzt nur noch deinen langen Anon Public Key aus Supabase ein.
+            </p>
+
             <div id="setup-error-msg" class="hidden bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl text-xs mb-4"></div>
-            
+
             <div class="space-y-3 text-left">
                 <div>
                     <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Supabase Project URL</label>
                     <input type="text" id="setup-url" value="https://hnaxwfqgxcfgjpqvvdgf.supabase.co" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-3 py-2 text-sm text-slate-300 outline-none">
                 </div>
+
                 <div>
                     <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Supabase Anon Public Key</label>
-                    <input type="text" id="setup-key" placeholder="Hier den langen Anon-Key hineinkopieren..." class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                    <input type="text" id="setup-key" placeholder="Hier den langen Anon Public Key hineinkopieren..." class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-3 py-2 text-sm text-white outline-none">
                 </div>
+
                 <div class="pt-2 flex gap-2">
                     <button onclick="saveConfigFromUI()" class="flex-1 bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-2.5 rounded-xl transition-all text-sm cursor-pointer">
                         Speichern & Aktivieren
                     </button>
+
                     <button onclick="skipConfig()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl text-sm cursor-pointer">
                         Demo-Modus starten
                     </button>
@@ -47,8 +56,10 @@
             <div class="w-16 h-16 bg-lime-500/10 border border-lime-500/30 text-lime-400 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl font-bold">⚡</div>
             <h1 class="text-2xl font-black tracking-tight text-white mb-2">Mein Digitales Cockpit</h1>
             <p class="text-slate-400 text-sm mb-6">Bitte gib dein Passwort ein, um auf deine privaten Projekte zuzugreifen.</p>
+
             <div class="space-y-4">
                 <input type="password" id="password-input" placeholder="Passwort eingeben..." class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-4 py-3 text-center tracking-widest text-white outline-none">
+
                 <button onclick="checkPassword()" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 px-4 rounded-xl transition-all cursor-pointer shadow-lg shadow-lime-500/10">
                     Cockpit starten
                 </button>
@@ -66,8 +77,12 @@
                         <p class="text-xs text-lime-400 font-medium tracking-wider uppercase">Sport, Longevity & Lifestyle Hub</p>
                     </div>
                 </div>
+
                 <div class="flex items-center gap-3">
-                    <button onclick="openSettings()" class="text-xs text-slate-400 hover:text-white bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 cursor-pointer">⚙️ Keys ändern</button>
+                    <button onclick="openSettings()" class="text-xs text-slate-400 hover:text-white bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 cursor-pointer">
+                        ⚙️ Keys ändern
+                    </button>
+
                     <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-full text-xs">
                         <span id="sync-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
                         <span id="sync-status-text" class="text-slate-400">Verbinde...</span>
@@ -88,32 +103,41 @@
         </nav>
 
         <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-8">
+
             <section id="content-cycling" class="tab-content hidden space-y-6">
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-1 bg-slate-900 border border-slate-800 p-6 rounded-2xl h-fit">
                         <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2"><span class="text-lime-400">➕</span> Training eintragen</h2>
+
                         <form id="cycling-form" onsubmit="saveCycling(event)" class="space-y-4">
                             <div>
                                 <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Titel / Fokus</label>
                                 <input type="text" id="cy-title" required placeholder="z.B. Zone 2 Grundlagenausdauer" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-white">
                             </div>
+
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
                                     <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Distanz (km)</label>
                                     <input type="number" step="0.1" id="cy-distance" placeholder="75" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-white">
                                 </div>
+
                                 <div>
                                     <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Durschn. Watt</label>
                                     <input type="number" id="cy-watt" placeholder="210" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-white">
                                 </div>
                             </div>
+
                             <div>
                                 <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Intervalle / Notizen</label>
                                 <textarea id="cy-notes" placeholder="3x 10 min Sweet Spot..." rows="3" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none resize-none text-white"></textarea>
                             </div>
-                            <button type="submit" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">Training speichern</button>
+
+                            <button type="submit" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">
+                                Training speichern
+                            </button>
                         </form>
                     </div>
+
                     <div class="lg:col-span-2 space-y-4">
                         <h2 class="text-xl font-black text-white tracking-tight">Trainingslog & Historie</h2>
                         <div id="cycling-list" class="space-y-3"></div>
@@ -125,14 +149,20 @@
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-1 bg-slate-900 border border-slate-800 p-6 rounded-2xl h-fit">
                         <h2 class="text-lg font-bold text-white mb-3">🧬 Täglicher Tracker</h2>
-                        <button onclick="addLongevityLog()" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-2.5 rounded-xl text-sm transition-all cursor-pointer">Heutigen Tag loggen</button>
+
+                        <button onclick="addLongevityLog()" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-2.5 rounded-xl text-sm transition-all cursor-pointer">
+                            Heutigen Tag loggen
+                        </button>
                     </div>
+
                     <div class="lg:col-span-2 space-y-4">
                         <h2 class="text-xl font-black text-white tracking-tight">Longevity Protokolle & Ziele</h2>
+
                         <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
                             <label class="block text-sm font-bold text-white mb-2">💊 Mein Supplement & Biohacking Plan</label>
                             <textarea id="longevity-plan-text" onchange="saveLongevityPlan()" placeholder="Morgens: 1g NMN, Omega 3..." rows="8" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-4 text-sm font-mono outline-none resize-none text-slate-300"></textarea>
                         </div>
+
                         <div id="longevity-history" class="space-y-3"></div>
                     </div>
                 </div>
@@ -142,27 +172,35 @@
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-1 bg-slate-900 border border-slate-800 p-6 rounded-2xl h-fit">
                         <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2"><span class="text-amber-400">🍳</span> Neues veganes Rezept</h2>
+
                         <form id="recipe-form" onsubmit="saveRecipe(event)" class="space-y-4">
                             <div>
                                 <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Name des Gerichts</label>
                                 <input type="text" id="rc-title" required placeholder="z.B. High-Protein Kichererbsen-Curry" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl p-3 text-sm outline-none text-white">
                             </div>
+
                             <div>
-                                <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Zutaten (Zeile für Zeile)</label>
+                                <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Zutaten</label>
                                 <textarea id="rc-ingredients" placeholder="1 Dose Kichererbsen&#10;400ml Kokosmilch..." rows="4" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl p-3 text-sm outline-none resize-none text-white"></textarea>
                             </div>
+
                             <div>
                                 <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Zubereitung & Makros</label>
                                 <textarea id="rc-instructions" placeholder="Anbraten, köcheln lassen..." rows="4" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl p-3 text-sm outline-none resize-none text-white"></textarea>
                             </div>
-                            <button type="submit" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">Rezept hinzufügen</button>
+
+                            <button type="submit" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">
+                                Rezept hinzufügen
+                            </button>
                         </form>
                     </div>
+
                     <div class="lg:col-span-2 space-y-4">
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
                             <h2 class="text-xl font-black text-white tracking-tight">Vegane Rezeptsammlung</h2>
                             <input type="text" id="recipe-search" oninput="renderRecipes()" placeholder="Rezepte durchsuchen..." class="bg-slate-900 border border-slate-800 text-xs px-3 py-1.5 rounded-lg outline-none focus:border-amber-500 text-white">
                         </div>
+
                         <div id="recipes-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
                     </div>
                 </div>
@@ -172,16 +210,22 @@
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-1 bg-slate-900 border border-slate-800 p-6 rounded-2xl h-fit">
                         <h2 class="text-lg font-bold text-white mb-4">🎯 Neues Lebensziel</h2>
+
                         <form id="goal-form" onsubmit="saveGoal(event)" class="space-y-4">
                             <input type="text" id="goal-title" required placeholder="z.B. Marathon unter 4 Std." class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-white">
+
                             <select id="goal-timeframe" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-slate-300">
                                 <option value="Kurzfristig (Dieses Jahr)">Kurzfristig (Dieses Jahr)</option>
                                 <option value="Mittelfristig (3-5 Jahre)">Mittelfristig (3-5 Jahre)</option>
                                 <option value="Langfristig (Vision)">Langfristig (Vision)</option>
                             </select>
-                            <button type="submit" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">Ziel verankern</button>
+
+                            <button type="submit" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">
+                                Ziel verankern
+                            </button>
                         </form>
                     </div>
+
                     <div class="lg:col-span-2 space-y-4">
                         <h2 class="text-xl font-black text-white tracking-tight">Lebenskompass & Ziele</h2>
                         <div id="goals-list" class="space-y-3"></div>
@@ -193,12 +237,18 @@
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-1 bg-slate-900 border border-slate-800 p-6 rounded-2xl h-fit">
                         <h2 class="text-lg font-bold text-white mb-4">💡 Neue Idee festhalten</h2>
+
                         <form id="idea-form" onsubmit="saveIdea(event)" class="space-y-4">
                             <input type="text" id="idea-title" required placeholder="z.B. Business Idee X oder Reiseort" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none text-white">
+
                             <textarea id="idea-text" placeholder="Details zur Umsetzung..." rows="3" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-3 text-sm outline-none resize-none text-white"></textarea>
-                            <button type="submit" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">Idee sichern</button>
+
+                            <button type="submit" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">
+                                Idee sichern
+                            </button>
                         </form>
                     </div>
+
                     <div class="lg:col-span-2 space-y-4">
                         <h2 class="text-xl font-black text-white tracking-tight">Möglichkeiten-Datenbank</h2>
                         <div id="ideas-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
@@ -209,60 +259,79 @@
             <section id="content-todo" class="tab-content hidden space-y-6">
                 <div class="max-w-2xl mx-auto bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
                     <h2 class="text-xl font-black text-white tracking-tight mb-4 flex items-center gap-2"><span>📝</span> Alltägliche Aufgaben</h2>
+
                     <form id="todo-form" onsubmit="saveTodo(event)" class="flex gap-2 mb-6">
                         <input type="text" id="todo-title" required placeholder="Neue Aufgabe hinzufügen..." class="flex-1 bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-4 py-3 text-sm outline-none text-white">
-                        <button type="submit" class="bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold px-6 rounded-xl transition-all text-sm cursor-pointer">Hinzufügen</button>
+
+                        <button type="submit" class="bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold px-6 rounded-xl transition-all text-sm cursor-pointer">
+                            Hinzufügen
+                        </button>
                     </form>
+
                     <div id="todo-list" class="divide-y divide-slate-800"></div>
                 </div>
             </section>
+
         </main>
     </div>
 
     <script>
-        let supabase = null;
+        let supabaseClient = null;
         let allData = [];
         let useLocalStorageFallback = false;
 
         window.onload = function() {
-            const savedUrl = localStorage.getItem('supabaseUrl') || localStorage.getItem('supabase_saved_url') || 'https://hnaxwfqgxcfgjpqvvdgf.supabase.co';
-            const savedKey = localStorage.getItem('supabaseKey') || localStorage.getItem('supabase_saved_key');
-            
+            const savedUrl =
+                localStorage.getItem('supabaseUrl') ||
+                localStorage.getItem('supabase_saved_url') ||
+                'https://hnaxwfqgxcfgjpqvvdgf.supabase.co';
+
+            const savedKey =
+                localStorage.getItem('supabaseKey') ||
+                localStorage.getItem('supabase_saved_key');
+
             document.getElementById('setup-url').value = savedUrl;
+
             if (savedKey) {
                 document.getElementById('setup-key').value = savedKey;
                 document.getElementById('config-popup').classList.add('hidden');
                 document.getElementById('login-screen').classList.remove('hidden');
             }
-        }
+        };
 
         async function saveConfigFromUI() {
             const url = document.getElementById('setup-url').value.trim();
             const key = document.getElementById('setup-key').value.trim();
             const errDiv = document.getElementById('setup-error-msg');
-            
-            if(!url || !key) {
-                errDiv.innerText = "Bitte gib deinen gültigen Anon Key ein.";
+
+            if (!url || !key) {
+                errDiv.innerText = "Bitte gib deine Supabase URL und deinen gültigen Anon Public Key ein.";
                 errDiv.classList.remove('hidden');
                 return;
             }
-            
+
             try {
                 const testClient = window.supabase.createClient(url, key);
-                const { error } = await testClient.from('cockpit_data').select('*').limit(1);
-                
+                const { error } = await testClient
+                    .from('cockpit_data')
+                    .select('*')
+                    .limit(1);
+
                 if (error) throw error;
 
                 localStorage.setItem('supabaseUrl', url);
                 localStorage.setItem('supabaseKey', key);
                 localStorage.setItem('supabase_saved_url', url);
                 localStorage.setItem('supabase_saved_key', key);
-                
+
                 errDiv.classList.add('hidden');
                 document.getElementById('config-popup').classList.add('hidden');
                 document.getElementById('login-screen').classList.remove('hidden');
+
             } catch (e) {
-                errDiv.innerText = "Verbindung zu Supabase fehlgeschlagen! Bitte prüfe, ob der Key stimmt. Fehler: " + (e.message || e);
+                errDiv.innerText =
+                    "Verbindung zu Supabase fehlgeschlagen. Prüfe bitte, ob Tabelle, URL, RLS-Policies und Anon Public Key stimmen. Fehler: " +
+                    (e.message || e);
                 errDiv.classList.remove('hidden');
             }
         }
@@ -279,6 +348,7 @@
 
         function checkPassword() {
             const pin = document.getElementById('password-input').value;
+
             if (pin === 'geheim123') {
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('app-container').classList.remove('hidden');
@@ -300,33 +370,52 @@
             }
 
             try {
-                supabase = window.supabase.createClient(url, key);
+                supabaseClient = window.supabase.createClient(url, key);
                 updateStatus(true, "⚡ Cloud aktiv (Supabase)");
                 fetchData();
             } catch (e) {
                 updateStatus(false, "❌ Verbindungsfehler");
                 loadLocalDataFallback();
             }
+
             switchTab('cycling');
         }
 
         function updateStatus(online, text) {
             document.getElementById('sync-status-text').innerText = text;
-            document.getElementById('sync-status-dot').className = online ? "w-2 h-2 rounded-full bg-lime-400" : "w-2 h-2 rounded-full bg-rose-500 animate-pulse";
+            document.getElementById('sync-status-dot').className = online
+                ? "w-2 h-2 rounded-full bg-lime-400"
+                : "w-2 h-2 rounded-full bg-rose-500 animate-pulse";
         }
 
         function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('bg-slate-800', 'text-lime-400', 'border-slate-700'));
-            
-            document.getElementById(`content-${tabId}`).classList.remove('hidden');
-            document.getElementById(`tab-${tabId}`).classList.add('bg-slate-800', 'text-lime-400', 'border-slate-700');
+            document.querySelectorAll('.tab-content').forEach(function(el) {
+                el.classList.add('hidden');
+            });
+
+            document.querySelectorAll('.tab-btn').forEach(function(btn) {
+                btn.classList.remove('bg-slate-800', 'text-lime-400', 'border-slate-700');
+            });
+
+            document.getElementById('content-' + tabId).classList.remove('hidden');
+            document.getElementById('tab-' + tabId).classList.add('bg-slate-800', 'text-lime-400', 'border-slate-700');
         }
 
         async function fetchData() {
-            if (!supabase) return;
-            const { data, error } = await supabase.from('cockpit_data').select('*').order('created_at', { ascending: false });
-            if (!error && data) {
+            if (!supabaseClient) return;
+
+            const { data, error } = await supabaseClient
+                .from('cockpit_data')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error(error);
+                updateStatus(false, "❌ Supabase Fehler");
+                return;
+            }
+
+            if (data) {
                 allData = data;
                 renderAll();
             }
@@ -342,196 +431,399 @@
         }
 
         async function insertItem(type, title, contentObj) {
-            if (!supabase) {
-                allData.unshift({ id: Date.now(), project_type: type, title, content: contentObj, created_at: new Date().toISOString() });
+            if (!supabaseClient) {
+                allData.unshift({
+                    id: Date.now(),
+                    project_type: type,
+                    title: title,
+                    content: contentObj,
+                    created_at: new Date().toISOString()
+                });
+
                 localStorage.setItem('cockpit_fallback_data', JSON.stringify(allData));
                 renderAll();
                 return;
             }
-            await supabase.from('cockpit_data').insert([{ project_type: type, title, content: contentObj }]);
+
+            const { error } = await supabaseClient
+                .from('cockpit_data')
+                .insert([
+                    {
+                        project_type: type,
+                        title: title,
+                        content: contentObj
+                    }
+                ]);
+
+            if (error) {
+                console.error(error);
+                alert("Speichern fehlgeschlagen: " + error.message);
+                return;
+            }
+
             fetchData();
         }
 
         async function deleteItem(id) {
-            if (!supabase) {
-                allData = allData.filter(i => i.id !== id);
+            if (!supabaseClient) {
+                allData = allData.filter(function(i) {
+                    return i.id !== id;
+                });
+
                 localStorage.setItem('cockpit_fallback_data', JSON.stringify(allData));
                 renderAll();
                 return;
             }
-            await supabase.from('cockpit_data').delete().eq('id', id);
+
+            const { error } = await supabaseClient
+                .from('cockpit_data')
+                .delete()
+                .eq('id', id);
+
+            if (error) {
+                console.error(error);
+                alert("Löschen fehlgeschlagen: " + error.message);
+                return;
+            }
+
             fetchData();
         }
 
         function loadLocalDataFallback() {
             const local = localStorage.getItem('cockpit_fallback_data');
-            if (local) { allData = JSON.parse(local); } else {
+
+            if (local) {
+                allData = JSON.parse(local);
+            } else {
                 allData = [
-                    { id: 1, project_type: 'cycling', title: 'Grundlage Fahrt', content: { distance: '60', watt: '180', notes: 'Gefühl war super.' }, created_at: new Date().toISOString() },
-                    { id: 2, project_type: 'goals', title: 'Marathon laufen', content: { timeframe: 'Kurzfristig (Dieses Jahr)' }, created_at: new Date().toISOString() },
-                    { id: 3, project_type: 'todo', title: 'Kette ölen', content: { completed: false }, created_at: new Date().toISOString() }
+                    {
+                        id: 1,
+                        project_type: 'cycling',
+                        title: 'Grundlage Fahrt',
+                        content: {
+                            distance: '60',
+                            watt: '180',
+                            notes: 'Gefühl war super.'
+                        },
+                        created_at: new Date().toISOString()
+                    },
+                    {
+                        id: 2,
+                        project_type: 'goals',
+                        title: 'Marathon laufen',
+                        content: {
+                            timeframe: 'Kurzfristig (Dieses Jahr)'
+                        },
+                        created_at: new Date().toISOString()
+                    },
+                    {
+                        id: 3,
+                        project_type: 'todo',
+                        title: 'Kette ölen',
+                        content: {
+                            completed: false
+                        },
+                        created_at: new Date().toISOString()
+                    }
                 ];
             }
+
             renderAll();
         }
 
-        // --- CYCLING ---
         function saveCycling(e) {
             e.preventDefault();
+
             insertItem('cycling', document.getElementById('cy-title').value, {
                 distance: document.getElementById('cy-distance').value,
                 watt: document.getElementById('cy-watt').value,
                 notes: document.getElementById('cy-notes').value
             });
+
             document.getElementById('cycling-form').reset();
         }
+
         function renderCycling() {
             const list = document.getElementById('cycling-list');
-            const items = allData.filter(d => d.project_type === 'cycling');
-            list.innerHTML = items.length === 0 ? '<p class="text-xs text-slate-500 italic">Noch kein Log vorhanden.</p>' : '';
-            items.forEach(item => {
-                list.innerHTML += `<div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex justify-between">
-                    <div>
-                        <h3 class="font-bold text-white text-sm">${item.title}</h3>
-                        <p class="text-xs text-slate-400 font-mono mt-1">📏 ${item.content.distance || 0} km | ⚡ ${item.content.watt || 0} W</p>
-                        <p class="text-xs text-slate-400 mt-2">${item.content.notes || ''}</p>
+            const items = allData.filter(function(d) {
+                return d.project_type === 'cycling';
+            });
+
+            list.innerHTML = items.length === 0
+                ? '<p class="text-xs text-slate-500 italic">Noch kein Log vorhanden.</p>'
+                : '';
+
+            items.forEach(function(item) {
+                list.innerHTML += `
+                    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex justify-between">
+                        <div>
+                            <h3 class="font-bold text-white text-sm">${escapeHtml(item.title)}</h3>
+                            <p class="text-xs text-slate-400 font-mono mt-1">📏 ${escapeHtml(item.content.distance || 0)} km | ⚡ ${escapeHtml(item.content.watt || 0)} W</p>
+                            <p class="text-xs text-slate-400 mt-2">${escapeHtml(item.content.notes || '')}</p>
+                        </div>
+
+                        <button onclick="deleteItem(${item.id})" class="text-slate-500 hover:text-rose-400 text-xs cursor-pointer">🗑️</button>
                     </div>
-                    <button onclick="deleteItem(${item.id})" class="text-slate-500 hover:text-rose-400 text-xs cursor-pointer">🗑️</button>
-                </div>`;
+                `;
             });
         }
 
-        // --- LONGEVITY ---
         function renderLongevity() {
-            const plan = allData.find(d => d.project_type === 'longevity_plan');
-            if(plan) document.getElementById('longevity-plan-text').value = plan.content.text || '';
+            const plan = allData.find(function(d) {
+                return d.project_type === 'longevity_plan';
+            });
+
+            if (plan) {
+                document.getElementById('longevity-plan-text').value = plan.content.text || '';
+            }
+
             const hist = document.getElementById('longevity-history');
-            const items = allData.filter(d => d.project_type === 'longevity_log');
+            const items = allData.filter(function(d) {
+                return d.project_type === 'longevity_log';
+            });
+
             hist.innerHTML = '';
-            items.forEach(i => {
-                hist.innerHTML += `<div class="bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl flex justify-between text-xs"><span>✅ Routine absolviert (${new Date(i.created_at).toLocaleDateString()})</span><button onclick="deleteItem(${i.id})" class="text-slate-500">🗑️</button></div>`;
+
+            items.forEach(function(i) {
+                hist.innerHTML += `
+                    <div class="bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl flex justify-between text-xs">
+                        <span>✅ Routine absolviert (${new Date(i.created_at).toLocaleDateString()})</span>
+                        <button onclick="deleteItem(${i.id})" class="text-slate-500">🗑️</button>
+                    </div>
+                `;
             });
         }
+
         async function saveLongevityPlan() {
             const txt = document.getElementById('longevity-plan-text').value;
-            const item = allData.find(d => d.project_type === 'longevity_plan');
-            if (item) {
-                if (supabase) { await supabase.from('cockpit_data').update({ content: { text: txt } }).eq('id', item.id); fetchData(); }
-                else { item.content.text = txt; localStorage.setItem('cockpit_fallback_data', JSON.stringify(allData)); }
-            } else { insertItem('longevity_plan', 'Plan', { text: txt }); }
-        }
-        function addLongevityLog() { insertItem('longevity_log', 'Log', { completed: true }); }
+            const item = allData.find(function(d) {
+                return d.project_type === 'longevity_plan';
+            });
 
-        // --- KOCHBUCH ---
+            if (item) {
+                if (supabaseClient) {
+                    const { error } = await supabaseClient
+                        .from('cockpit_data')
+                        .update({
+                            content: {
+                                text: txt
+                            }
+                        })
+                        .eq('id', item.id);
+
+                    if (error) {
+                        console.error(error);
+                        alert("Plan konnte nicht gespeichert werden: " + error.message);
+                        return;
+                    }
+
+                    fetchData();
+                } else {
+                    item.content.text = txt;
+                    localStorage.setItem('cockpit_fallback_data', JSON.stringify(allData));
+                }
+            } else {
+                insertItem('longevity_plan', 'Plan', {
+                    text: txt
+                });
+            }
+        }
+
+        function addLongevityLog() {
+            insertItem('longevity_log', 'Log', {
+                completed: true
+            });
+        }
+
         function saveRecipe(e) {
             e.preventDefault();
+
             insertItem('kochbuch', document.getElementById('rc-title').value, {
                 ingredients: document.getElementById('rc-ingredients').value,
                 instructions: document.getElementById('rc-instructions').value
             });
+
             document.getElementById('recipe-form').reset();
         }
+
         function renderRecipes() {
             const grid = document.getElementById('recipes-grid');
-            const query = document.getElementById('recipe-search').value.toLowerCase();
-            const items = allData.filter(d => d.project_type === 'kochbuch' && d.title.toLowerCase().includes(query));
-            grid.innerHTML = items.length === 0 ? '<p class="text-xs text-slate-500 italic">Keine Rezepte gefunden.</p>' : '';
-            items.forEach(item => {
-                grid.innerHTML += `<div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-                    <div class="flex justify-between font-bold text-sm text-white mb-2"><span>${item.title}</span><button onclick="deleteItem(${item.id})">🗑️</button></div>
-                    <p class="text-xs text-amber-400 font-mono whitespace-pre-line mb-2">${item.content.ingredients || ''}</p>
-                    <p class="text-xs text-slate-400 border-t border-slate-800 pt-2 whitespace-pre-line">${item.content.instructions || ''}</p>
-                </div>`;
+            const searchInput = document.getElementById('recipe-search');
+            const query = searchInput ? searchInput.value.toLowerCase() : '';
+
+            const items = allData.filter(function(d) {
+                return d.project_type === 'kochbuch' && d.title.toLowerCase().includes(query);
+            });
+
+            grid.innerHTML = items.length === 0
+                ? '<p class="text-xs text-slate-500 italic">Keine Rezepte gefunden.</p>'
+                : '';
+
+            items.forEach(function(item) {
+                grid.innerHTML += `
+                    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                        <div class="flex justify-between font-bold text-sm text-white mb-2">
+                            <span>${escapeHtml(item.title)}</span>
+                            <button onclick="deleteItem(${item.id})">🗑️</button>
+                        </div>
+
+                        <p class="text-xs text-amber-400 font-mono whitespace-pre-line mb-2">${escapeHtml(item.content.ingredients || '')}</p>
+                        <p class="text-xs text-slate-400 border-t border-slate-800 pt-2 whitespace-pre-line">${escapeHtml(item.content.instructions || '')}</p>
+                    </div>
+                `;
             });
         }
 
-        // --- ZIELERREICHUNG ---
         function saveGoal(e) {
             e.preventDefault();
+
             insertItem('goals', document.getElementById('goal-title').value, {
                 timeframe: document.getElementById('goal-timeframe').value
             });
+
             document.getElementById('goal-form').reset();
         }
+
         function renderGoals() {
             const list = document.getElementById('goals-list');
-            const items = allData.filter(d => d.project_type === 'goals');
-            list.innerHTML = items.length === 0 ? '<p class="text-xs text-slate-500 italic">Noch keine Lebensziele eingetragen.</p>' : '';
-            items.forEach(item => {
-                list.innerHTML += `<div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex justify-between items-center">
-                    <div>
-                        <h3 class="font-bold text-white text-sm">${item.title}</h3>
-                        <span class="inline-block bg-lime-500/10 text-lime-400 text-[10px] uppercase font-bold px-2 py-0.5 rounded mt-1">${item.content.timeframe}</span>
+            const items = allData.filter(function(d) {
+                return d.project_type === 'goals';
+            });
+
+            list.innerHTML = items.length === 0
+                ? '<p class="text-xs text-slate-500 italic">Noch keine Lebensziele eingetragen.</p>'
+                : '';
+
+            items.forEach(function(item) {
+                list.innerHTML += `
+                    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-white text-sm">${escapeHtml(item.title)}</h3>
+                            <span class="inline-block bg-lime-500/10 text-lime-400 text-[10px] uppercase font-bold px-2 py-0.5 rounded mt-1">${escapeHtml(item.content.timeframe)}</span>
+                        </div>
+
+                        <button onclick="deleteItem(${item.id})" class="text-slate-500 hover:text-rose-400 text-xs cursor-pointer">🗑️</button>
                     </div>
-                    <button onclick="deleteItem(${item.id})" class="text-slate-500 hover:text-rose-400 text-xs cursor-pointer">🗑️</button>
-                </div>`;
+                `;
             });
         }
 
-        // --- IDEENSCHMIEDE ---
         function saveIdea(e) {
             e.preventDefault();
+
             insertItem('ideas', document.getElementById('idea-title').value, {
                 text: document.getElementById('idea-text').value
             });
+
             document.getElementById('idea-form').reset();
         }
-        
+
         function renderIdeas() {
             const grid = document.getElementById('ideas-grid');
-            const items = allData.filter(d => d.project_type === 'ideas');
-            grid.innerHTML = items.length === 0 ? '<p class="text-xs text-slate-500 italic">Noch keine Ideen vorhanden.</p>' : '';
-            items.forEach(item => {
-                grid.innerHTML += `<div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
-                    <div>
-                        <div class="flex justify-between font-bold text-sm text-white mb-2"><span>${item.title}</span><button onclick="deleteItem(${item.id})">🗑️</button></div>
-                        <p class="text-xs text-slate-400 whitespace-pre-line">${item.content.text || ''}</p>
+            const items = allData.filter(function(d) {
+                return d.project_type === 'ideas';
+            });
+
+            grid.innerHTML = items.length === 0
+                ? '<p class="text-xs text-slate-500 italic">Noch keine Ideen vorhanden.</p>'
+                : '';
+
+            items.forEach(function(item) {
+                grid.innerHTML += `
+                    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between font-bold text-sm text-white mb-2">
+                                <span>${escapeHtml(item.title)}</span>
+                                <button onclick="deleteItem(${item.id})">🗑️</button>
+                            </div>
+
+                            <p class="text-xs text-slate-400 whitespace-pre-line">${escapeHtml(item.content.text || '')}</p>
+                        </div>
                     </div>
-                </div>`;
+                `;
             });
         }
 
-        // --- TO-DO LISTE ---
         function saveTodo(e) {
             e.preventDefault();
+
             insertItem('todo', document.getElementById('todo-title').value, {
                 completed: false
             });
+
             document.getElementById('todo-form').reset();
         }
 
         function renderTodos() {
             const list = document.getElementById('todo-list');
-            const items = allData.filter(d => d.project_type === 'todo');
-            list.innerHTML = items.length === 0 ? '<p class="text-xs text-slate-500 italic py-4">Keine offenen Aufgaben.</p>' : '';
-            
-            items.forEach(item => {
+            const items = allData.filter(function(d) {
+                return d.project_type === 'todo';
+            });
+
+            list.innerHTML = items.length === 0
+                ? '<p class="text-xs text-slate-500 italic py-4">Keine offenen Aufgaben.</p>'
+                : '';
+
+            items.forEach(function(item) {
                 const isDone = item.content.completed;
-                list.innerHTML += `<div class="py-3 flex justify-between items-center group">
-                    <div class="flex items-center gap-3">
-                        <button onclick="toggleTodo(${item.id})" class="w-5 h-5 rounded border ${isDone ? 'bg-lime-500 border-lime-500 text-slate-950' : 'border-slate-600'} flex items-center justify-center text-xs cursor-pointer">
-                            ${isDone ? '✓' : ''}
-                        </button>
-                        <span class="text-sm ${isDone ? 'text-slate-500 line-through' : 'text-slate-300'}">${item.title}</span>
+
+                list.innerHTML += `
+                    <div class="py-3 flex justify-between items-center group">
+                        <div class="flex items-center gap-3">
+                            <button onclick="toggleTodo(${item.id})" class="w-5 h-5 rounded border ${isDone ? 'bg-lime-500 border-lime-500 text-slate-950' : 'border-slate-600'} flex items-center justify-center text-xs cursor-pointer">
+                                ${isDone ? '✓' : ''}
+                            </button>
+
+                            <span class="text-sm ${isDone ? 'text-slate-500 line-through' : 'text-slate-300'}">${escapeHtml(item.title)}</span>
+                        </div>
+
+                        <button onclick="deleteItem(${item.id})" class="text-slate-600 hover:text-rose-400 text-xs cursor-pointer">🗑️</button>
                     </div>
-                    <button onclick="deleteItem(${item.id})" class="text-slate-600 hover:text-rose-400 text-xs cursor-pointer">🗑️</button>
-                </div>`;
+                `;
             });
         }
 
         async function toggleTodo(id) {
-            const item = allData.find(d => d.id === id);
+            const item = allData.find(function(d) {
+                return d.id === id;
+            });
+
             if (!item) return;
+
             const newStatus = !item.content.completed;
-            
-            if (supabase) {
-                await supabase.from('cockpit_data').update({ content: { ...item.content, completed: newStatus } }).eq('id', id);
+
+            if (supabaseClient) {
+                const { error } = await supabaseClient
+                    .from('cockpit_data')
+                    .update({
+                        content: {
+                            ...item.content,
+                            completed: newStatus
+                        }
+                    })
+                    .eq('id', id);
+
+                if (error) {
+                    console.error(error);
+                    alert("Status konnte nicht geändert werden: " + error.message);
+                    return;
+                }
+
                 fetchData();
             } else {
                 item.content.completed = newStatus;
                 localStorage.setItem('cockpit_fallback_data', JSON.stringify(allData));
                 renderAll();
             }
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
     </script>
 </body>
