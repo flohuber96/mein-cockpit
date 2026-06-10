@@ -27,12 +27,12 @@
                     <input type="text" id="setup-url" value="https://hnaxwfqgxcfgjpqvvdgf.supabase.co" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-3 py-2 text-sm text-slate-300 outline-none">
                 </div>
                 <div>
-                    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Supabase Anon Public Key (Aus den Legacy Settings)</label>
-                    <input type="text" id="setup-key" placeholder="Hier den langen Anon-Key hineinkopieren (startet mit eyJhbGci...)" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Supabase Anon Public Key</label>
+                    <input type="text" id="setup-key" placeholder="Hier den langen Anon-Key hineinkopieren..." class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl px-3 py-2 text-sm text-white outline-none">
                 </div>
                 <div class="pt-2 flex gap-2">
                     <button onclick="saveConfigFromUI()" class="flex-1 bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-2.5 rounded-xl transition-all text-sm cursor-pointer">
-                        Speichern &amp; Aktivieren
+                        Speichern & Aktivieren
                     </button>
                     <button onclick="skipConfig()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl text-sm cursor-pointer">
                         Demo-Modus starten
@@ -63,7 +63,7 @@
                     <span class="text-2xl">⚡</span>
                     <div>
                         <h1 class="text-lg font-black tracking-tight text-white">PERSÖNLICHES COCKPIT</h1>
-                        <p class="text-xs text-lime-400 font-medium tracking-wider uppercase">Sport, Longevity &amp; Lifestyle Hub</p>
+                        <p class="text-xs text-lime-400 font-medium tracking-wider uppercase">Sport, Longevity & Lifestyle Hub</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -78,8 +78,8 @@
 
         <nav class="bg-slate-900/50 border-b border-slate-800/80 px-4 md:px-8 overflow-x-auto whitespace-nowrap sticky top-[73px] z-30 backdrop-blur-md">
             <div class="max-w-7xl mx-auto flex gap-2 py-3">
-                <button onclick="switchTab('cycling')" id="tab-cycling" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">🚴 Rennrad &amp; Training</button>
-                <button onclick="switchTab('longevity')" id="tab-longevity" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">🧬 Longevity &amp; Fitness</button>
+                <button onclick="switchTab('cycling')" id="tab-cycling" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">🚴 Rennrad & Training</button>
+                <button onclick="switchTab('longevity')" id="tab-longevity" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">🧬 Longevity & Fitness</button>
                 <button onclick="switchTab('kochbuch')" id="tab-kochbuch" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">🍳 Veganes Kochbuch</button>
                 <button onclick="switchTab('goals')" id="tab-goals" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">🎯 Zielerreichung</button>
                 <button onclick="switchTab('ideas')" id="tab-ideas" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all border border-transparent text-slate-400 hover:text-white cursor-pointer">💡 Ideenschmiede</button>
@@ -115,7 +115,7 @@
                         </form>
                     </div>
                     <div class="lg:col-span-2 space-y-4">
-                        <h2 class="text-xl font-black text-white tracking-tight">Trainingslog &amp; Historie</h2>
+                        <h2 class="text-xl font-black text-white tracking-tight">Trainingslog & Historie</h2>
                         <div id="cycling-list" class="space-y-3"></div>
                     </div>
                 </div>
@@ -128,9 +128,9 @@
                         <button onclick="addLongevityLog()" class="w-full bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold py-2.5 rounded-xl text-sm transition-all cursor-pointer">Heutigen Tag loggen</button>
                     </div>
                     <div class="lg:col-span-2 space-y-4">
-                        <h2 class="text-xl font-black text-white tracking-tight">Longevity Protokolle &amp; Ziele</h2>
+                        <h2 class="text-xl font-black text-white tracking-tight">Longevity Protokolle & Ziele</h2>
                         <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-                            <label class="block text-sm font-bold text-white mb-2">💊 Mein Supplement &amp; Biohacking Plan</label>
+                            <label class="block text-sm font-bold text-white mb-2">💊 Mein Supplement & Biohacking Plan</label>
                             <textarea id="longevity-plan-text" onchange="saveLongevityPlan()" placeholder="Morgens: 1g NMN, Omega 3..." rows="8" class="w-full bg-slate-950 border border-slate-800 focus:border-lime-500 rounded-xl p-4 text-sm font-mono outline-none resize-none text-slate-300"></textarea>
                         </div>
                         <div id="longevity-history" class="space-y-3"></div>
@@ -152,7 +152,7 @@
                                 <textarea id="rc-ingredients" placeholder="1 Dose Kichererbsen&#10;400ml Kokosmilch..." rows="4" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl p-3 text-sm outline-none resize-none text-white"></textarea>
                             </div>
                             <div>
-                                <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Zubereitung &amp; Makros</label>
+                                <label class="block text-xs uppercase font-semibold text-slate-400 mb-1">Zubereitung & Makros</label>
                                 <textarea id="rc-instructions" placeholder="Anbraten, köcheln lassen..." rows="4" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl p-3 text-sm outline-none resize-none text-white"></textarea>
                             </div>
                             <button type="submit" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 rounded-xl transition-all cursor-pointer">Rezept hinzufügen</button>
@@ -183,7 +183,7 @@
                         </form>
                     </div>
                     <div class="lg:col-span-2 space-y-4">
-                        <h2 class="text-xl font-black text-white tracking-tight">Lebenskompass &amp; Ziele</h2>
+                        <h2 class="text-xl font-black text-white tracking-tight">Lebenskompass & Ziele</h2>
                         <div id="goals-list" class="space-y-3"></div>
                     </div>
                 </div>
@@ -262,7 +262,7 @@
                 document.getElementById('config-popup').classList.add('hidden');
                 document.getElementById('login-screen').classList.remove('hidden');
             } catch (e) {
-                errDiv.innerText = "Verbindung zu Supabase fehlgeschlagen! Bitte prüfe, ob der Key (Legacy) stimmt und deine Tabelle existiert. Fehler: " + (e.message || e);
+                errDiv.innerText = "Verbindung zu Supabase fehlgeschlagen! Bitte prüfe, ob der Key stimmt. Fehler: " + (e.message || e);
                 errDiv.classList.remove('hidden');
             }
         }
@@ -476,19 +476,22 @@
             });
             document.getElementById('idea-form').reset();
         }
+        
         function renderIdeas() {
             const grid = document.getElementById('ideas-grid');
             const items = allData.filter(d => d.project_type === 'ideas');
-            grid.innerHTML = items.length === 0 ? '<p class="text-xs text-slate-500 italic">Noch keine Ideen gesichert.</p>' : '';
+            grid.innerHTML = items.length === 0 ? '<p class="text-xs text-slate-500 italic">Noch keine Ideen vorhanden.</p>' : '';
             items.forEach(item => {
-                grid.innerHTML += `<div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-                    <div class="flex justify-between font-bold text-sm text-white mb-2"><span>${item.title}</span><button onclick="deleteItem(${item.id})" class="text-slate-500 hover:text-rose-400 text-xs cursor-pointer">🗑️</button></div>
-                    <p class="text-xs text-slate-400 mt-2 whitespace-pre-line">${item.content.text || ''}</p>
+                grid.innerHTML += `<div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between font-bold text-sm text-white mb-2"><span>${item.title}</span><button onclick="deleteItem(${item.id})">🗑️</button></div>
+                        <p class="text-xs text-slate-400 whitespace-pre-line">${item.content.text || ''}</p>
+                    </div>
                 </div>`;
             });
         }
 
-        // --- TO-DOS ---
+        // --- TO-DO LISTE ---
         function saveTodo(e) {
             e.preventDefault();
             insertItem('todo', document.getElementById('todo-title').value, {
@@ -496,33 +499,39 @@
             });
             document.getElementById('todo-form').reset();
         }
-        async function toggleTodo(id, currentStatus) {
-            const item = allData.find(d => d.id === id);
-            if (item) {
-                if (supabase) { 
-                    await supabase.from('cockpit_data').update({ content: { completed: !currentStatus } }).eq('id', id); 
-                    fetchData(); 
-                } else { 
-                    item.content.completed = !currentStatus; 
-                    localStorage.setItem('cockpit_fallback_data', JSON.stringify(allData)); 
-                    renderAll(); 
-                }
-            }
-        }
+
         function renderTodos() {
             const list = document.getElementById('todo-list');
             const items = allData.filter(d => d.project_type === 'todo');
-            list.innerHTML = items.length === 0 ? '<p class="text-xs text-slate-500 italic p-4">Keine offenen Aufgaben.</p>' : '';
+            list.innerHTML = items.length === 0 ? '<p class="text-xs text-slate-500 italic py-4">Keine offenen Aufgaben.</p>' : '';
+            
             items.forEach(item => {
-                const isCompleted = item.content.completed;
-                list.innerHTML += `<div class="flex justify-between items-center py-3 px-2 hover:bg-slate-900/50 transition-colors">
+                const isDone = item.content.completed;
+                list.innerHTML += `<div class="py-3 flex justify-between items-center group">
                     <div class="flex items-center gap-3">
-                        <input type="checkbox" ${isCompleted ? 'checked' : ''} onclick="toggleTodo(${item.id}, ${isCompleted})" class="w-4 h-4 accent-lime-500 cursor-pointer">
-                        <span class="text-sm ${isCompleted ? 'line-through text-slate-500' : 'text-slate-200'}">${item.title}</span>
+                        <button onclick="toggleTodo(${item.id})" class="w-5 h-5 rounded border ${isDone ? 'bg-lime-500 border-lime-500 text-slate-950' : 'border-slate-600'} flex items-center justify-center text-xs cursor-pointer">
+                            ${isDone ? '✓' : ''}
+                        </button>
+                        <span class="text-sm ${isDone ? 'text-slate-500 line-through' : 'text-slate-300'}">${item.title}</span>
                     </div>
-                    <button onclick="deleteItem(${item.id})" class="text-slate-500 hover:text-rose-400 text-xs cursor-pointer">🗑️</button>
+                    <button onclick="deleteItem(${item.id})" class="text-slate-600 hover:text-rose-400 text-xs cursor-pointer">🗑️</button>
                 </div>`;
             });
+        }
+
+        async function toggleTodo(id) {
+            const item = allData.find(d => d.id === id);
+            if (!item) return;
+            const newStatus = !item.content.completed;
+            
+            if (supabase) {
+                await supabase.from('cockpit_data').update({ content: { ...item.content, completed: newStatus } }).eq('id', id);
+                fetchData();
+            } else {
+                item.content.completed = newStatus;
+                localStorage.setItem('cockpit_fallback_data', JSON.stringify(allData));
+                renderAll();
+            }
         }
     </script>
 </body>
