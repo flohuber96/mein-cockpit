@@ -46,8 +46,8 @@ body{background:var(--bg);color:var(--t1);font-family:'Inter',sans-serif;min-hei
 ::selection{background:var(--acc);color:#000}
 
 /* OVERLAY */
-.ov{position:fixed;inset:0;background:rgba(6,10,15,0.97);display:flex;align-items:center;justify-content:center;z-index:200;padding:1rem;backdrop-filter:blur(12px)}
-.ov.off{display:none}
+.ov{position:fixed;inset:0;background:rgba(6,10,15,0.97);display:flex;align-items:center;justify-content:center;z-index:200;padding:1rem;backdrop-filter:blur(12px);pointer-events:all}
+.ov.off{display:none !important;pointer-events:none;visibility:hidden}
 .mc{background:var(--s1);border:1px solid var(--bdh);border-radius:var(--rl);padding:2rem;max-width:460px;width:100%;box-shadow:0 40px 80px rgba(0,0,0,0.7)}
 .mico{width:46px;height:46px;background:var(--accg);border:1px solid rgba(132,204,22,0.25);border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:1.3rem;margin-bottom:1.2rem}
 .mc h2{font-size:1.1rem;font-weight:700;color:var(--t1);margin-bottom:0.3rem}
@@ -279,7 +279,7 @@ input[type=checkbox]{width:15px;height:15px;accent-color:var(--acc);cursor:point
 </div>
 
 <!-- LOGIN -->
-<div id="ov-login" class="ov off">
+<div id="ov-login" class="ov off" style="z-index:300">
   <div class="mc" style="text-align:center">
     <div class="mico" style="margin:0 auto 1.1rem">⚡</div>
     <h2>Performance Cockpit</h2>
@@ -291,7 +291,7 @@ input[type=checkbox]{width:15px;height:15px;accent-color:var(--acc);cursor:point
 </div>
 
 <!-- EDIT MODAL -->
-<div id="ov-edit" class="ov off">
+<div id="ov-edit" class="ov off" style="z-index:400">
   <div class="mc modal-edit">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.1rem">
       <h2 style="font-size:1rem">Eintrag bearbeiten</h2>
@@ -605,7 +605,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const url = ls('supabaseUrl') || 'https://hnaxwfqgxcfgjpqvvdgf.supabase.co';
   const key = ls('supabaseKey');
   $('su-url').value = url;
-  if (key) { $('su-key').value = key; show('ov-login'); }
+  if (key) { $('su-key').value = key; hide('ov-config'); show('ov-login'); }
+  else { show('ov-config'); }
   $('pw-input').onkeydown = e => e.key==='Enter' && checkPw();
   $('su-key').onkeydown = e => e.key==='Enter' && saveConfig();
   $('td-title').onkeydown = e => e.key==='Enter' && saveTodo();
@@ -614,8 +615,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
 function $(id){ return document.getElementById(id) }
 function ls(k,v){ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v) }
-function show(id){ $(id).classList.remove('off') }
-function hide(id){ $(id).classList.add('off') }
+function show(id){ const el=$(id); el.classList.remove('off'); el.style.display='flex'; }
+function hide(id){ const el=$(id); el.classList.add('off'); el.style.display='none'; }
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 async function saveConfig(){
@@ -626,12 +627,10 @@ async function saveConfig(){
     const {error}=await tc.from('cockpit_data').select('*').limit(1);
     if(error) throw error;
     ls('supabaseUrl',url); ls('supabaseKey',key);
-    hide('cfg-err'); hide('ov-config'); show('ov-login');
-  } catch(e){ err.textContent='Verbindung fehlgeschlagen: '+(e.message||e); show('cfg-err'); }
+    hide('cfg-err'); hide('ov-config'); show('ov-login');  } catch(e){ err.textContent='Verbindung fehlgeschlagen: '+(e.message||e); show('cfg-err'); }
 }
 
-function skipConfig(){ demoMode=true; hide('ov-config'); show('ov-login'); }
-function openSettings(){ show('ov-config'); }
+function skipConfig(){ demoMode=true; hide('ov-config'); show('ov-login'); }function openSettings(){ show('ov-config'); }
 
 function checkPw(){
   if($('pw-input').value==='geheim123'){
