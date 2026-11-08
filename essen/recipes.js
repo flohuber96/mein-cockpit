@@ -734,11 +734,13 @@ Chili-Käse-Ofenkartoffel|🥔|60|2|1|Ofen,Mexikanisch
 Süßkartoffeln einstechen und bei 200 °C 45 Minuten backen. | Bohnen, Mais, Tomaten und Gewürze 5 Minuten köcheln lassen. | Kartoffeln aufschneiden, mit dem Bohnen-Chili füllen und mit Käse bestreuen. | Kurz überbacken und mit saurer Sahne und Frühlingszwiebeln servieren.
 `;
 
+const RECIPE_TEXTS = [RECIPE_TEXT]; // weitere Dateien hängen hier ihre Rezepte an
+
 const QUICK_TAGS_DROP = new Set(['Schnell', 'High Protein', 'Low Carb', 'Vegan', 'Vegetarisch']);
 const _slug = s => s.toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 function builtinRecipes(parseIng) {
-  return RECIPE_TEXT.trim().split(/\n\s*\n/).map(block => {
+  return RECIPE_TEXTS.join('\n\n').trim().split(/\n\s*\n/).map(block => {
     const [head, ings, steps] = block.trim().split('\n');
     const [name, emoji, time, servings, level, tags] = head.split('|');
     return {

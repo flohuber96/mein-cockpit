@@ -248,3 +248,26 @@ main{padding:4px 16px calc(96px + var(--bot));max-width:680px;margin:0 auto}
 .toast.has-act.show{pointer-events:auto}
 .toast button{color:var(--acc);font-weight:800;font-size:14px;padding:2px 0}
 @media (prefers-color-scheme:dark){.toast button{color:#c2410c}}
+
+/* ── v3: Fitness-Check, Schritte, Kochmodus ── */
+.fit{margin:12px 2px 6px;padding:12px;border-radius:12px;background:var(--card2)}
+.fit-top{display:flex;align-items:baseline;gap:8px}
+.fit-top b{font-size:22px}
+.fit-top span{font-size:13px;color:var(--t2)}
+.fit-bar{position:relative;height:10px;border-radius:5px;background:var(--line);margin:8px 0 4px;overflow:hidden}
+.fit-bar i{display:block;height:100%;border-radius:5px}
+.fit-bar s{position:absolute;top:0;bottom:0;width:2px;background:var(--card)}
+.fit-scale{display:flex;justify-content:space-between;font-size:11px;color:var(--t3)}
+.fit-lbl{font-size:14px;font-weight:600;margin-top:6px}
+.steps li b{color:var(--acc-t)}
+.cook{display:flex;flex-direction:column;gap:16px;padding-top:6px}
+.cook-prog{height:6px;border-radius:3px;background:var(--card2);overflow:hidden}
+.cook-prog i{display:block;height:100%;background:var(--acc);transition:width .25s}
+.cook-n{font-size:14px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.04em}
+.cook-t{font-size:24px;line-height:1.45;font-weight:600;min-height:150px}
+.cook-t b{color:var(--acc-t)}
+.cook .btn{min-height:56px;font-size:17px}
+.cook .btn:disabled{opacity:.4}
+.cook-ing{padding:12px 16px}
+.cook-ing summary{font-weight:700;cursor:pointer}
+.cook-ing ul{margin:8px 0 0 18px;font-size:15px;line-height:1.7}

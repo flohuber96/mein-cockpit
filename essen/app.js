@@ -225,7 +225,7 @@ function nutr(r) {
   let n = nutCache.get(r.id);
   if (!n) {
     const t = calcNutrition(r.ingredients), s = r.servings || 1;
-    n = { kcal: t.kcal / s, p: t.p / s, c: t.c / s, f: t.f / s, fib: t.fib / s, vegan: t.vegan, coverage: t.coverage };
+    n = { pp: t.kcal ? t.p * 4 / t.kcal * 100 : 0, kcal: t.kcal / s, p: t.p / s, c: t.c / s, f: t.f / s, fib: t.fib / s, vegan: t.vegan, coverage: t.coverage };
     nutCache.set(r.id, n);
   }
   return n;
@@ -235,7 +235,7 @@ const SMART = {
   vegan: { label: '🌱 Vegan', test: r => nutr(r).vegan },
   fast: { label: '⏱ Bis 30 Min.', test: r => r.time && r.time <= 30 },
   light: { label: '🔥 Unter 500 kcal', test: r => nutr(r).kcal < 500 },
-  protein: { label: '💪 Proteinreich', test: r => nutr(r).p >= 25 },
+  protein: { label: '💪 Proteinreich (ab 25 %)', test: r => nutr(r).pp >= 25 },
   lowcarb: { label: '🥑 Low Carb', test: r => nutr(r).c <= 30 },
 };
 const isMainDish = r => !(r.tags || []).some(t => /frühstück|snack|dip|dessert|süß|beilage/i.test(t));
@@ -316,10 +316,10 @@ function updateBadge() {
 function entryInfo(e) {
   if (e.r) {
     const r = recipeById(e.r);
-    if (!r) return { emoji: '❓', name: 'Gelöschtes Rezept', meta: '', kcal: 0 };
-    return { emoji: r.emoji || '🍽️', name: r.name, meta: `${e.s || r.servings} P.`, kcal: nutr(r).kcal };
+    if (!r) return { emoji: '❓', name: 'Gelöschtes Rezept', meta: '', kcal: 0, p: 0 };
+    return { emoji: r.emoji || '🍽️', name: r.name, meta: `${e.s || r.servings} P.`, kcal: nutr(r).kcal, p: nutr(r).p };
   }
-  return { emoji: '📝', name: e.t, meta: '', kcal: 0 };
+  return { emoji: '📝', name: e.t, meta: '', kcal: 0, p: 0 };
 }
 const fmtInt = n => Math.round(n).toLocaleString('de-DE');
 function viewPlan() {
@@ -337,17 +337,17 @@ function viewPlan() {
   const meals = MEALS.filter(m => S.settings.meals.includes(m.k));
   for (let i = 0; i < 7; i++) {
     const d = addDays(ws, i), k = dkey(d), day = S.plan[k] || {};
-    let slots = '', kcal = 0;
+    let slots = '', kcal = 0, prot = 0;
     for (const m of meals) {
       const e = day[m.k];
       if (e) {
-        const x = entryInfo(e); kcal += x.kcal;
+        const x = entryInfo(e); kcal += x.kcal; prot += x.p;
         slots += `<button class="slot filled" data-act="slotMenu" data-d="${k}" data-m="${m.k}"><span class="slot-l">${m.short}</span><span class="slot-emoji">${x.emoji}</span><span class="slot-name">${esc(x.name)}</span><span class="slot-meta">${x.meta}</span></button>`;
       } else {
         slots += `<button class="slot empty" data-act="slotPick" data-d="${k}" data-m="${m.k}"><span class="slot-l">${m.short}</span><span class="slot-add">+ Gericht wählen</span></button>`;
       }
     }
-    h += `<section class="card day${k === today ? ' today' : ''}${k < today ? ' past' : ''}"><div class="day-h"><span>${DAYS[i]}</span><small>${fmtDay(d)}</small>${kcal ? `<em>≈ ${fmtInt(kcal)} kcal</em>` : ''}</div>${slots}</section>`;
+    h += `<section class="card day${k === today ? ' today' : ''}${k < today ? ' past' : ''}"><div class="day-h"><span>${DAYS[i]}</span><small>${fmtDay(d)}</small>${kcal ? `<em>≈ ${fmtInt(kcal)} kcal · ${Math.round(prot * 400 / kcal)} % P</em>` : ''}</div>${slots}</section>`;
   }
   h += `<div class="stack" style="margin-top:18px">
     <button class="btn primary" data-act="weekToShop">🛒 Einkaufsliste für diese Woche</button>
@@ -362,7 +362,7 @@ function viewRecipes() {
     <div class="chips" id="rtags"></div>
     <div class="listbar"><span id="rcount" class="small muted"></span>
       <label class="sortsel"><span>Sortieren:</span><select data-change="sort">
-        ${[['name', 'Name'], ['time', 'Zeit'], ['kcal', 'Kalorien'], ['protein', 'Eiweiß']].map(([k, l]) => `<option value="${k}" ${S.ui.sort === k ? 'selected' : ''}>${l}</option>`).join('')}
+        ${[['name', 'Name'], ['time', 'Zeit'], ['kcal', 'Kalorien'], ['protein', 'Eiweiß (g)'], ['pp', 'Protein-Anteil']].map(([k, l]) => `<option value="${k}" ${S.ui.sort === k ? 'selected' : ''}>${l}</option>`).join('')}
       </select></label></div>
     <div class="list" id="rlist"></div>`;
 }
@@ -386,12 +386,13 @@ function filteredRecipes() {
     time: (a, b) => (a.time || 999) - (b.time || 999),
     kcal: (a, b) => nutr(a).kcal - nutr(b).kcal,
     protein: (a, b) => nutr(b).p - nutr(a).p,
+    pp: (a, b) => nutr(b).pp - nutr(a).pp,
   };
   return list.sort((a, b) => (isFav(b.id) - isFav(a.id)) || sorters[S.ui.sort || 'name'](a, b));
 }
 function recipeMeta(r) {
   const n = nutr(r);
-  return [r.time ? `⏱ ${r.time} Min.` : '', n.kcal ? `${fmtInt(n.kcal)} kcal` : '', n.vegan ? '🌱 Vegan' : ''].filter(Boolean).join(' · ');
+  return [r.time ? `⏱ ${r.time} Min.` : '', n.kcal ? `${fmtInt(n.kcal)} kcal` : '', n.kcal ? `💪 ${Math.round(n.pp)} % Protein` : '', n.vegan ? '🌱 Vegan' : ''].filter(Boolean).join(' · ');
 }
 function renderRecipeList() {
   const tags = tagCounts();
@@ -666,12 +667,13 @@ function openRecipe(id) {
         <div><b>${fmtInt(n.p)} g</b><span>Eiweiß</span></div><div><b>${fmtInt(n.c)} g</b><span>Kohlenh.</span></div><div><b>${fmtInt(n.f)} g</b><span>Fett</span></div><div><b>${fmtInt(n.fib)} g</b><span>Ballastst.</span></div></div>
         <div class="macro"><i class="mp" style="width:${eP / eT * 100}%"></i><i class="mc" style="width:${eC / eT * 100}%"></i><i class="mf" style="width:${eF / eT * 100}%"></i></div>
         <div class="legend"><span><i class="mp"></i>Eiweiß ${Math.round(eP / eT * 100)} %</span><span><i class="mc"></i>KH ${Math.round(eC / eT * 100)} %</span><span><i class="mf"></i>Fett ${Math.round(eF / eT * 100)} %</span></div>
+        ${fitnessHTML(n)}
         <p class="small muted">Ca.-Werte, automatisch aus den Zutaten berechnet${n.coverage < 0.9 ? ' – einige Zutaten wurden nicht erkannt' : ''}.</p>
       </div>` : ''}
       <div class="dhead"><h3>Zutaten</h3><span class="stepper" data-stepper="detServ"><button data-act="step" data-n="-1">−</button><output>${r.servings}</output><button data-act="step" data-n="1">+</button></span></div>
       <ul class="card ing" id="ingList"></ul>
       <button class="btn" style="margin-top:10px;width:100%" data-act="recipeToShop" data-id="${r.id}">🛒 Zutaten auf die Einkaufsliste</button>
-      ${r.steps.length ? `<div class="dhead"><h3>Zubereitung</h3></div><ol class="steps">${r.steps.map(s => `<li class="card" data-act="stepDone">${esc(s)}</li>`).join('')}</ol>` : ''}
+      ${r.steps.length ? `<div class="dhead"><h3>Zubereitung</h3></div><ol class="steps">${r.steps.map(s => `<li class="card" data-act="stepDone">${stepHTML(s)}</li>`).join('')}</ol><button class="btn primary" style="width:100%;margin-top:10px" data-act="cookStart" data-id="${r.id}">👩‍🍳 Kochmodus: Schritt für Schritt</button>` : ''}
       ${r.notes ? `<div class="dhead"><h3>Notizen</h3></div><div class="card notes">${esc(r.notes)}</div>` : ''}
       ${'wakeLock' in navigator ? `<div class="card" style="margin-top:18px"><label class="setting"><span><span class="lbl">Kochmodus</span><br><span class="sub">Bildschirm bleibt an</span></span><span class="switch"><input type="checkbox" data-change="wake"><i></i></span></label></div>` : ''}
       <button class="btn danger" style="width:100%;margin-top:14px" data-act="recipeDelete" data-id="${r.id}">${r.builtin ? 'Rezept ausblenden' : 'Rezept löschen'}</button>`,
@@ -679,6 +681,36 @@ function openRecipe(id) {
   });
   sh.dataset.recipe = r.id;
   drawIngredients(sh);
+}
+function fitnessHTML(n) {
+  const pp = Math.round(n.pp);
+  const [lbl, col] = pp >= 30 ? ['Sehr proteinreich – top für Muskelaufbau', 'var(--ok)'] : pp >= 20 ? ['Proteinreich – gut für Fitness & Sättigung', 'var(--ok)'] : pp >= 12 ? ['Ausgewogen – normaler Proteinanteil', '#f2b33d'] : ['Wenig Protein – z. B. mit Skyr, Tofu oder Linsen ergänzen', 'var(--red-t)'];
+  return `<div class="fit"><div class="fit-top"><b style="color:${col}">💪 ${pp} %</b><span>der Kalorien aus Protein</span></div>
+    <div class="fit-bar"><i style="width:${Math.min(100, pp / 40 * 100)}%;background:${col}"></i><s style="left:30%"></s><s style="left:62.5%"></s></div>
+    <div class="fit-scale"><span>0 %</span><span>12</span><span>25</span><span>40 %+</span></div>
+    <p class="fit-lbl">${lbl}</p></div>`;
+}
+// Zeiten & Temperaturen in Schritten fett hervorheben
+const stepHTML = s => esc(s).replace(/(\d+(?:[,.]\d+)?(?:\s*[–-]\s*\d+(?:[,.]\d+)?)?\s*(?:Min\.|Minuten|Minute|Std\.|Stunden?|Sek\.|Sekunden|°C|Watt))/g, '<b>$1</b>');
+function openCook(id) {
+  const r = recipeById(id); if (!r) return;
+  const sh = openSheet({
+    title: r.name, left: '<button class="lnk" data-act="closeSheet">Beenden</button>',
+    body: `<div class="cook"><div class="cook-prog"><i></i></div><p class="cook-n"></p><p class="cook-t"></p>
+      <div class="row"><button class="btn plain" data-act="cookMove" data-n="-1">← Zurück</button><button class="btn primary" data-act="cookMove" data-n="1">Weiter →</button></div>
+      <details class="card cook-ing"><summary>Zutaten anzeigen</summary><ul>${r.ingredients.map(i => `<li>${esc(ingLine(i))}</li>`).join('')}</ul></details></div>`,
+    onClose: releaseWake,
+  });
+  sh.dataset.recipe = id; sh.dataset.i = 0; drawCook(sh);
+  if ('wakeLock' in navigator) navigator.wakeLock.request('screen').then(w => { wakeLock = w; }).catch(() => {});
+}
+function drawCook(sh) {
+  const r = recipeById(sh.dataset.recipe), i = +sh.dataset.i, n = r.steps.length;
+  $('.cook-prog i', sh).style.width = `${(i + 1) / n * 100}%`;
+  $('.cook-n', sh).textContent = `Schritt ${i + 1} von ${n}`;
+  $('.cook-t', sh).innerHTML = stepHTML(r.steps[i]);
+  const [b, f] = $$('[data-act="cookMove"]', sh);
+  b.disabled = i === 0; f.textContent = i === n - 1 ? '✓ Fertig' : 'Weiter →';
 }
 function drawIngredients(sh) {
   const r = recipeById(sh.dataset.recipe); if (!r) return;
@@ -951,6 +983,12 @@ const ACT = {
   },
   seg(el) { $$('button', el.parentElement).forEach(b => b.classList.toggle('on', b === el)); },
   stepDone(el) { el.classList.toggle('done'); },
+  cookStart(el) { openCook(el.dataset.id); },
+  cookMove(el) {
+    const sh = topSheet(), r = recipeById(sh.dataset.recipe), i = +sh.dataset.i + +el.dataset.n;
+    if (i >= r.steps.length) { closeSheet(); toast('Guten Appetit! 🍽️'); return; }
+    sh.dataset.i = Math.max(0, i); drawCook(sh);
+  },
   step(el) {
     const st = el.closest('[data-stepper]'), out = $('output', st);
     const v = Math.max(1, Math.min(50, +out.textContent + +el.dataset.n));
