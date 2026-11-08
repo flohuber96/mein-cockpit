@@ -1,6 +1,6 @@
 // Offline-Cache für den Essensplaner. Bei Änderungen VERSION erhöhen.
-const VERSION = 'essen-v1';
-const FILES = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+const VERSION = 'essen-v2';
+const FILES = ['./', 'index.html', 'app.css', 'app.js', 'foods.js', 'recipes.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
