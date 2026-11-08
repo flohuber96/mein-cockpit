@@ -302,6 +302,22 @@ Harissa|🌶️|gewuerz|180,4,15,12,6|el=15,tl=5|harissa
 Meerrettich|🌿|gewuerz|70,2.5,11,0.6,8|el=15,tl=5|meerrettich
 Gewürzmischung|🟤|gewuerz|300,10,50,10,25|tl=2.5|gewürzmischung,gyros-gewürz,taco-gewürz,cajun,fajita-gewürz,five spice,fünf-gewürze,lebkuchengewürz,shawarma-gewürz,berbere,za'atar,zaatar,sumach,pul biber
 Ganze Gewürze|🟤|gewuerz|300,10,55,10,30|tl=2,p=0.5|kardamom,nelke,sternanis,fenchelsamen,fenchelsaat,bockshornklee,asafoetida,piment,wacholder,senfsaat,senfkörner,koriandersamen
+Lachs|🐟|fleisch|200,20,0,13,0|p=125,a,f|lachs,lachsfilet
+Räucherlachs|🐟|fleisch|180,22,0,10,0|pck=100,a,f|räucherlachs
+Thunfisch (Dose)|🐟|fleisch|110,25,0,1,0|d=150,a,f|thunfisch
+Kabeljau|🐟|fleisch|80,18,0,0.7,0|p=125,a,f|kabeljau,dorsch,skrei
+Seelachs|🐟|fleisch|80,18,0,0.9,0|p=125,a,f|seelachs,alaska-seelachs
+Garnelen|🦐|fleisch|80,18,0,1,0|a,f|garnele,shrimp,scampi,gambas,krabben
+Forelle|🐟|fleisch|110,20,0,3,0|p=150,a,f|forelle
+Makrele|🐟|fleisch|220,19,0,16,0|p=150,a,f|makrele
+Dorade|🐟|fleisch|100,20,0,2,0|p=200,a,f|dorade,wolfsbarsch,loup de mer
+Zander|🐟|fleisch|85,19,0,0.7,0|p=150,a,f|zander,pangasius,tilapia
+Matjes|🐟|fleisch|260,16,0,22,0|p=60,a,f|matjes,hering
+Sardinen (Dose)|🐟|fleisch|210,24,0,12,0|d=90,a,f|sardine,anchovis
+Tintenfisch|🦑|fleisch|80,16,1,1,0|a,f|tintenfisch,calamari,kalmar
+Miesmuscheln|🦪|fleisch|70,11,3,2,0|a,f|miesmuschel
+Fischstäbchen|🐟|tk|200,13,16,9,1|p=30,a,f|fischstäbchen
+Fischsauce|🍶|gewuerz|35,5,4,0,0|el=18,tl=6,a,f|fischsauce
 Toilettenpapier|🧻|haushalt|0,0,0,0,0|x|toilettenpapier,klopapier
 Küchenrolle|🧻|haushalt|0,0,0,0,0|x|küchenrolle,küchenpapier
 Spülmittel|🧴|haushalt|0,0,0,0,0|x|spülmittel
@@ -329,7 +345,7 @@ const FOODS = FOOD_DATA.trim().split('\n').map((line, i) => {
   (opts || '').split(',').filter(Boolean).forEach(x => { const [k, v] = x.split('='); o[k] = v === undefined ? true : +v; });
   const base = name.replace(/\s*\(.*?\)/g, '').toLowerCase();
   const kl = [...new Set([base, ...(keys || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)])];
-  return { id: i, name, emoji, cat, kcal, p, c, f, fib, o, keys: kl, animal: !!o.a, nonfood: !!o.x };
+  return { id: i, name, emoji, cat, kcal, p, c, f, fib, o, keys: kl, animal: !!o.a, fish: !!o.f, nonfood: !!o.x };
 });
 
 // Längster passender Suchbegriff gewinnt ("Kokosmilch" vor "Milch", "Tomatenmark" vor "Tomate").
@@ -396,10 +412,11 @@ function ingGrams(ing, fd) {
 // Nährwerte für ein Rezept (gesamt), plus Info ob vegan und wie viel erkannt wurde
 function calcNutrition(ingredients) {
   const t = { kcal: 0, p: 0, c: 0, f: 0, fib: 0 };
-  let vegan = true, known = 0, counted = 0;
+  let vegan = true, fish = false, known = 0, counted = 0;
   for (const ing of ingredients) {
     const fd = matchFood(ing.name);
     if (fd && fd.animal) vegan = false;
+    if (fd && fd.fish) fish = true;
     if (!fd) { if (/\b(ei|eier|käse|milch|butter|sahne|joghurt|quark|honig)\b/i.test(ing.name)) vegan = false; }
     if (ing.amount == null) continue;
     counted++;
@@ -408,5 +425,5 @@ function calcNutrition(ingredients) {
     const g = ingGrams(ing, fd) / 100;
     t.kcal += fd.kcal * g; t.p += fd.p * g; t.c += fd.c * g; t.f += fd.f * g; t.fib += fd.fib * g;
   }
-  return { ...t, vegan, coverage: counted ? known / counted : 1 };
+  return { ...t, vegan, fish, coverage: counted ? known / counted : 1 };
 }

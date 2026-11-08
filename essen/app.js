@@ -225,14 +225,16 @@ function nutr(r) {
   let n = nutCache.get(r.id);
   if (!n) {
     const t = calcNutrition(r.ingredients), s = r.servings || 1;
-    n = { pp: t.kcal ? t.p * 4 / t.kcal * 100 : 0, kcal: t.kcal / s, p: t.p / s, c: t.c / s, f: t.f / s, fib: t.fib / s, vegan: t.vegan, coverage: t.coverage };
+    n = { pp: t.kcal ? t.p * 4 / t.kcal * 100 : 0, kcal: t.kcal / s, p: t.p / s, c: t.c / s, f: t.f / s, fib: t.fib / s, vegan: t.vegan, fish: t.fish, coverage: t.coverage };
     nutCache.set(r.id, n);
   }
   return n;
 }
 const SMART = {
   fav: { label: '♥ Favoriten', test: r => isFav(r.id) },
+  veggie: { label: '🥕 Vegetarisch', test: r => !nutr(r).fish },
   vegan: { label: '🌱 Vegan', test: r => nutr(r).vegan },
+  fish: { label: '🐟 Fisch', test: r => nutr(r).fish },
   fast: { label: '⏱ Bis 30 Min.', test: r => r.time && r.time <= 30 },
   light: { label: '🔥 Unter 500 kcal', test: r => nutr(r).kcal < 500 },
   protein: { label: '💪 Proteinreich (ab 25 %)', test: r => nutr(r).pp >= 25 },
@@ -392,7 +394,7 @@ function filteredRecipes() {
 }
 function recipeMeta(r) {
   const n = nutr(r);
-  return [r.time ? `⏱ ${r.time} Min.` : '', n.kcal ? `${fmtInt(n.kcal)} kcal` : '', n.kcal ? `💪 ${Math.round(n.pp)} % Protein` : '', n.vegan ? '🌱 Vegan' : ''].filter(Boolean).join(' · ');
+  return [r.time ? `⏱ ${r.time} Min.` : '', n.kcal ? `${fmtInt(n.kcal)} kcal` : '', n.kcal ? `💪 ${Math.round(n.pp)} % Protein` : '', n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : ''].filter(Boolean).join(' · ');
 }
 function renderRecipeList() {
   const tags = tagCounts();
@@ -611,7 +613,7 @@ function viewMore() {
     1. Diese Seite in <b>Safari</b> öffnen<br>2. Unten auf <b>Teilen</b> (□↑) tippen<br>3. <b>„Zum Home-Bildschirm“</b> wählen<br>
     <span class="muted small">Danach startet die App im Vollbild und funktioniert auch offline.</span>
   </div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte · alle vegetarisch · Essensplaner v2.0<br>Nährwerte sind automatisch berechnete Ca.-Werte.</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Essensplaner v3.0<br>Nährwerte sind automatisch berechnete Ca.-Werte.</p>`;
 }
 
 /* ───────── Plan-Aktionen ───────── */
@@ -656,7 +658,7 @@ function openRecipe(id) {
     left: `<button class="lnk" data-act="closeSheet">Schließen</button>`,
     right: `<button class="lnk r" data-act="recipeEdit" data-id="${r.id}">Bearbeiten</button>`,
     body: `<div class="hero"><div class="e">${esc(r.emoji || '🍽️')}</div><h2>${esc(r.name)}</h2>
-      <div class="meta">${r.time ? `<span class="pill">⏱ ${r.time} Min.</span>` : ''}${r.level ? `<span class="pill">📊 ${LEVELS[r.level]}</span>` : ''}<span class="pill">${n.vegan ? '🌱 Vegan' : '🥕 Vegetarisch'}</span>${(r.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div></div>
+      <div class="meta">${r.time ? `<span class="pill">⏱ ${r.time} Min.</span>` : ''}${r.level ? `<span class="pill">📊 ${LEVELS[r.level]}</span>` : ''}<span class="pill">${n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : '🥕 Vegetarisch'}</span>${(r.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div></div>
       <div class="row">
         <button class="btn soft" data-act="recipeFav" data-id="${r.id}">${isFav(r.id) ? '♥ Favorit' : '♡ Merken'}</button>
         <button class="btn soft" data-act="recipeToPlan" data-id="${r.id}">📅 Planen</button>
