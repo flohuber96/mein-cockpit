@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lernpfad</title>
+<meta name="description" content="Kurse mit Kapiteln, Tests, Notizen und Fortschritt – alles auf einer Plattform.">
+<meta name="theme-color" content="#f5f6fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111214" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Lernen">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <button class="back" id="back" data-act="back" hidden aria-label="Zurück">
+    <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg><span id="backLbl">Zurück</span>
+  </button>
+  <h1 id="title">Kurse</h1>
+  <div id="hact" class="hact"></div>
+</header>
+
+<main id="main"></main>
+
+<nav class="tabbar" id="tabbar">
+  <button data-act="tab" data-view="kurse">
+    <svg viewBox="0 0 24 24"><path d="M2.5 8.5 12 4l9.5 4.5L12 13z"/><path d="M6.5 10.5v5c0 1.5 2.5 3 5.5 3s5.5-1.5 5.5-3v-5M21.5 8.5v6"/></svg>
+    <span>Kurse</span>
+  </button>
+  <button data-act="tab" data-view="notizen">
+    <svg viewBox="0 0 24 24"><path d="M5 3.5h10l4 4V20a.5.5 0 0 1-.5.5h-13A.5.5 0 0 1 5 20z"/><path d="M15 3.5v4h4M8.5 11.5h7M8.5 15.5h5"/></svg>
+    <span>Notizen</span><i class="badge" id="qBadge" hidden></i>
+  </button>
+  <button data-act="tab" data-view="fortschritt">
+    <svg viewBox="0 0 24 24"><path d="M4 20.5V10M10 20.5V4M16 20.5v-7M21 20.5H3"/></svg>
+    <span>Fortschritt</span>
+  </button>
+  <button data-act="tab" data-view="mehr">
+    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+    <span>Mehr</span>
+  </button>
+</nav>
+
+<div id="sheets"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<!-- Kursinhalte: neue Kurse einfach als weitere Datei in kurse/ anlegen und hier eintragen -->
+<script src="kurse/fuehrung.js"></script>
+<script src="kurse/motivation.js"></script>
+<script src="kurse/schweissen.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
