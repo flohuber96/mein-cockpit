@@ -12,6 +12,7 @@ create table if not exists public.app_items (
   primary key (owner, app, id)
 );
 create index if not exists app_items_sync on public.app_items (owner, app, updated_at);
+grant select, insert, update, delete on public.app_items to authenticated;
 alter table public.app_items enable row level security;
 drop policy if exists "app_items_own" on public.app_items;
 create policy "app_items_own" on public.app_items

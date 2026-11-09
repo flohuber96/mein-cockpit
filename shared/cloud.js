@@ -26,6 +26,7 @@
   primary key (owner, app, id)
 );
 create index if not exists app_items_sync on public.app_items (owner, app, updated_at);
+grant select, insert, update, delete on public.app_items to authenticated;
 alter table public.app_items enable row level security;
 drop policy if exists "app_items_own" on public.app_items;
 create policy "app_items_own" on public.app_items
@@ -67,8 +68,10 @@ create trigger app_items_touch before insert or update on public.app_items
     if (/email not confirmed/i.test(m)) return 'E-Mail noch nicht bestätigt – bitte Link in der Mail antippen';
     if (/already registered/i.test(m)) return 'Konto gibt es schon – bitte anmelden';
     if (/password should be/i.test(m)) return 'Passwort zu kurz (mind. 6 Zeichen)';
-    if (/invalid api key/i.test(m)) return 'Anon Key stimmt nicht';
+    if (/invalid api key|no api key/i.test(m)) return 'API-Key stimmt nicht';
     if (/app_items/.test(m) && /does not exist|not find|schema cache/i.test(m)) return 'Tabelle fehlt – bitte das SQL im Supabase-Dashboard ausführen';
+    if (/permission denied|row-level security/i.test(m)) return 'Keine Berechtigung – bitte das SQL (neueste Version) im Supabase-Dashboard erneut ausführen';
+    if (/jwt expired/i.test(m)) return 'Anmeldung abgelaufen – bitte neu anmelden';
     return m;
   }
   async function authCall(a, path, body) {
@@ -78,25 +81,35 @@ create trigger app_items_touch before insert or update on public.app_items
     return j;
   }
   function setSession(a, j) {
-    a.session = { at: j.access_token, rt: j.refresh_token, exp: j.expires_at || Math.floor(Date.now() / 1000) + (j.expires_in || 3600), uid: j.user.id };
+    const life = j.expires_in || 3600;
+    a.session = { at: j.access_token, rt: j.refresh_token, exp: j.expires_at || Math.floor(Date.now() / 1000) + life, life, uid: j.user.id };
     if (j.user.email) a.email = j.user.email;
     saveAuth(a);
   }
-  async function refresh(a) {
-    const now = auth(); // evtl. hat eine andere App schon erneuert
-    if (now.session && now.session.at !== a.session.at) { a.session = now.session; return; }
-    try { setSession(a, await authCall(a, 'token?grant_type=refresh_token', { refresh_token: a.session.rt })); }
-    catch (e) {
-      if (e.status >= 400 && e.status < 500) { a.session = null; saveAuth(a); throw new Error('Anmeldung abgelaufen – bitte neu anmelden'); }
-      throw e;
-    }
+  const expiring = s => s.exp - Math.min(60, (s.life || 3600) / 4) < Date.now() / 1000;
+  // Login erneuern. Immer nur eine App gleichzeitig (Sperre über alle Tabs), denn Supabase
+  // akzeptiert jeden Refresh-Token nur einmal. Die andere App übernimmt dann den neuen Login.
+  function refresh(a, stale) {
+    const run = async () => {
+      const cur = auth();
+      if (cur.session && cur.session.at !== stale) { a.session = cur.session; return; } // andere App war schneller
+      if (!cur.session) { a.session = null; throw new Error('Anmeldung abgelaufen – bitte neu anmelden'); }
+      try { setSession(a, await authCall(a, 'token?grant_type=refresh_token', { refresh_token: cur.session.rt })); }
+      catch (e) {
+        const again = auth();
+        if (again.session && again.session.at !== stale) { a.session = again.session; return; }
+        if (e.status >= 400 && e.status < 500) { a.session = null; saveAuth(a); throw new Error('Anmeldung abgelaufen – bitte neu anmelden'); }
+        throw e;
+      }
+    };
+    return navigator.locks ? navigator.locks.request('cloud-auth', run) : run();
   }
   async function rest(a, path, opts = {}, retry = true) {
-    if (a.session.exp - 60 < Date.now() / 1000) await refresh(a);
+    if (expiring(a.session)) await refresh(a, a.session.at);
     const res = await fetch(base(a) + '/rest/v1/' + path, {
       ...opts, headers: { apikey: a.key, Authorization: 'Bearer ' + a.session.at, 'Content-Type': 'application/json', ...opts.headers },
     });
-    if (res.status === 401 && retry) { await refresh(a); return rest(a, path, opts, false); }
+    if (res.status === 401 && retry) { await refresh(a, a.session.at); return rest(a, path, opts, false); }
     const txt = await res.text();
     if (!res.ok) {
       let m = txt; try { const j = JSON.parse(txt); m = j.message || j.hint || txt; } catch (e) { /* Text */ }
@@ -206,16 +219,16 @@ create trigger app_items_touch before insert or update on public.app_items
         <button data-cloud="tap"><span class="ico">🔄</span>Jetzt synchronisieren</button>
         <button data-cloud="logout"><span class="ico">🚪</span>Abmelden</button>
       </div>
-      <p class="small muted" style="margin:0 4px">Deine Daten liegen online und zusätzlich auf diesem Gerät. Der Login gilt für alle Apps im Cockpit. Auf weiteren Handys einfach mit demselben Konto anmelden – Änderungen erscheinen dort beim Öffnen und alle 20 Sekunden.</p>`;
+      <p class="small muted" style="margin:0 4px">Deine Daten liegen online und zusätzlich auf diesem Gerät. Auf weiteren Handys mit demselben Konto anmelden – Änderungen erscheinen dort beim Öffnen und alle 20 Sekunden. Im Browser gilt der Login für alle Apps im Cockpit; als App auf dem Home-Bildschirm meldest du dich in jeder App einmal an.</p>`;
     } else {
       h += `<form class="card cloud-form" data-cloud-form>
         ${a.email ? `<p class="small" style="color:var(--red-t);margin:0 2px 10px">Bitte (neu) anmelden.</p>` : ''}
-        <p class="small muted" style="margin:0 2px 12px">Daten online speichern – sicher vor Handy-Verlust und auf mehreren Geräten nutzbar. Ein Konto für alle Apps.</p>
+        <p class="small muted" style="margin:0 2px 12px">Daten online speichern – sicher vor Handy-Verlust und auf mehreren Geräten nutzbar. Ein Konto für alle Apps (Essen, Baby, …).</p>
         <div class="field"><label>E-Mail</label><input type="email" name="email" autocomplete="username" value="${esc(a.email || '')}" required></div>
         <div class="field"><label>Passwort</label><input type="password" name="pw" autocomplete="current-password" minlength="6" required></div>
         <details class="cloud-adv" ${a.key ? '' : 'open'}><summary>Server-Einstellungen</summary>
           <div class="field"><label>Supabase-Projekt-URL</label><input type="url" name="url" value="${esc(a.url)}" required></div>
-          <div class="field"><label>Anon Public Key</label><input type="text" name="key" value="${esc(a.key)}" placeholder="eyJhbGci…" autocomplete="off" required></div>
+          <div class="field"><label>API-Key (anon public oder publishable)</label><input type="text" name="key" value="${esc(a.key)}" placeholder="eyJhbGci… oder sb_publishable_…" autocomplete="off" required></div>
         </details>
         <div class="cloud-acts">
           <button type="button" class="btn plain" data-cloud="signup">Konto erstellen</button>
@@ -226,8 +239,8 @@ create trigger app_items_touch before insert or update on public.app_items
         <ol>
           <li>Auf <b>supabase.com</b> dein Projekt öffnen (oder ein kostenloses neues anlegen).</li>
           <li><b>SQL Editor</b> → <b>New query</b> → den Text unten einfügen → <b>Run</b>.</li>
-          <li>Unter <b>Project Settings → API</b> die <b>Project URL</b> und den <b>anon public</b> Key kopieren und oben eintragen.</li>
-          <li>Konto anlegen: hier „Konto erstellen“ – oder im Dashboard unter <b>Authentication → Users → Add user</b> (mit „Auto Confirm“).</li>
+          <li>Unter <b>Project Settings → API Keys</b> den Key <b>anon public</b> (beginnt mit eyJ…) oder den <b>Publishable key</b> (beginnt mit sb_publishable_) kopieren. Die <b>Project URL</b> steht unter <b>Project Settings → Data API</b> (bzw. <b>API</b>). Beides oben eintragen.</li>
+          <li>Konto anlegen: hier „Konto erstellen“ und den Link in der Bestätigungs-Mail antippen (zeigt der Link eine Fehlerseite, ist die Mail trotzdem bestätigt). Einfacher: im Dashboard unter <b>Authentication → Users → Add user</b> mit „Auto Confirm User“.</li>
           <li>Auf weiteren Handys mit derselben E-Mail und demselben Passwort anmelden.</li>
         </ol>
         <textarea readonly rows="8" id="cloudSql">${esc(SQL)}</textarea>
