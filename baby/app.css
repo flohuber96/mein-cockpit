@@ -208,18 +208,48 @@ main{padding:4px 14px calc(96px + var(--bot));max-width:1100px;margin:0 auto}
 .grow .del{color:var(--t3);font-size:20px}
 
 /* To-do */
-.addbar{display:flex;gap:8px;margin-bottom:12px}
+.tback{font-size:12px;font-weight:700;color:var(--acc-t);margin-left:4px}
+.addbar{display:flex;gap:8px;margin-bottom:8px}
 .addbar input{background:var(--card);box-shadow:var(--shadow)}
 .addbar .btn{width:52px;flex:none;padding:0;font-size:26px;font-weight:400}
-.todo{overflow:hidden}
-.item{display:flex;align-items:center;gap:2px;padding-left:4px}
-.item+.item{border-top:1px solid var(--line)}
+.tgt{margin:0 -14px 10px;padding:2px 14px}
+.chip.today:not(.on){color:var(--acc-t)}
+.chiprow.wrap{flex-wrap:wrap;overflow:visible}
+.tfilter{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 0 12px}
+.tfilter span{font-size:13px;color:var(--t2);text-align:right}
+.tfilter span button{font-size:13px;font-weight:700;color:var(--red-t)}
+.tday{margin-bottom:10px;overflow:hidden}
+.tday.today{outline:2px solid var(--acc);outline-offset:-2px}
+.tday.past .tday-h{opacity:.6}
+.tday.over{outline:1.5px solid var(--red-t);outline-offset:-1.5px}
+.tday.over .tday-h b{color:var(--red-t)}
+.tday-h{display:flex;align-items:center;gap:8px;padding:8px 6px 4px 14px;min-height:44px}
+.tday-h b{font-size:16px;font-weight:800}
+.tday-h small{font-size:13px;color:var(--t2)}
+.tday-h i{font-style:normal;padding:2px 8px;border-radius:8px;background:var(--acc);color:var(--on-acc);font-size:11px;font-weight:800}
+.tday-h em{margin-left:auto;font-style:normal;font-size:12px;font-weight:700;color:var(--t2);background:var(--card2);padding:2px 8px;border-radius:8px;font-variant-numeric:tabular-nums}
+.tday-h em.full{background:var(--ok-soft);color:var(--ok)}
+.tplus{width:36px;height:36px;border-radius:50%;background:var(--acc-soft);color:var(--acc-t);font-size:22px;line-height:1;flex:none}
+.tday-h b+.tplus,.tday-h small+.tplus,.tday-h i+.tplus{margin-left:auto}
+.tlist{min-height:40px;padding-bottom:2px}
+.tempty{padding:2px 14px 10px;font-size:14px;color:var(--t3)}
+.tempty:not(:last-child){display:none}
+.item{display:flex;align-items:center;gap:2px;padding-left:4px;border-top:1px solid var(--line);transition:opacity .15s}
 .check{width:44px;height:48px;flex:none;display:grid;place-items:center}
 .check::before{content:"";width:24px;height:24px;border-radius:50%;border:2px solid var(--t3);transition:.15s}
 .item.done .check::before{background:var(--ok);border-color:var(--ok);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E");background-size:16px;background-position:center;background-repeat:no-repeat}
 .item .txt{flex:1;min-width:0;padding:12px 4px;text-align:left;font-size:16px;overflow-wrap:anywhere}
+.item .txt small{display:block;font-size:12px;font-weight:600;color:var(--red-t);margin-top:1px}
 .item.done .txt{text-decoration:line-through;color:var(--t3)}
-.item .del{width:40px;height:44px;flex:none;color:var(--t3);font-size:22px}
+.item.done{opacity:.6}
+.grip{width:44px;height:48px;flex:none;display:grid;place-items:center;color:var(--t3);touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.grip svg{width:20px;height:20px;fill:currentColor}
+.item.ph{opacity:.3;background:var(--acc-soft)}
+.ghost{position:fixed;z-index:90;pointer-events:none;background:var(--card);display:flex;align-items:center;border-radius:12px;border:0;box-shadow:0 12px 32px rgba(0,0,0,.28);transform:scale(1.03);opacity:.97}
+body.dragging{-webkit-user-select:none;user-select:none;cursor:grabbing}
+.thint{text-align:center;margin:6px 8px 4px}
+.tsugg{margin-top:14px}
+.tsugg summary{cursor:pointer;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t2);padding:6px 4px 10px}
 .sugg{display:flex;flex-wrap:wrap;gap:6px}
 .sugg .chip{background:var(--card);box-shadow:var(--shadow)}
 
