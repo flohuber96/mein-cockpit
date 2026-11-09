@@ -1,5 +1,5 @@
 // Offline-Cache für das Baby-Tagebuch. Bei Änderungen VERSION erhöhen.
-const VERSION = 'baby-v4';
+const VERSION = 'baby-v5';
 const FILES = ['./', 'index.html', 'app.css', 'app.js', '../shared/cloud.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
