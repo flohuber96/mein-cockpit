@@ -63,7 +63,7 @@ const KEY = 'baby.v1';
 function fresh() {
   return {
     v: 1, log: [], todos: [], growth: [], vitd: {},
-    settings: { name: '', birth: '', theme: 'auto', vitd: true },
+    settings: { name: '', birth: '', theme: 'auto', vitd: true, feedInt: 180, feedFrom: 'start', nightOn: false, nightInt: 240 },
     ui: { view: 'today' },
   };
 }
@@ -257,7 +257,7 @@ function render() {
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
   $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'today' ? `<button class="hbtn" data-act="shareDay" aria-label="Tag teilen"><svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button>` : '');
   const main = $('#main');
-  if (v === 'today') main.innerHTML = viewToday();
+  if (v === 'today') { main.innerHTML = viewToday(); updateFeedCard(Date.now()); }
   if (v === 'stats') main.innerHTML = viewStats();
   if (v === 'todo') main.innerHTML = viewTodo();
   if (v === 'more') main.innerHTML = viewMore();
@@ -273,6 +273,66 @@ function viewToday() {
   return `<div class="today"><div class="colL">${statusHTML()}<div id="formWrap">${formHTML(F, 'main')}</div></div>
     <div class="colR" id="logWrap">${logHTML()}</div></div>`;
 }
+/* ── Mahlzeiten-Timer: Zeit seit letzter Mahlzeit + Optimalzeit ── */
+const fmtInt = m => { const h = Math.floor(m / 60), r = m % 60; return h ? (r ? `${h}:${pad(r)} h` : `${h} h`) : `${r} min`; };
+const isNight = ts => { const h = new Date(ts).getHours(); return h >= 22 || h < 6; };
+function feedPlan(lf) {
+  const st = S.settings;
+  const ref = st.feedFrom === 'end' && lf.e ? lf.e : lf.s;
+  const night = st.nightOn && isNight(ref);
+  const int = night ? st.nightInt : st.feedInt;
+  return { ref, int, target: ref + int * MIN, night };
+}
+function feedCardHTML(lf) {
+  if (running().some(x => isFeed(x) && !isSleep(x))) return ''; // Mahlzeit läuft gerade – die Timer-Karte oben reicht
+  if (!lf) return `<button class="card feed" data-act="feedSettings"><div class="fh"><small>🍼 Seit letzter Mahlzeit</small><span>Ziel ${fmtInt(S.settings.feedInt)} ⚙︎</span></div>
+    <b class="fclock">–</b><div class="fstate">Noch keine Mahlzeit eingetragen</div></button>`;
+  const p = feedPlan(lf);
+  return `<button class="card feed" id="feedCard" data-act="feedSettings" data-ref="${p.ref}" data-target="${p.target}" data-int="${p.int}">
+    <div class="fh"><small>🍼 Seit letzter Mahlzeit</small><span>Ziel ${fmtInt(p.int)}${p.night ? ' 🌙' : ''} ⚙︎</span></div>
+    <b class="fclock"></b>
+    <div class="fbar"><i></i></div>
+    <div class="fstate"></div>
+    <div class="flast">${S.settings.feedFrom === 'end' && lf.e ? 'Ende' : 'Beginn'} ${hm(p.ref)} · ${esc(kindNames(lf))}${lf.side.length ? ' ' + lf.side.join('+') : ''}${lf.ml ? ' · ' + lf.ml + ' ml' : ''}</div>
+  </button>`;
+}
+function updateFeedCard(now) {
+  const c = document.getElementById('feedCard'); if (!c) return;
+  const ref = +c.dataset.ref, target = +c.dataset.target, int = +c.dataset.int * MIN;
+  const passed = now - ref, left = target - now;
+  const state = left > 15 * MIN ? 'ok' : left > 0 ? 'soon' : 'due';
+  if (!c.classList.contains(state)) { c.classList.toggle('ok', state === 'ok'); c.classList.toggle('soon', state === 'soon'); c.classList.toggle('due', state === 'due'); }
+  $('.fclock', c).textContent = fmtClock(passed);
+  $('.fbar i', c).style.width = Math.min(100, Math.max(0, passed / int * 100)) + '%';
+  $('.fstate', c).textContent = left > 0 ? `noch ${fmtDur(left)} · nächste ca. ${hm(target)}` : left > -MIN ? 'Jetzt ist Mahlzeit-Zeit' : `Optimalzeit seit ${fmtDur(-left)} erreicht`;
+  // Hinweis, wenn die Optimalzeit erreicht wird, während die App offen ist
+  if (left <= 0 && ui.feedAlert !== ref && document.visibilityState === 'visible') {
+    ui.feedAlert = ref;
+    if (left > -5 * MIN) { toast('🍼 Optimalzeit erreicht'); if (navigator.vibrate) navigator.vibrate([200, 100, 200]); }
+  }
+}
+function feedSheetBody() {
+  const st = S.settings;
+  const stepper = (k, v) => `<div class="fstep"><button type="button" data-act="feedStep" data-k="${k}" data-n="-15" aria-label="15 Minuten weniger">−</button><output>${fmtInt(v)}</output><button type="button" data-act="feedStep" data-k="${k}" data-n="15" aria-label="15 Minuten mehr">+</button></div>
+    <div class="chiprow wrap">${[120, 150, 180, 210, 240, 300].map(m => `<button type="button" class="chip ${v === m ? 'on' : ''}" data-act="feedSet" data-k="${k}" data-v="${m}">${fmtInt(m)}</button>`).join('')}</div>`;
+  return `<div id="feedSheet">
+    <div class="field"><label>Optimaler Abstand zwischen den Mahlzeiten</label>${stepper('feedInt', st.feedInt)}</div>
+    <div class="field"><label>Gemessen ab</label><div class="seg">
+      <button type="button" data-act="feedFrom" data-v="start" class="${st.feedFrom !== 'end' ? 'on' : ''}">Beginn der Mahlzeit</button>
+      <button type="button" data-act="feedFrom" data-v="end" class="${st.feedFrom === 'end' ? 'on' : ''}">Ende der Mahlzeit</button></div>
+      <p class="small muted" style="margin:6px 4px 0">Üblich ist ab Beginn: „alle 3 Stunden“ heißt von Anfang zu Anfang.</p></div>
+    <div class="card" style="margin-bottom:12px"><label class="setting"><span><span class="lbl">🌙 Nachts anderer Abstand</span><br><span class="sub">für Mahlzeiten zwischen 22 und 6 Uhr</span></span><span class="switch"><input type="checkbox" data-change="nightOn" ${st.nightOn ? 'checked' : ''}><i></i></span></label></div>
+    ${st.nightOn ? `<div class="field"><label>Abstand nachts</label>${stepper('nightInt', st.nightInt)}</div>` : ''}
+    <p class="small muted" style="margin:0 4px 14px">Grün = alles gut, ab 15 min vorher orange, danach rot. Ist die App offen, kommt beim Erreichen ein Hinweis. Nur eine Orientierung – richtet euch nach eurem Baby und eurer Hebamme.</p>
+    <button class="btn primary" style="width:100%" data-act="closeSheet">Fertig</button>
+  </div>`;
+}
+function feedChanged() {
+  save();
+  const b = document.getElementById('feedSheet'); if (b) b.outerHTML = feedSheetBody();
+  refreshToday(); if (S.ui.view === 'more') render();
+}
+
 function statusHTML() {
   const now = Date.now();
   let h = running().map(x => {
@@ -291,8 +351,10 @@ function statusHTML() {
   const lastDiaper = [lpee, lpoo].filter(Boolean).sort((a, b) => b.s - a.s)[0];
   const sleeping = running().find(isSleep);
   const lastBreast = lastWhere(x => isBreast(x) && x.side.length);
+  const td = dayStats(dkey(new Date()));
+  h += feedCardHTML(lf);
   h += `<div class="status">
-    <div class="card st"><small>🍼 Letzte Mahlzeit</small>${lf ? `<b data-ago="${lf.s}">${fmtDur(now - lf.s)}</b><span>${hm(lf.s)} · ${esc(kindNames(lf))}${lf.side.length ? ' ' + lf.side.join('+') : ''}${lf.ml ? ' · ' + lf.ml + ' ml' : ''}</span>` : '<b>–</b><span>noch nichts eingetragen</span>'}</div>
+    <div class="card st"><small>🍼 Heute</small><b>${td.feeds}× gefüttert</b><span>${[td.ml ? td.ml + ' ml' : '', td.breastMin ? '🤱 ' + fmtDur(td.breastMin * MIN) : ''].filter(Boolean).join(' · ') || 'noch nichts'}</span></div>
     <div class="card st"><small>🤱 Nächste Seite</small>${sug ? `<b><span class="side">${sug}</span>${sug === 'L' ? 'links' : 'rechts'}</b><span>zuletzt ${lastBreast.side.join(' → ')} um ${hm(lastBreast.s)}</span>` : '<b>–</b><span>nach dem ersten Stillen</span>'}</div>
     <div class="card st"><small>😴 Schlaf</small>${sleeping ? `<b data-ago="${sleeping.s}">${fmtDur(now - sleeping.s)}</b><span>schläft seit ${hm(sleeping.s)}</span>`
       : ls && ls.e ? `<b data-ago="${ls.e}">${fmtDur(now - ls.e)}</b><span>wach seit ${hm(ls.e)}</span>` : '<b>–</b><span>Schlaf per Timer starten</span>'}</div>
@@ -346,7 +408,7 @@ function rowHTML(x) {
 }
 function refreshToday() {
   if (S.ui.view !== 'today') return;
-  const sw = $('#statusWrap'); if (sw) sw.outerHTML = statusHTML();
+  const sw = $('#statusWrap'); if (sw) sw.outerHTML = statusHTML(); updateFeedCard(Date.now());
   const lw = $('#logWrap'); if (lw) lw.innerHTML = logHTML();
 }
 
@@ -429,6 +491,7 @@ function viewMore() {
   <div class="section-t">Anzeige</div>
   <div class="card">
     <div class="setting"><span class="lbl">Design</span><div class="seg">${[['auto', 'Auto'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([k, n]) => `<button data-act="theme" data-v="${k}" class="${th === k ? 'on' : ''}">${n}</button>`).join('')}</div></div>
+    <button class="setting" style="width:100%;text-align:left" data-act="feedSettings"><span><span class="lbl">Mahlzeiten-Timer</span><br><span class="sub">Optimaler Abstand ${fmtInt(st.feedInt)}${st.nightOn ? ' · nachts ' + fmtInt(st.nightInt) : ''} · ab ${st.feedFrom === 'end' ? 'Ende' : 'Beginn'}</span></span><span class="sub">›</span></button>
     <label class="setting"><span><span class="lbl">Vitamin-D-Erinnerung</span><br><span class="sub">Abhaken auf der Startseite</span></span><span class="switch"><input type="checkbox" data-change="vitdOn" ${st.vitd ? 'checked' : ''}><i></i></span></label>
   </div>
   ${window.Cloud ? Cloud.section() : ''}
@@ -455,7 +518,7 @@ function viewMore() {
     • Eintrag antippen zum Bearbeiten oder Löschen.<br>
     • Uhrzeit nach Mitternacht? Eine spätere Uhrzeit als jetzt wird automatisch auf gestern gelegt.
   </div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.2</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.3</p>`;
 }
 
 /* ───────── Aktionen ───────── */
@@ -581,6 +644,10 @@ const ACT = {
     ui.day = d; $('#logWrap').innerHTML = logHTML();
   },
   dayToday() { ui.day = dkey(new Date()); $('#logWrap').innerHTML = logHTML(); },
+  feedSettings() { openSheet({ title: 'Mahlzeiten-Timer', body: feedSheetBody() }); },
+  feedStep(el) { const k = el.dataset.k; S.settings[k] = Math.max(30, Math.min(480, S.settings[k] + +el.dataset.n)); vib(); feedChanged(); },
+  feedSet(el) { S.settings[el.dataset.k] = +el.dataset.v; vib(); feedChanged(); },
+  feedFrom(el) { S.settings.feedFrom = el.dataset.v; feedChanged(); },
   vitd() { const k = dkey(new Date()); if (S.vitd[k]) delete S.vitd[k]; else S.vitd[k] = true; vib(); commit(); },
   async shareDay() {
     const text = dayText(S.ui.view === 'today' ? ui.day : dkey(new Date()));
@@ -658,6 +725,7 @@ const CHANGE = {
   name(el) { S.settings.name = el.value.trim(); save(); render(); },
   birth(el) { S.settings.birth = el.value; save(); render(); },
   vitdOn(el) { S.settings.vitd = el.checked; save(); },
+  nightOn(el) { S.settings.nightOn = el.checked; feedChanged(); },
 };
 
 /* ───────── Events ───────── */
@@ -703,6 +771,7 @@ function tick() {
     return;
   }
   $$('[data-clock]').forEach(el => { el.textContent = fmtClock(now - +el.dataset.clock); });
+  updateFeedCard(now);
   if (now % 15000 < 1000) $$('[data-ago]').forEach(el => { el.textContent = fmtDur(now - +el.dataset.ago); });
   if (!F.vonSet) {
     const inp = $('[data-fid="main"] [data-in="von"]');
@@ -727,8 +796,9 @@ if (window.Cloud) Cloud.init({
     const m = {};
     for (const [k, [p, arr]] of Object.entries(CLOUD_ARR)) for (const x of S[arr]) m[p + x.id] = { kind: k, data: x };
     for (const d of Object.keys(S.vitd)) if (S.vitd[d]) m['v:' + d] = { kind: 'vitd', data: true };
-    const st = { name: S.settings.name, birth: S.settings.birth, vitd: S.settings.vitd };
-    m.settings = { kind: 'settings', data: st, soft: !st.name && !st.birth && st.vitd };
+    const st = {}, def = fresh().settings;
+    for (const k of ['name', 'birth', 'vitd', 'feedInt', 'feedFrom', 'nightOn', 'nightInt']) st[k] = S.settings[k];
+    m.settings = { kind: 'settings', data: st, soft: Object.keys(st).every(k => st[k] === def[k]) };
     return m;
   },
   apply(r) {
