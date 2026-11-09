@@ -76,10 +76,11 @@ function load() {
   return fresh();
 }
 let S = load();
-function save() {
+function save(fromServer) {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { toast('Speichern fehlgeschlagen – Speicher voll?'); }
   updateBadge();
+  if (!fromServer && window.syncSoon) syncSoon(); // Änderung an den Server schicken (sync.js)
 }
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
@@ -254,7 +255,7 @@ function render() {
   const age = fmtAge(S.settings.birth);
   $('#sub').textContent = v === 'today' ? [DAYS[new Date().getDay()] + ', ' + fmtDate(new Date()), age].filter(Boolean).join(' · ') : (S.settings.name ? S.settings.name + (age ? ' · ' + age : '') : '');
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
-  $('#hact').innerHTML = v === 'today' ? `<button class="hbtn" data-act="shareDay" aria-label="Tag teilen"><svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button>` : '';
+  $('#hact').innerHTML = (window.syncBadge ? syncBadge() : '') + (v === 'today' ? `<button class="hbtn" data-act="shareDay" aria-label="Tag teilen"><svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button>` : '');
   const main = $('#main');
   if (v === 'today') main.innerHTML = viewToday();
   if (v === 'stats') main.innerHTML = viewStats();
@@ -444,6 +445,7 @@ function viewMore() {
     <div class="setting"><span class="lbl">Design</span><div class="seg">${[['auto', 'Auto'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([k, n]) => `<button data-act="theme" data-v="${k}" class="${th === k ? 'on' : ''}">${n}</button>`).join('')}</div></div>
     <label class="setting"><span><span class="lbl">Vitamin-D-Erinnerung</span><br><span class="sub">Abhaken auf der Startseite</span></span><span class="switch"><input type="checkbox" data-change="vitdOn" ${st.vitd ? 'checked' : ''}><i></i></span></label>
   </div>
+  ${window.syncSectionHTML ? syncSectionHTML() : ''}
   <div class="section-t">Teilen & Daten</div>
   <div class="card menu">
     <button data-act="shareDay"><span class="ico">📤</span>Tagesübersicht teilen</button>
@@ -453,7 +455,7 @@ function viewMore() {
     <button data-act="resetAll"><span class="ico">🗑️</span><span class="red">Alle Daten löschen</span></button>
   </div>
   <input type="file" id="importFile" accept="application/json,.json" hidden>
-  <p class="small muted" style="margin:0 4px">Die Daten bleiben nur auf diesem Gerät – kein Konto, keine Cloud. Exportiere ab und zu ein Backup (z. B. in iCloud Drive). Mit dem Backup kannst du die Daten auch auf ein zweites Handy übertragen.</p>
+  <p class="small muted" style="margin:0 4px">Alle Daten liegen zusätzlich auf diesem Gerät, die App funktioniert also auch ohne Netz. Ein Backup ab und zu (z. B. in iCloud Drive) schadet trotzdem nicht.</p>
   <div class="section-t">Auf dem iPhone installieren</div>
   <div class="card" style="padding:14px 16px;font-size:15px;line-height:1.55">
     1. Diese Seite in <b>Safari</b> öffnen<br>2. Unten auf <b>Teilen</b> (□↑) tippen<br>3. <b>„Zum Home-Bildschirm“</b> wählen<br>
@@ -467,7 +469,7 @@ function viewMore() {
     • Eintrag antippen zum Bearbeiten oder Löschen.<br>
     • Uhrzeit nach Mitternacht? Eine spätere Uhrzeit als jetzt wird automatisch auf gestern gelegt.
   </div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.0</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.1</p>`;
 }
 
 /* ───────── Aktionen ───────── */
@@ -653,7 +655,7 @@ const ACT = {
     exportFile(csv, `baby-protokoll-${dkey(new Date())}.csv`, 'text/csv', 'Baby-Protokoll');
   },
   resetAll() {
-    confirmSheet('Alle Einträge, To-dos und Einstellungen auf diesem Gerät löschen? Das kann nicht rückgängig gemacht werden.', 'Alles löschen', () => {
+    confirmSheet(window.syncIsOn && syncIsOn() ? 'Alle Einträge, To-dos und Einstellungen löschen – auch auf dem Server und auf allen verbundenen Handys? Das kann nicht rückgängig gemacht werden.' : 'Alle Einträge, To-dos und Einstellungen auf diesem Gerät löschen? Das kann nicht rückgängig gemacht werden.', 'Alles löschen', () => {
       S = fresh(); S.ui.view = 'more'; F = newDraft(); save(); applyTheme(); render(); toast('Alle Daten gelöscht');
     });
   },
