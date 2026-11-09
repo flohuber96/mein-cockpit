@@ -194,10 +194,11 @@ function load() {
   return fresh();
 }
 let S = load();
-function save() {
+function save(fromServer) {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { toast('Speichern fehlgeschlagen – Speicher voll?'); }
   updateBadge();
+  if (!fromServer && window.Cloud) Cloud.soon(); // Änderung an die Online-Datenbank schicken
 }
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
@@ -300,8 +301,8 @@ function render() {
   const v = S.ui.view;
   $('#title').textContent = TITLES[v];
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
-  $('#hact').innerHTML = v === 'recipes' ? `<button class="hbtn" data-act="recipeNew" aria-label="Neues Rezept">${ICON.plus}</button>`
-    : v === 'shop' ? `<button class="hbtn" data-act="shopShare" aria-label="Liste teilen">${ICON.share}</button>` : '';
+  $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'recipes' ? `<button class="hbtn" data-act="recipeNew" aria-label="Neues Rezept">${ICON.plus}</button>`
+    : v === 'shop' ? `<button class="hbtn" data-act="shopShare" aria-label="Liste teilen">${ICON.share}</button>` : '');
   const main = $('#main');
   if (v === 'plan') main.innerHTML = viewPlan();
   if (v === 'recipes') { main.innerHTML = viewRecipes(); renderRecipeList(); }
@@ -588,7 +589,8 @@ const PLURAL_REV = Object.fromEntries(Object.entries(PLURAL).map(([a, b]) => [b,
 /* ── Mehr ── */
 function viewMore() {
   const st = S.settings;
-  return `<div class="section-t">Wochenplan</div>
+  return `${window.Cloud ? Cloud.section() : ''}
+  <div class="section-t">Wochenplan</div>
   <div class="card">
     ${MEALS.map(m => `<label class="setting"><span class="lbl">${m.name}</span><span class="switch"><input type="checkbox" data-change="mealToggle" data-m="${m.k}" ${st.meals.includes(m.k) ? 'checked' : ''}><i></i></span></label>`).join('')}
     <div class="setting"><span><span class="lbl">Standard-Portionen</span><br><span class="sub">für neue Einträge im Plan</span></span>
@@ -607,13 +609,13 @@ function viewMore() {
     <button data-act="resetAll"><span class="ico">🗑️</span><span class="red">Alle Daten löschen</span></button>
   </div>
   <input type="file" id="importFile" accept="application/json,.json" hidden>
-  <p class="small muted" style="margin:0 4px">Deine Daten werden nur auf diesem Gerät gespeichert – kein Konto, keine Cloud, keine Kosten. Exportiere ab und zu ein Backup, z. B. in die Dateien-App oder iCloud Drive.</p>
+  <p class="small muted" style="margin:0 4px">${window.Cloud && Cloud.isOn() ? 'Deine Daten liegen online und zusätzlich auf diesem Gerät.' : 'Ohne Anmeldung (oben) liegen die Daten nur auf diesem Gerät.'} Ein Backup ab und zu (z. B. in iCloud Drive) schadet trotzdem nicht.</p>
   <div class="section-t">Auf dem iPhone installieren</div>
   <div class="card" style="padding:14px 16px;font-size:15px;line-height:1.55">
     1. Diese Seite in <b>Safari</b> öffnen<br>2. Unten auf <b>Teilen</b> (□↑) tippen<br>3. <b>„Zum Home-Bildschirm“</b> wählen<br>
     <span class="muted small">Danach startet die App im Vollbild und funktioniert auch offline.</span>
   </div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Essensplaner v3.0<br>Nährwerte sind automatisch berechnete Ca.-Werte.</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Essensplaner v3.1<br>Nährwerte sind automatisch berechnete Ca.-Werte.</p>`;
 }
 
 /* ───────── Plan-Aktionen ───────── */
@@ -1041,7 +1043,7 @@ const ACT = {
   importData() { $('#importFile').click(); },
   restoreHidden() { const n = S.hidden.length; S.hidden = []; invalidate(); save(); render(); toast(`${n} Rezepte wieder da`); },
   resetAll() {
-    confirmSheet('Wirklich alle eigenen Rezepte, Pläne und Listen löschen?', 'Alles löschen', () => {
+    confirmSheet(window.Cloud && Cloud.isOn() ? 'Wirklich alle eigenen Rezepte, Pläne und Listen löschen – auch online und auf allen verbundenen Geräten?' : 'Wirklich alle eigenen Rezepte, Pläne und Listen löschen?', 'Alles löschen', () => {
       S = fresh(); invalidate(); save(); render(); toast('Alle Daten gelöscht');
     });
   },
@@ -1122,6 +1124,43 @@ document.addEventListener('visibilitychange', () => {
 });
 
 render();
+
+/* ───────── Online-Datenbank (../shared/cloud.js) ───────── */
+const CLOUD_LIST = { recipe: ['r:', 'recipes'], shop: ['s:', 'shop'] };
+const CLOUD_SET = { hidden: ['h:', 'hidden'], fav: ['f:', 'favs'] };
+if (window.Cloud) Cloud.init({
+  app: 'essen',
+  records() {
+    const m = {};
+    for (const [k, [p, arr]] of Object.entries(CLOUD_LIST)) for (const x of S[arr]) m[p + x.id] = { kind: k, data: x };
+    for (const [k, [p, arr]] of Object.entries(CLOUD_SET)) for (const id of S[arr]) m[p + id] = { kind: k, data: true };
+    for (const [id, o] of Object.entries(S.over)) m['o:' + id] = { kind: 'over', data: o };
+    for (const [d, day] of Object.entries(S.plan)) for (const [k, e] of Object.entries(day || {})) if (e) m[`p:${d}|${k}`] = { kind: 'plan', data: e };
+    m.recent = { kind: 'recent', data: S.recent, soft: !S.recent.length };
+    m.settings = { kind: 'settings', data: S.settings, soft: JSON.stringify(S.settings) === JSON.stringify(fresh().settings) };
+    return m;
+  },
+  apply(r) {
+    const rid = r.id.slice(2);
+    if (CLOUD_LIST[r.kind]) {
+      const arr = S[CLOUD_LIST[r.kind][1]], i = arr.findIndex(x => x.id === rid);
+      if (r.deleted) { if (i >= 0) arr.splice(i, 1); } else if (i >= 0) arr[i] = r.data; else arr.push(r.data);
+    } else if (CLOUD_SET[r.kind]) {
+      const key = CLOUD_SET[r.kind][1];
+      S[key] = S[key].filter(x => x !== rid); if (!r.deleted) S[key].push(rid);
+    } else if (r.kind === 'over') { if (r.deleted) delete S.over[rid]; else S.over[rid] = r.data; }
+    else if (r.kind === 'plan') {
+      const [d, k] = rid.split('|');
+      if (r.deleted) { if (S.plan[d]) { delete S.plan[d][k]; if (!Object.keys(S.plan[d]).length) delete S.plan[d]; } }
+      else (S.plan[d] = S.plan[d] || {})[k] = r.data;
+    } else if (r.kind === 'recent') S.recent = r.deleted ? [] : r.data || [];
+    else if (r.kind === 'settings' && r.data) S.settings = { ...S.settings, ...r.data };
+  },
+  persist() { invalidate(); save(true); },
+  refresh() { const y = window.scrollY; render(); window.scrollTo(0, y); },
+  toast, confirm: confirmSheet, badgeHost: '#hact',
+  openSettings() { closeAllSheets(); S.ui.view = 'more'; save(true); render(); setTimeout(() => $('#cloudBox')?.scrollIntoView({ behavior: 'smooth' }), 50); },
+});
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

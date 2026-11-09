@@ -80,7 +80,7 @@ function save(fromServer) {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { toast('Speichern fehlgeschlagen – Speicher voll?'); }
   updateBadge();
-  if (!fromServer && window.syncSoon) syncSoon(); // Änderung an den Server schicken (sync.js)
+  if (!fromServer && window.Cloud) Cloud.soon(); // Änderung an die Online-Datenbank schicken
 }
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
@@ -255,7 +255,7 @@ function render() {
   const age = fmtAge(S.settings.birth);
   $('#sub').textContent = v === 'today' ? [DAYS[new Date().getDay()] + ', ' + fmtDate(new Date()), age].filter(Boolean).join(' · ') : (S.settings.name ? S.settings.name + (age ? ' · ' + age : '') : '');
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
-  $('#hact').innerHTML = (window.syncBadge ? syncBadge() : '') + (v === 'today' ? `<button class="hbtn" data-act="shareDay" aria-label="Tag teilen"><svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button>` : '');
+  $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'today' ? `<button class="hbtn" data-act="shareDay" aria-label="Tag teilen"><svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button>` : '');
   const main = $('#main');
   if (v === 'today') main.innerHTML = viewToday();
   if (v === 'stats') main.innerHTML = viewStats();
@@ -445,7 +445,7 @@ function viewMore() {
     <div class="setting"><span class="lbl">Design</span><div class="seg">${[['auto', 'Auto'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([k, n]) => `<button data-act="theme" data-v="${k}" class="${th === k ? 'on' : ''}">${n}</button>`).join('')}</div></div>
     <label class="setting"><span><span class="lbl">Vitamin-D-Erinnerung</span><br><span class="sub">Abhaken auf der Startseite</span></span><span class="switch"><input type="checkbox" data-change="vitdOn" ${st.vitd ? 'checked' : ''}><i></i></span></label>
   </div>
-  ${window.syncSectionHTML ? syncSectionHTML() : ''}
+  ${window.Cloud ? Cloud.section() : ''}
   <div class="section-t">Teilen & Daten</div>
   <div class="card menu">
     <button data-act="shareDay"><span class="ico">📤</span>Tagesübersicht teilen</button>
@@ -655,7 +655,7 @@ const ACT = {
     exportFile(csv, `baby-protokoll-${dkey(new Date())}.csv`, 'text/csv', 'Baby-Protokoll');
   },
   resetAll() {
-    confirmSheet(window.syncIsOn && syncIsOn() ? 'Alle Einträge, To-dos und Einstellungen löschen – auch auf dem Server und auf allen verbundenen Handys? Das kann nicht rückgängig gemacht werden.' : 'Alle Einträge, To-dos und Einstellungen auf diesem Gerät löschen? Das kann nicht rückgängig gemacht werden.', 'Alles löschen', () => {
+    confirmSheet(window.Cloud && Cloud.isOn() ? 'Alle Einträge, To-dos und Einstellungen löschen – auch auf dem Server und auf allen verbundenen Handys? Das kann nicht rückgängig gemacht werden.' : 'Alle Einträge, To-dos und Einstellungen auf diesem Gerät löschen? Das kann nicht rückgängig gemacht werden.', 'Alles löschen', () => {
       S = fresh(); S.ui.view = 'more'; F = newDraft(); save(); applyTheme(); render(); toast('Alle Daten gelöscht');
     });
   },
@@ -757,6 +757,32 @@ document.addEventListener('visibilitychange', () => {
 });
 
 render();
+
+/* ───────── Online-Datenbank (../shared/cloud.js) ───────── */
+const CLOUD_ARR = { log: ['l:', 'log'], todo: ['t:', 'todos'], growth: ['g:', 'growth'] };
+if (window.Cloud) Cloud.init({
+  app: 'baby',
+  records() {
+    const m = {};
+    for (const [k, [p, arr]] of Object.entries(CLOUD_ARR)) for (const x of S[arr]) m[p + x.id] = { kind: k, data: x };
+    for (const d of Object.keys(S.vitd)) if (S.vitd[d]) m['v:' + d] = { kind: 'vitd', data: true };
+    const st = { name: S.settings.name, birth: S.settings.birth, vitd: S.settings.vitd };
+    m.settings = { kind: 'settings', data: st, soft: !st.name && !st.birth && st.vitd };
+    return m;
+  },
+  apply(r) {
+    const rid = r.id.slice(2);
+    if (CLOUD_ARR[r.kind]) {
+      const arr = S[CLOUD_ARR[r.kind][1]], i = arr.findIndex(x => x.id === rid);
+      if (r.deleted) { if (i >= 0) arr.splice(i, 1); } else if (i >= 0) arr[i] = r.data; else arr.push(r.data);
+    } else if (r.kind === 'vitd') { if (r.deleted) delete S.vitd[rid]; else S.vitd[rid] = true; }
+    else if (r.kind === 'settings' && r.data) Object.assign(S.settings, r.data);
+  },
+  persist() { save(true); },
+  refresh() { const y = window.scrollY; render(); window.scrollTo(0, y); },
+  toast, confirm: confirmSheet, badgeHost: '#hact',
+  openSettings() { closeAllSheets(); S.ui.view = 'more'; save(true); render(); setTimeout(() => $('#cloudBox')?.scrollIntoView({ behavior: 'smooth' }), 50); },
+});
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

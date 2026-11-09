@@ -271,21 +271,3 @@ main{padding:4px 14px calc(96px + var(--bot));max-width:1100px;margin:0 auto}
 }
 @media (min-width:860px){.top{max-width:1100px;margin:0 auto}}
 
-/* Server-Sync */
-.hbtn.sync{background:var(--card2);color:var(--t3)}
-.hbtn.sync.ok{color:var(--ok)}
-.hbtn.sync.err{color:var(--run);background:var(--run-soft)}
-.hbtn.sync.busy svg{animation:pulse 1s ease-in-out infinite}
-@keyframes pulse{50%{opacity:.35}}
-.sync-st{font-weight:800;font-size:18px}
-.sync-st.ok{color:var(--ok)}
-.sync-st.err{color:var(--run)}
-.sync-form{padding:14px}
-.sync-form button:disabled{opacity:.5}
-.sync-adv{margin:0 0 6px}
-.sync-adv summary,.sync-help summary{cursor:pointer;font-size:14px;font-weight:700;color:var(--acc-t);padding:4px 2px 10px}
-.sync-help{padding:12px 14px;margin-top:10px}
-.sync-help summary{padding:2px}
-.sync-help ol{margin:10px 0 10px 20px;font-size:14px;line-height:1.55;color:var(--t2)}
-.sync-help ol b{color:var(--t1)}
-.sync-help textarea{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
