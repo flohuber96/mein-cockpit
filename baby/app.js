@@ -264,7 +264,7 @@ function render() {
   updateBadge();
 }
 function updateBadge() {
-  const n = S.todos.filter(t => !t.done).length, b = $('#todoBadge');
+  const n = todoDueCount(), b = $('#todoBadge'); // offen und heute oder überfällig
   b.hidden = !n; b.textContent = n;
 }
 
@@ -416,21 +416,7 @@ function growthHTML() {
   return h;
 }
 
-/* ── To-do ── */
-function viewTodo() {
-  const open = S.todos.filter(t => !t.done), done = S.todos.filter(t => t.done);
-  const item = t => `<div class="item ${t.done ? 'done' : ''}"><button class="check" data-act="todoToggle" data-id="${t.id}" aria-label="Erledigt"></button>
-    <button class="txt" data-act="todoEdit" data-id="${t.id}">${esc(t.t)}</button>
-    <button class="del" data-act="todoDel" data-id="${t.id}" aria-label="Löschen">×</button></div>`;
-  let h = `<form class="addbar" data-form="todo"><input name="t" placeholder="Neue Aufgabe …" autocomplete="off" enterkeyhint="done"><button class="btn primary" aria-label="Hinzufügen">+</button></form>`;
-  if (open.length) h += `<div class="card todo">${open.map(item).join('')}</div>`;
-  else h += `<div class="card empty"><div class="big">✅</div><b>Alles erledigt</b>${S.todos.length ? 'Gut gemacht!' : 'Tippe oben eine Aufgabe ein.'}</div>`;
-  if (done.length) h += `<div class="section-t">Erledigt (${done.length})<button data-act="todoClear">Löschen</button></div><div class="card todo">${done.map(item).join('')}</div>`;
-  const have = new Set(S.todos.map(t => t.t));
-  const sugg = TODO_SUGG.filter(s => !have.has(s));
-  if (sugg.length) h += `<div class="section-t">Vorschläge</div><div class="sugg">${sugg.map(s => `<button class="chip" data-act="todoSugg" data-t="${esc(s)}">+ ${esc(s)}</button>`).join('')}</div>`;
-  return h;
-}
+/* ── To-do: siehe todo.js ── */
 
 /* ── Mehr ── */
 function viewMore() {
@@ -469,7 +455,7 @@ function viewMore() {
     • Eintrag antippen zum Bearbeiten oder Löschen.<br>
     • Uhrzeit nach Mitternacht? Eine spätere Uhrzeit als jetzt wird automatisch auf gestern gelegt.
   </div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.1</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.2</p>`;
 }
 
 /* ───────── Aktionen ───────── */
@@ -619,24 +605,6 @@ const ACT = {
     toast('Messung gelöscht', { label: 'Rückgängig', fn: () => { S.growth = before; save(); render(); } });
   },
 
-  // To-do
-  todoToggle(el) { const t = S.todos.find(x => x.id === el.dataset.id); if (t) { t.done = !t.done; vib(); save(); render(); } },
-  todoDel(el) {
-    const before = S.todos.map(t => ({ ...t }));
-    S.todos = S.todos.filter(t => t.id !== el.dataset.id); save(); render();
-    toast('Gelöscht', { label: 'Rückgängig', fn: () => { S.todos = before; save(); render(); } });
-  },
-  todoClear() {
-    const before = S.todos.map(t => ({ ...t }));
-    S.todos = S.todos.filter(t => !t.done); save(); render();
-    toast('Erledigte gelöscht', { label: 'Rückgängig', fn: () => { S.todos = before; save(); render(); } });
-  },
-  todoSugg(el) { S.todos.push({ id: uid(), t: el.dataset.t, done: false }); vib(); save(); render(); },
-  todoEdit(el) {
-    const t = S.todos.find(x => x.id === el.dataset.id); if (!t) return;
-    openSheet({ title: 'Aufgabe', body: `<form data-form="todoEdit" data-id="${t.id}"><div class="field"><input name="t" value="${esc(t.t)}" required></div><button class="btn primary" style="width:100%">Speichern</button></form>` });
-  },
-
   // Einstellungen
   theme(el) { S.settings.theme = el.dataset.v; save(); applyTheme(); render(); },
   exportData() {
@@ -676,22 +644,15 @@ function importData(file) {
 }
 
 const FORMS = {
-  todo(form) {
-    const t = form.t.value.trim(); if (!t) return;
-    S.todos.push({ id: uid(), t, done: false }); save(); render();
-    setTimeout(() => $('.addbar input')?.focus(), 0);
-  },
-  todoEdit(form) {
-    const t = S.todos.find(x => x.id === form.dataset.id), v = form.t.value.trim();
-    if (t && v) { t.t = v; save(); }
-    closeSheet(); render();
-  },
   growth(form) {
     const g = parseInt(form.g.value, 10) || null, cm = parseFloat(form.cm.value.replace(',', '.')) || null;
     if (!g && !cm) { toast('Gewicht oder Größe eingeben'); return; }
     S.growth.push({ id: uid(), d: form.d.value || dkey(new Date()), g, cm }); save(); closeSheet(); render();
   },
 };
+
+Object.assign(ACT, TODO_ACT);
+Object.assign(FORMS, TODO_FORMS);
 
 const CHANGE = {
   name(el) { S.settings.name = el.value.trim(); save(); render(); },

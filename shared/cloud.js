@@ -306,7 +306,7 @@ create trigger app_items_touch before insert or update on public.app_items
 .cloud-adv summary,.cloud-help summary{cursor:pointer;font-size:14px;font-weight:700;color:var(--acc-t);padding:4px 2px 10px}
 .cloud-help{padding:12px 14px;margin-top:10px}.cloud-help summary{padding:2px}
 .cloud-help ol{margin:10px 0 10px 20px;font-size:14px;line-height:1.55;color:var(--t2)}.cloud-help ol b{color:var(--t1)}
-.cloud-help textarea{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;min-height:0}`;
+.cloud-help textarea{font:16px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;min-height:0}`;
   document.head.appendChild(css);
 
   window.Cloud = {
