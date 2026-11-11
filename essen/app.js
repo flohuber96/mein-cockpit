@@ -150,7 +150,7 @@ const BUILTIN_BY_ID = new Map(BUILTINS.map(b => [b.id, b]));
 const KEY = 'essen.v1';
 function fresh() {
   return {
-    v: 2, recipes: [], over: {}, hidden: [], favs: [], plan: {}, shop: [], recent: [],
+    v: 2, recipes: [], over: {}, hidden: [], favs: [], plan: {}, shop: [], recent: [], votes: { Fee: {}, Flo: {} },
     settings: { meals: ['m', 'a'], servings: 2, pantry: 'Salz\nPfeffer\nWasser\nÖl\nOlivenöl' },
     ui: { view: 'plan', hideHint: false, open: {}, sort: 'name' },
   };
@@ -295,17 +295,19 @@ function confirmSheet(text, okLabel, onOk) {
 }
 
 /* ───────── Rendering ───────── */
-const TITLES = { plan: 'Wochenplan', recipes: 'Rezepte', shop: 'Einkaufsliste', more: 'Mehr' };
+const TITLES = { plan: 'Wochenplan', recipes: 'Rezepte', swipe: 'Essens-Tinder', shop: 'Einkaufsliste', more: 'Mehr' };
 function render() {
   const v = S.ui.view;
   $('#title').textContent = TITLES[v];
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
   $('#hact').innerHTML = v === 'recipes' ? `<button class="hbtn" data-act="recipeNew" aria-label="Neues Rezept">${ICON.plus}</button>`
-    : v === 'shop' ? `<button class="hbtn" data-act="shopShare" aria-label="Liste teilen">${ICON.share}</button>` : '';
+    : v === 'shop' ? `<button class="hbtn" data-act="shopShare" aria-label="Liste teilen">${ICON.share}</button>`
+    : v === 'swipe' ? `<button class="hbtn" data-act="swSync" aria-label="Bewertungen übertragen">⇄</button>` : '';
   const main = $('#main');
   if (v === 'plan') main.innerHTML = viewPlan();
   if (v === 'recipes') { main.innerHTML = viewRecipes(); renderRecipeList(); }
   if (v === 'shop') { main.innerHTML = viewShop(); renderShop(); }
+  if (v === 'swipe') { main.innerHTML = viewSwipe(); renderSwipe(); }
   if (v === 'more') main.innerHTML = viewMore();
   updateBadge();
 }
@@ -658,7 +660,7 @@ function openRecipe(id) {
     left: `<button class="lnk" data-act="closeSheet">Schließen</button>`,
     right: `<button class="lnk r" data-act="recipeEdit" data-id="${r.id}">Bearbeiten</button>`,
     body: `<div class="hero"><div class="e">${esc(r.emoji || '🍽️')}</div><h2>${esc(r.name)}</h2>
-      <div class="meta">${r.time ? `<span class="pill">⏱ ${r.time} Min.</span>` : ''}${r.level ? `<span class="pill">📊 ${LEVELS[r.level]}</span>` : ''}<span class="pill">${n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : '🥕 Vegetarisch'}</span>${(r.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div></div>
+      <div class="meta">${r.time ? `<span class="pill">⏱ ${r.time} Min.</span>` : ''}${r.level ? `<span class="pill">📊 ${LEVELS[r.level]}</span>` : ''}<span class="pill">${n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : '🥕 Vegetarisch'}</span>${(r.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>${typeof USERS !== 'undefined' && USERS.some(u => voteOf(u, r.id) !== undefined) ? `<div class="meta">${USERS.map(u => `<span class="pill">${u} ${voteBadge(voteOf(u, r.id))}</span>`).join('')}</div>` : ''}</div>
       <div class="row">
         <button class="btn soft" data-act="recipeFav" data-id="${r.id}">${isFav(r.id) ? '♥ Favorit' : '♡ Merken'}</button>
         <button class="btn soft" data-act="recipeToPlan" data-id="${r.id}">📅 Planen</button>
@@ -1121,7 +1123,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && wakeLock === null && $('[data-change="wake"]:checked')) setWake(true);
 });
 
-render();
+document.addEventListener('DOMContentLoaded', render);
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
