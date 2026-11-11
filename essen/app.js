@@ -150,7 +150,7 @@ const BUILTIN_BY_ID = new Map(BUILTINS.map(b => [b.id, b]));
 const KEY = 'essen.v1';
 function fresh() {
   return {
-    v: 2, recipes: [], over: {}, hidden: [], favs: [], plan: {}, shop: [], recent: [],
+    v: 2, recipes: [], over: {}, hidden: [], favs: [], plan: {}, shop: [], recent: [], votes: { Fee: {}, Flo: {} },
     settings: { meals: ['m', 'a'], servings: 2, pantry: 'Salz\nPfeffer\nWasser\nÖl\nOlivenöl' },
     ui: { view: 'plan', hideHint: false, open: {}, sort: 'name' },
   };
@@ -296,17 +296,19 @@ function confirmSheet(text, okLabel, onOk) {
 }
 
 /* ───────── Rendering ───────── */
-const TITLES = { plan: 'Wochenplan', recipes: 'Rezepte', shop: 'Einkaufsliste', more: 'Mehr' };
+const TITLES = { plan: 'Wochenplan', recipes: 'Rezepte', swipe: 'Essens-Tinder', shop: 'Einkaufsliste', more: 'Mehr' };
 function render() {
   const v = S.ui.view;
   $('#title').textContent = TITLES[v];
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
   $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'recipes' ? `<button class="hbtn" data-act="recipeNew" aria-label="Neues Rezept">${ICON.plus}</button>`
-    : v === 'shop' ? `<button class="hbtn" data-act="shopShare" aria-label="Liste teilen">${ICON.share}</button>` : '');
+    : v === 'shop' ? `<button class="hbtn" data-act="shopShare" aria-label="Liste teilen">${ICON.share}</button>`
+    : v === 'swipe' ? `<button class="hbtn" data-act="swSync" aria-label="Bewertungen übertragen">⇄</button>` : '');
   const main = $('#main');
   if (v === 'plan') main.innerHTML = viewPlan();
   if (v === 'recipes') { main.innerHTML = viewRecipes(); renderRecipeList(); }
   if (v === 'shop') { main.innerHTML = viewShop(); renderShop(); }
+  if (v === 'swipe') { main.innerHTML = viewSwipe(); renderSwipe(); }
   if (v === 'more') main.innerHTML = viewMore();
   updateBadge();
 }
@@ -660,7 +662,7 @@ function openRecipe(id) {
     left: `<button class="lnk" data-act="closeSheet">Schließen</button>`,
     right: `<button class="lnk r" data-act="recipeEdit" data-id="${r.id}">Bearbeiten</button>`,
     body: `<div class="hero"><div class="e">${esc(r.emoji || '🍽️')}</div><h2>${esc(r.name)}</h2>
-      <div class="meta">${r.time ? `<span class="pill">⏱ ${r.time} Min.</span>` : ''}${r.level ? `<span class="pill">📊 ${LEVELS[r.level]}</span>` : ''}<span class="pill">${n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : '🥕 Vegetarisch'}</span>${(r.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div></div>
+      <div class="meta">${r.time ? `<span class="pill">⏱ ${r.time} Min.</span>` : ''}${r.level ? `<span class="pill">📊 ${LEVELS[r.level]}</span>` : ''}<span class="pill">${n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : '🥕 Vegetarisch'}</span>${(r.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>${typeof USERS !== 'undefined' && USERS.some(u => voteOf(u, r.id) !== undefined) ? `<div class="meta">${USERS.map(u => `<span class="pill">${u} ${voteBadge(voteOf(u, r.id))}</span>`).join('')}</div>` : ''}</div>
       <div class="row">
         <button class="btn soft" data-act="recipeFav" data-id="${r.id}">${isFav(r.id) ? '♥ Favorit' : '♡ Merken'}</button>
         <button class="btn soft" data-act="recipeToPlan" data-id="${r.id}">📅 Planen</button>
@@ -1123,7 +1125,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && wakeLock === null && $('[data-change="wake"]:checked')) setWake(true);
 });
 
-render();
+document.addEventListener('DOMContentLoaded', render);
 
 /* ───────── Online-Datenbank (../shared/cloud.js) ───────── */
 const CLOUD_LIST = { recipe: ['r:', 'recipes'], shop: ['s:', 'shop'] };
@@ -1136,6 +1138,7 @@ if (window.Cloud) Cloud.init({
     for (const [k, [p, arr]] of Object.entries(CLOUD_SET)) for (const id of S[arr]) m[p + id] = { kind: k, data: true };
     for (const [id, o] of Object.entries(S.over)) m['o:' + id] = { kind: 'over', data: o };
     for (const [d, day] of Object.entries(S.plan)) for (const [k, e] of Object.entries(day || {})) if (e) m[`p:${d}|${k}`] = { kind: 'plan', data: e };
+    for (const [u, vs] of Object.entries(S.votes || {})) for (const [id, v] of Object.entries(vs)) m[`v:${u}|${id}`] = { kind: 'vote', data: v };
     m.recent = { kind: 'recent', data: S.recent, soft: !S.recent.length };
     m.settings = { kind: 'settings', data: S.settings, soft: JSON.stringify(S.settings) === JSON.stringify(fresh().settings) };
     return m;
@@ -1153,6 +1156,9 @@ if (window.Cloud) Cloud.init({
       const [d, k] = rid.split('|');
       if (r.deleted) { if (S.plan[d]) { delete S.plan[d][k]; if (!Object.keys(S.plan[d]).length) delete S.plan[d]; } }
       else (S.plan[d] = S.plan[d] || {})[k] = r.data;
+    } else if (r.kind === 'vote') {
+      const [u, id] = rid.split('|'); S.votes = S.votes || {}; const vs = (S.votes[u] = S.votes[u] || {});
+      if (r.deleted) delete vs[id]; else vs[id] = r.data;
     } else if (r.kind === 'recent') S.recent = r.deleted ? [] : r.data || [];
     else if (r.kind === 'settings' && r.data) S.settings = { ...S.settings, ...r.data };
   },
