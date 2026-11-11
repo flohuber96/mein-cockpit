@@ -1,6 +1,6 @@
 // Offline-Cache für den Essensplaner. Bei Änderungen VERSION erhöhen.
-const VERSION = 'essen-v5';
-const FILES = ['./', 'index.html', 'app.css', 'app.js', 'tinder.js', 'foods.js', 'recipes.js', 'recipes2.js', 'recipes3.js', 'recipes4.js', 'recipes5.js', 'recipes6.js', 'recipes7.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+const VERSION = 'essen-v9';
+const FILES = ['./', 'index.html', 'app.css', 'app.js', 'tinder.js', '../shared/cloud.js', 'foods.js', 'recipes.js', 'recipes2.js', 'recipes3.js', 'recipes4.js', 'recipes5.js', 'recipes6.js', 'recipes7.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -8,7 +8,7 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
+    .then(keys => Promise.all(keys.filter(k => k.startsWith('essen-') && k !== VERSION).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
