@@ -145,7 +145,9 @@ function openSheet({ title = '', right = '', body = '', onClose } = {}) {
   const sh = document.createElement('div'); sh.className = 'sheet';
   sh.innerHTML = `<div class="sheet-head"><button class="lnk" data-act="closeSheet">Abbrechen</button><b>${esc(title)}</b>${right || '<span class="lnk"></span>'}</div><div class="sheet-body">${body}</div>`;
   const entry = { ov, sh, onClose, t: Date.now() };
-  ov.addEventListener('click', () => { if (Date.now() - entry.t > 450) closeSheet(); });
+  let ovOk = false;
+  ov.addEventListener('pointerdown', () => { const a = document.activeElement; ovOk = !(a && sh.contains(a) && /INPUT|SELECT|TEXTAREA/.test(a.tagName)); });
+  ov.addEventListener('click', () => { if (ovOk && Date.now() - entry.t > 450) closeSheet(); ovOk = false; });
   $('#sheets').append(ov, sh);
   document.body.classList.add('locked');
   requestAnimationFrame(() => requestAnimationFrame(() => { ov.classList.add('show'); sh.classList.add('show'); }));
@@ -204,7 +206,7 @@ function formHTML(f, fid) {
     <div class="chiprow"><span class="lbl">Dauer</span>${[5, 10, 15, 20, 30, 45, 60].map(n => `<button type="button" class="chip ${durOf(f, von) === n ? 'on' : ''}" data-act="dur" data-n="${n}">${n}′</button>`).join('')}</div>
     <div class="tgs k4">${KINDS.map(k => `<button type="button" class="tg ${f.kinds.includes(k.k) ? 'on' : ''}" data-act="kind" data-k="${k.k}" aria-pressed="${f.kinds.includes(k.k)}"><span class="e">${k.e}</span>${k.name}</button>`).join('')}</div>
     <div class="mlrow">
-      ${['L', 'R'].map(s => `<button type="button" class="tg side ${f.side.includes(s) ? 'on' : ''} ${sug === s && !f.side.length && main ? 'sug' : ''}" data-act="side" data-s="${s}" aria-pressed="${f.side.includes(s)}">${s}<small>${s === 'L' ? 'links' : 'rechts'}</small></button>`).join('')}
+      ${['L', 'R'].map(s => `<button type="button" class="tg side ${f.side.includes(s) ? 'on' : ''} ${sug === s && !f.side.length && main ? 'sug' : ''}" data-act="side" data-s="${s}" aria-pressed="${f.side.includes(s)}">${s}<small>${sug === s && !f.side.length && main ? 'nächste' : s === 'L' ? 'links' : 'rechts'}</small></button>`).join('')}
       <div class="stepper"><button type="button" data-act="mlStep" data-n="-10" aria-label="10 ml weniger">−</button><label><input type="number" inputmode="numeric" min="0" max="999" placeholder="0" data-in="ml" value="${ml}"><span>ml</span></label><button type="button" data-act="mlStep" data-n="10" aria-label="10 ml mehr">+</button></div>
     </div>
     <div class="chiprow"><span class="lbl">Menge</span>${[20, 30, 50, 60, 80, 90, 100, 120, 150].map(n => `<button type="button" class="chip ${f.ml === n ? 'on' : ''}" data-act="mlSet" data-n="${n}">${n}</button>`).join('')}</div>
@@ -222,6 +224,16 @@ function durOf(f, von) {
   if (!von || !f.bis) return 0;
   const [a, b] = [von, f.bis].map(t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; });
   return (b - a + 1440) % 1440;
+}
+// Markierungen (Dauer, Menge, "jetzt/leeren") anpassen, ohne Eingabefelder neu aufzubauen –
+// sonst schließt iOS das Zeitrad beim Drehen
+function updateFormMarks(fid) {
+  const fe = $(`[data-fid="${fid}"]`), f = formOf(fid); if (!fe || !f) return;
+  const von = fid === 'main' && !f.vonSet ? hm(Date.now()) : f.von, d = durOf(f, von);
+  $$('[data-act=dur]', fe).forEach(c => c.classList.toggle('on', +c.dataset.n === d));
+  $$('[data-act=mlSet]', fe).forEach(c => c.classList.toggle('on', +c.dataset.n === f.ml));
+  const bb = $('[data-in="bis"]', fe)?.closest('.tbox')?.querySelector('small button');
+  if (bb) { bb.dataset.act = f.bis ? 'bisClr' : 'bisNow'; bb.textContent = f.bis ? 'leeren' : 'jetzt'; }
 }
 function rerenderForm(fid) {
   const el = $(`[data-fid="${fid}"]`);
@@ -749,13 +761,11 @@ document.addEventListener('input', e => {
   if (k === 'day') f.day = v || f.day;
   if (k === 'note') f.note = v;
   if (k === 'ml') f.ml = Math.max(0, Math.min(999, parseInt(v, 10) || 0));
+  updateFormMarks(fe.dataset.fid);
 });
 document.addEventListener('change', e => {
   const k = e.target.dataset.change; if (k && CHANGE[k]) CHANGE[k](e.target);
   if (e.target.id === 'importFile' && e.target.files[0]) { importData(e.target.files[0]); e.target.value = ''; }
-  // Dauer-/Mengen-Chips nach Tippen aktualisieren
-  const din = e.target.dataset.in, fe = e.target.closest('[data-fid]');
-  if (fe && ['von', 'bis', 'ml'].includes(din)) rerenderForm(fe.dataset.fid);
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.dataset.in === 'note') e.target.blur();
@@ -774,8 +784,8 @@ function tick() {
   updateFeedCard(now);
   if (now % 15000 < 1000) $$('[data-ago]').forEach(el => { el.textContent = fmtDur(now - +el.dataset.ago); });
   if (!F.vonSet) {
-    const inp = $('[data-fid="main"] [data-in="von"]');
-    if (inp && document.activeElement !== inp && inp.value !== hm(now)) inp.value = hm(now);
+    const fm = $('[data-fid="main"]'), inp = fm && $('[data-in="von"]', fm);
+    if (inp && !fm.contains(document.activeElement) && inp.value !== hm(now)) inp.value = hm(now);
   }
 }
 setInterval(tick, 1000);
