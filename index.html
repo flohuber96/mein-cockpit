@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="koerper.css">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -293,6 +294,7 @@ input[type=checkbox]{width:15px;height:15px;accent-color:var(--acc);cursor:point
       <button class="tb" id="tb-dash"      onclick="sw('dash')">📊 Dashboard</button>
       <button class="tb" id="tb-cycling"   onclick="sw('cycling')">🚴 Rennrad</button>
       <button class="tb" id="tb-longevity" onclick="sw('longevity')">🧬 Longevity</button>
+      <button class="tb" id="tb-koerper"   onclick="sw('koerper')">🦴 Körper</button>
       <button class="tb" id="tb-kochbuch"  onclick="sw('kochbuch')">🍳 Kochbuch</button>
       <button class="tb" id="tb-goals"     onclick="sw('goals')">🎯 Ziele</button>
       <button class="tb" id="tb-ideas"     onclick="sw('ideas')">💡 Ideen</button>
@@ -398,6 +400,8 @@ input[type=checkbox]{width:15px;height:15px;accent-color:var(--acc);cursor:point
         </div>
       </div>
     </div>
+
+    <div class="tp" id="tp-koerper"></div>
 
     <div class="tp" id="tp-kochbuch">
       <div class="pgrid">
@@ -593,6 +597,7 @@ function sw(tab) {
   document.querySelectorAll('.tb').forEach(el => el.classList.remove('act'));
   if($('tp-' + tab)) $('tp-' + tab).classList.add('act');
   if($('tb-' + tab)) $('tb-' + tab).classList.add('act');
+  if(tab === 'koerper' && window.KP) KP.init();
 }
 
 // Dummy-Funktionen, um Fehler bei Klicks im UI zu verhindern, falls Supabase noch fehlt
@@ -612,5 +617,7 @@ function openSettings() { showScreen('scr-config'); }
 function globalSearch() {}
 function renderCycling() {}
 </script>
+<script src="koerper-data.js"></script>
+<script src="koerper.js"></script>
 </body>
 </html>
