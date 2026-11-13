@@ -867,6 +867,7 @@ function viewMore() {
   <div class="card menu snaps">
     ${snaps.map(x => `<button data-act="snapRestore" data-t="${x.t}"><span class="ico">🕘</span><span class="mtxt"><b>${fmtStamp(x.t)}</b><small>${esc(x.why || 'Sicherung')} · ${esc(snapInfo(x.data))}</small></span></button>`).join('')}
     <button data-act="snapNow"><span class="ico">➕</span>Jetzt sichern</button>
+    ${lsGet(BAD_KEY) ? `<button data-act="retryBad"><span class="ico">🧩</span><span class="mtxt"><b>Beschädigten Datenstand erneut einlesen</b><small>Ein früherer Stand konnte nicht gelesen werden und wurde aufbewahrt.</small></span></button>` : ''}
   </div>
   <p class="small muted" style="margin:0 4px">Die App sichert automatisch einmal am Tag und vor jedem großen Eingriff (Import, Löschen). Antippen stellt den Stand wieder her.</p>
   </div><div>
@@ -1394,6 +1395,16 @@ const ACT = {
     confirmSheet(`Stand vom ${fmtStamp(sn.t)} wiederherstellen (${snapInfo(sn.data)})? Die jetzigen Daten werden ersetzt${window.Cloud && Cloud.isOn() ? ' – auch online und auf allen verbundenen Geräten' : ''}. Der aktuelle Stand wird vorher gesichert.`, 'Wiederherstellen', () => {
       snapshot('Vor Wiederherstellung');
       replaceState(sn.data, 'Sicherung wiederhergestellt');
+    });
+  },
+  // Ein früher nicht lesbarer Stand liegt noch auf dem Gerät – noch einmal versuchen (z. B. nach einem App-Update)
+  retryBad() {
+    let d = null;
+    try { d = JSON.parse(lsGet(BAD_KEY)); } catch (e) { /* weiterhin unlesbar */ }
+    if (!isObj(d) || !Array.isArray(d.recipes)) { toast('Der Stand ist leider weiterhin nicht lesbar'); return; }
+    confirmSheet(`Aufbewahrten Stand einlesen (${snapInfo(d)})? Die jetzigen Daten werden ersetzt; der aktuelle Stand wird vorher gesichert.`, 'Einlesen', () => {
+      snapshot('Vor Einlesen des alten Stands');
+      replaceState(d, 'Alter Stand eingelesen'); lsDel(BAD_KEY); render();
     });
   },
   diag() {

@@ -1,7 +1,8 @@
 // Offline-Cache für den Essensplaner. Bei Änderungen VERSION erhöhen.
 const VERSION = 'essen-v10';
 const FILES = ['./', 'index.html', 'app.css', 'app.js', 'tinder.js', '../shared/cloud.js', 'foods.js', 'recipes.js', 'recipes2.js', 'recipes3.js', 'recipes4.js', 'recipes5.js', 'recipes6.js', 'recipes7.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
-const TIMEOUT = 3500; // so lange aufs Netz warten, dann den gespeicherten Stand zeigen
+const TIMEOUT = 3000; // so lange aufs Netz warten, dann den gespeicherten Stand zeigen
+let slowUntil = 0;    // war das Netz gerade zäh, kommen die nächsten Dateien sofort aus dem Cache
 
 self.addEventListener('install', e => {
   // Einzeln laden: fehlt eine Datei, soll die Installation nicht komplett scheitern
@@ -30,7 +31,10 @@ self.addEventListener('fetch', e => {
     });
     if (!cached) return net.catch(() => new Response('Offline', { status: 503, statusText: 'Offline' }));
     net.catch(() => {}); // läuft im Hintergrund weiter und frischt den Cache auf
-    const late = new Promise(resolve => setTimeout(() => resolve(cached), TIMEOUT));
-    return Promise.race([net.then(res => (res.ok ? res : cached)).catch(() => cached), late]);
+    if (Date.now() < slowUntil) return cached;
+    let done = false;
+    const late = new Promise(resolve => setTimeout(() => { if (!done) { slowUntil = Date.now() + 20000; resolve(cached); } }, TIMEOUT));
+    const fast = net.then(res => { done = true; return res.ok ? res : cached; }, () => { done = true; slowUntil = Date.now() + 20000; return cached; });
+    return Promise.race([fast, late]);
   })());
 });
