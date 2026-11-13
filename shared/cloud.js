@@ -11,6 +11,15 @@
      apply(row) → Zeile vom Server übernehmen ({ id, kind, data, deleted })
      persist()  → lokal speichern (ohne neuen Sync auszulösen)
      refresh()  → Ansicht neu zeichnen
+   Optional:
+     storeId()            → Kennung des lokalen Datenbestands. Ändert sie sich (Speicher wurde neu
+                            aufgebaut, z. B. nach einem Defekt), wird alles neu vom Server geholt –
+                            der Server gewinnt, es wird nichts gelöscht.
+     rebuilt              → true, wenn die App beim Start keinen lesbaren Datenbestand vorfand
+                            (gleiche Wirkung wie eine geänderte Kennung).
+     guardDeletes(l, n)   → true = diese Löschungen (l = [{id, kind}], n = Anzahl bekannter Zeilen)
+                            sind verdächtig. Sie werden erst nach Rückfrage hochgeladen.
+                            Gewollte Massenlöschungen vorher mit Cloud.allowBulkDelete() ankündigen.
 */
 (function () {
   const AUTH_KEY = 'cloud.auth';
@@ -38,7 +47,10 @@ create trigger app_items_touch before insert or update on public.app_items
   for each row execute function public.app_items_touch();`;
 
   const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
-  const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* voll */ } };
+  const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; /* voll */ } };
+  // Einheitliche JSON-Form (Schlüssel sortiert) – die Datenbank liefert Schlüssel in anderer Reihenfolge zurück
+  const canon = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x)
+    ? Object.keys(x).sort().reduce((o, key) => { o[key] = x[key]; return o; }, {}) : x);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   // Login immer frisch lesen – eine andere App (anderer Tab) kann ihn erneuert haben
   function auth() {
@@ -52,17 +64,36 @@ create trigger app_items_touch before insert or update on public.app_items
   const isOn = () => { const a = auth(); return !!(a.url && a.key && a.session); };
 
   let C = null, P = null; // C = Einstellungen der App, P = Sync-Stand dieser App
-  const sy = { busy: false, again: false, timer: null, err: '', deferred: false };
+  const sy = { busy: false, again: false, timer: null, err: '', deferred: false, hold: 0, since: 0 };
+  let diskRev; // Stand, den dieser Tab zuletzt gelesen/geschrieben hat
   function state(uid) {
-    if (!P) P = read('cloud.' + C.app) || {};
-    if (uid && P.uid !== uid) P = { uid, snap: {}, cursor: null }; // anderes Konto → von vorn
+    if (!P) { P = read('cloud.' + C.app) || {}; diskRev = P.rev; }
+    if (uid && P.uid !== uid) P = { uid, snap: {}, cursor: null, canon: 1 }; // anderes Konto → von vorn
     P.snap = P.snap || {};
+    if (!P.canon) { // ältere Stände auf die einheitliche JSON-Form bringen
+      for (const id in P.snap) { try { P.snap[id].j = canon(JSON.parse(P.snap[id].j)); } catch (e) { delete P.snap[id]; } }
+      P.canon = 1;
+    }
+    if (C.storeId) {
+      const sid = C.storeId();
+      if (sid && P.sid && P.sid !== sid) { P.snap = {}; P.cursor = null; P.adopt = true; delete P.allow; } // lokaler Bestand neu → Server gewinnt
+      if (sid) P.sid = sid;
+    }
     return P;
   }
-  const saveState = () => write('cloud.' + C.app, P);
+  function saveState() { if (!P) return; const rev = Math.random().toString(36).slice(2); const old = P.rev; P.rev = rev; if (write('cloud.' + C.app, P)) diskRev = rev; else P.rev = old; }
+  // Hat ein anderer Tab inzwischen abgeglichen? Dann dessen Stand übernehmen.
+  function reloadState() { const d = read('cloud.' + C.app); if (d && d.rev !== diskRev) { P = d; diskRev = d.rev; } }
 
   /* ── Supabase ── */
-  const netErr = e => e.name === 'TypeError' || /fetch|network|load failed/i.test(e.message);
+  const netErr = e => e.name === 'TypeError' || e.name === 'AbortError' || /fetch|network|load failed/i.test(e.message);
+  // fetch mit Zeitlimit – ein hängendes Mobilfunknetz darf den Abgleich nicht für immer blockieren
+  async function fetchT(url, opts = {}, ms = 25000) {
+    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const t = ac && setTimeout(() => ac.abort(), ms);
+    try { const res = await fetch(url, ac ? { ...opts, signal: ac.signal } : opts); const txt = await res.text(); return { ok: res.ok, status: res.status, txt }; }
+    finally { clearTimeout(t); }
+  }
   function msg(m) {
     if (/invalid login credentials/i.test(m)) return 'E-Mail oder Passwort falsch';
     if (/email not confirmed/i.test(m)) return 'E-Mail noch nicht bestätigt – bitte Link in der Mail antippen';
@@ -75,8 +106,8 @@ create trigger app_items_touch before insert or update on public.app_items
     return m;
   }
   async function authCall(a, path, body) {
-    const res = await fetch(base(a) + '/auth/v1/' + path, { method: 'POST', headers: { apikey: a.key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const j = await res.json().catch(() => ({}));
+    const res = await fetchT(base(a) + '/auth/v1/' + path, { method: 'POST', headers: { apikey: a.key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    let j = {}; try { j = JSON.parse(res.txt) || {}; } catch (e) { /* kein JSON */ }
     if (!res.ok) { const e = new Error(msg(j.error_description || j.msg || j.message || j.error || 'Fehler ' + res.status)); e.status = res.status; throw e; }
     return j;
   }
@@ -106,11 +137,11 @@ create trigger app_items_touch before insert or update on public.app_items
   }
   async function rest(a, path, opts = {}, retry = true) {
     if (expiring(a.session)) await refresh(a, a.session.at);
-    const res = await fetch(base(a) + '/rest/v1/' + path, {
+    const res = await fetchT(base(a) + '/rest/v1/' + path, {
       ...opts, headers: { apikey: a.key, Authorization: 'Bearer ' + a.session.at, 'Content-Type': 'application/json', ...opts.headers },
     });
     if (res.status === 401 && retry) { await refresh(a, a.session.at); return rest(a, path, opts, false); }
-    const txt = await res.text();
+    const txt = res.txt;
     if (!res.ok) {
       let m = txt; try { const j = JSON.parse(txt); m = j.message || j.hint || txt; } catch (e) { /* Text */ }
       throw new Error(msg(m || 'Serverfehler ' + res.status));
@@ -123,16 +154,18 @@ create trigger app_items_touch before insert or update on public.app_items
     const m = C.records(), out = {};
     for (const id in m) {
       if (m[id].soft && !(id in snap)) continue; // Standardwert eines neuen Geräts nicht hochladen
-      out[id] = { k: m[id].kind, d: m[id].data, j: JSON.stringify(m[id].data) };
+      out[id] = { k: m[id].kind, d: m[id].data, j: canon(m[id].data) };
     }
     return out;
   }
   async function syncNow(manual) {
     if (!C || !isOn()) return;
     if (sy.busy) { sy.again = true; return; }
+    clearTimeout(sy.timer); sy.timer = null;
     if (!navigator.onLine) { sy.err = 'Offline – wird nachgeholt'; ui(); return; }
     sy.busy = true; ui();
-    let changed = false, pushed = 0;
+    let changed = false, pushed = 0, failed = false;
+    reloadState();
     const a = auth(), p = state(a.session.uid);
     try {
       // 1) Neues vom Server holen (2 Min. Überlappung – doppelt anwenden schadet nicht)
@@ -141,23 +174,32 @@ create trigger app_items_touch before insert or update on public.app_items
       let top = p.cursor ? Date.parse(p.cursor) : 0, topStr = p.cursor || null;
       for (let off = 0; ; off += 1000) {
         const rows = await rest(a, `app_items?select=id,kind,data,deleted,updated_at&app=eq.${encodeURIComponent(C.app)}&order=updated_at.asc,id.asc&limit=1000&offset=${off}` + (since ? `&updated_at=gte.${encodeURIComponent(since)}` : ''));
+        if (!Array.isArray(rows)) throw new Error('Unerwartete Antwort vom Server');
         for (const r of rows) {
+          if (!r || typeof r.id !== 'string') continue;
           const t = Date.parse(r.updated_at); if (t > top) { top = t; topStr = r.updated_at; }
           const local = cur0[r.id] && cur0[r.id].j, snap = p.snap[r.id] && p.snap[r.id].j;
-          if (local !== snap) continue; // hier geändert → wird gleich hochgeladen und gewinnt
-          const remote = r.deleted ? undefined : JSON.stringify(r.data);
-          if (remote !== local) { C.apply(r); changed = true; }
+          if (!p.adopt && local !== snap) continue; // hier geändert → wird gleich hochgeladen und gewinnt
+          const remote = r.deleted ? undefined : canon(r.data);
+          if (remote !== local) {
+            try { C.apply(r); changed = true; }
+            catch (e) { console.error('Cloud: Zeile übersprungen', r.id, e); continue; } // eine kaputte Zeile darf nicht alles blockieren
+          }
           if (r.deleted) delete p.snap[r.id]; else p.snap[r.id] = { k: r.kind, j: remote };
         }
         if (rows.length < 1000) break;
       }
-      p.cursor = topStr;
+      p.cursor = topStr; delete p.adopt;
       if (changed) C.persist();
 
       // 2) Eigene Änderungen hochladen
-      const cur = current(p.snap), up = [];
+      const cur = current(p.snap), up = [], dels = [];
       for (const id in cur) if (cur[id].j !== (p.snap[id] && p.snap[id].j)) up.push({ id, kind: cur[id].k, data: cur[id].d, deleted: false, _j: cur[id].j });
-      for (const id in p.snap) if (!(id in cur)) up.push({ id, kind: p.snap[id].k, data: null, deleted: true });
+      for (const id in p.snap) if (!(id in cur)) dels.push({ id, kind: p.snap[id].k, data: null, deleted: true });
+      // Verdächtig viele Löschungen? Erst nachfragen, statt die Datenbank leerzuräumen.
+      let hold = 0;
+      if (dels.length && C.guardDeletes && !p.allow && C.guardDeletes(dels.map(d => ({ id: d.id, kind: d.kind })), Object.keys(p.snap).length)) hold = dels.length;
+      else up.push(...dels);
       for (let i = 0; i < up.length; i += 500) {
         const part = up.slice(i, i + 500);
         await rest(a, 'app_items?on_conflict=owner,app,id', {
@@ -167,17 +209,22 @@ create trigger app_items_touch before insert or update on public.app_items
         for (const r of part) { if (r.deleted) delete p.snap[r.id]; else p.snap[r.id] = { k: r.kind, j: r._j }; }
         pushed += part.length;
       }
-      p.last = Date.now(); sy.err = '';
-      if (manual) C.toast(pushed || changed ? 'Synchronisiert' : 'Alles aktuell');
+      if (!hold) delete p.allow;
+      if (hold && !sy.hold && C.toast) C.toast('Abgleich angehalten – bitte unter „Mehr“ prüfen');
+      sy.hold = hold;
+      p.last = Date.now(); sy.err = ''; sy.since = 0;
+      if (manual) C.toast(hold ? 'Abgleich angehalten – bitte prüfen' : pushed || changed ? 'Synchronisiert' : 'Alles aktuell');
     } catch (e) {
-      sy.err = netErr(e) ? 'Server nicht erreichbar' : e.message;
+      sy.err = netErr(e) ? 'Server nicht erreichbar – wird nachgeholt' : (e && e.message) || 'Unbekannter Fehler';
+      failed = true;
+      if (!sy.since) sy.since = Date.now();
       if (manual) C.toast(sy.err);
     } finally {
       saveState();
       sy.busy = false;
       if (changed) refreshView();
       ui();
-      if (sy.again) { sy.again = false; setTimeout(syncNow, 300); }
+      if (sy.again) { sy.again = false; setTimeout(syncNow, failed ? 6000 : 300); } // nach einem Fehler nicht sofort wieder anrennen
     }
   }
   const typing = () => { const el = document.activeElement; return !!el && /INPUT|TEXTAREA|SELECT/.test(el.tagName); };
@@ -186,17 +233,59 @@ create trigger app_items_touch before insert or update on public.app_items
 
   function soon() { if (!C || !isOn()) return; clearTimeout(sy.timer); sy.timer = setTimeout(syncNow, 1200); }
   setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 20000);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') syncNow();
+    else if (sy.timer) syncNow(); // App wird weggelegt → offene Änderung sofort noch abschicken
+  });
+  window.addEventListener('pagehide', () => { if (sy.timer) syncNow(); });
   window.addEventListener('online', () => syncNow());
   window.addEventListener('offline', () => { sy.err = 'Offline – wird nachgeholt'; ui(); });
 
+  /* ── Weiteres Gerät verbinden (Link/Code mit Server-Adresse, ohne Passwort) ── */
+  const b64e = t => btoa(unescape(encodeURIComponent(t))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const b64d = t => decodeURIComponent(escape(atob(t.replace(/-/g, '+').replace(/_/g, '/'))));
+  const hostOf = u => { try { return new URL(u).host; } catch (e) { return ''; } };
+  function linkCode() { const a = auth(); return 'MC1.' + b64e(JSON.stringify({ u: a.url, k: a.key, e: a.email || '' })); }
+  const linkUrl = () => location.origin + location.pathname + '#verbinden=' + linkCode();
+  function readCode(text) {
+    const m = String(text || '').match(/MC1\.([A-Za-z0-9_-]+)/); if (!m) return null;
+    try { const j = JSON.parse(b64d(m[1])); return j && /^(https:\/\/[^\s/]+|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$))/.test(j.u) && typeof j.k === 'string' && j.k ? j : null; } catch (e) { return null; }
+  }
+  function applyCode(text, open) {
+    const j = readCode(text);
+    if (!j) { C.toast('Verbindungscode ungültig'); return; }
+    if (isOn()) { C.toast('Dieses Gerät ist schon verbunden'); return; }
+    const a = auth();
+    const done = () => {
+      a.url = j.u.replace(/\/$/, ''); a.key = j.k; if (j.e) a.email = String(j.e); saveAuth(a);
+      if (open && C.openSettings) C.openSettings();
+      const box = document.getElementById('cloudBox'); if (box) box.outerHTML = section();
+      C.toast('Server-Daten übernommen – jetzt nur noch das Passwort eingeben');
+    };
+    // Schutz vor untergeschobenen Links: fremde Server nur nach Rückfrage
+    if (hostOf(j.u) === hostOf(a.url) || hostOf(j.u) === hostOf(DEFAULT_URL)) done();
+    else C.confirm(`Mit dem Server „${hostOf(j.u)}“ verbinden? Nur bestätigen, wenn der Code von dir selbst stammt.`, 'Verbinden', done);
+  }
+  function takeLink() {
+    const m = location.hash.match(/verbinden=(MC1\.[A-Za-z0-9_-]+)/); if (!m) return;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* egal */ }
+    applyCode(m[1], true);
+  }
+
   /* ── Oberfläche ── */
   const CLOUD = '<svg viewBox="0 0 24 24"><path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.5 9.6 4.5 4.5 0 0 0 7 18.5z"/></svg>';
+  function status() {
+    const on = isOn();
+    if (!on) return { st: 'err', label: 'Nicht angemeldet' };
+    if (sy.busy) return { st: 'busy', label: 'Synchronisiere …' };
+    if (sy.hold) return { st: 'err', label: 'Abgleich angehalten – bitte prüfen' };
+    if (sy.err) return { st: /offline|nicht erreichbar/i.test(sy.err) ? 'off' : 'err', label: sy.err };
+    return { st: 'ok', label: 'Online gespeichert' };
+  }
   function badge() {
     const a = auth(), on = isOn();
     if (!on && !a.email) return '';
-    const st = !on ? 'err' : sy.busy ? 'busy' : sy.err ? 'err' : 'ok';
-    const label = !on ? 'Nicht angemeldet' : sy.busy ? 'Synchronisiere …' : sy.err || 'Online gespeichert';
+    const { st, label } = status();
     return `<button class="hbtn cloud-btn ${st}" id="cloudBtn" data-cloud="tap" aria-label="${esc(label)}" title="${esc(label)}">${CLOUD}</button>`;
   }
   function ui() {
@@ -204,31 +293,49 @@ create trigger app_items_touch before insert or update on public.app_items
     if (b) { if (h) b.outerHTML = h; else b.remove(); }
     else if (h && C && C.badgeHost) { const host = document.querySelector(C.badgeHost); if (host) host.insertAdjacentHTML('afterbegin', h); }
     const box = document.getElementById('cloudBox');
-    if (box && !box.contains(document.activeElement)) box.outerHTML = section();
+    if (box && !box.contains(document.activeElement) && !box.querySelector('details.cloud-help[open]')) box.outerHTML = section();
+    if (C && C.onStatus) { try { C.onStatus(status()); } catch (e) { /* Anzeige ist optional */ } }
   }
   function section() {
     const a = auth(), p = C ? state() : {};
     let h = `<div id="cloudBox"><div class="section-t">Online-Datenbank</div>`;
     if (isOn()) {
-      const when = !p.last ? 'noch nie' : Date.now() - p.last < 60000 ? 'gerade eben' : 'vor ' + Math.round((Date.now() - p.last) / 60000) + ' min';
+      const when = !p.last ? 'noch nie' : Date.now() - p.last < 60000 ? 'gerade eben' : Date.now() - p.last < 5400000 ? 'vor ' + Math.round((Date.now() - p.last) / 60000) + ' min' : new Date(p.last).toLocaleString('de-DE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      const bad = sy.err || sy.hold;
       h += `<div class="card">
-        <div class="setting"><span><span class="lbl">☁️ Verbunden</span><br><span class="sub">${esc(a.email || '')}</span></span><span class="cloud-st ${sy.err ? 'err' : 'ok'}">${sy.busy ? '…' : sy.err ? '⚠︎' : '✓'}</span></div>
-        <div class="setting"><span class="sub">${sy.err ? esc(sy.err) : 'Zuletzt abgeglichen: ' + when}</span></div>
-      </div>
-      <div class="card menu" style="margin-top:10px">
+        <div class="setting"><span><span class="lbl">☁️ Verbunden</span><br><span class="sub">${esc(a.email || '')}</span></span><span class="cloud-st ${bad ? 'err' : 'ok'}">${sy.busy ? '…' : bad ? '⚠︎' : '✓'}</span></div>
+        <div class="setting"><span class="sub">${sy.err ? esc(sy.err) + (p.last ? ' · zuletzt abgeglichen: ' + when : '') : 'Zuletzt abgeglichen: ' + when}</span></div>
+      </div>`;
+      if (sy.hold) h += `<div class="card cloud-hold">
+        <b>⚠️ Abgleich angehalten</b>
+        <p>Auf diesem Gerät fehlen <b>${sy.hold} Einträge</b>, die online gespeichert sind. Damit nichts versehentlich verloren geht, wurde online noch nichts gelöscht.</p>
+        <div class="cloud-acts"><button type="button" class="btn primary" data-cloud="holdRestore">Von online zurückholen</button><button type="button" class="btn plain" data-cloud="holdDelete">Auch online löschen</button></div>
+      </div>`;
+      h += `<div class="card menu" style="margin-top:10px">
         <button data-cloud="tap"><span class="ico">🔄</span>Jetzt synchronisieren</button>
         <button data-cloud="logout"><span class="ico">🚪</span>Abmelden</button>
       </div>
-      <p class="small muted" style="margin:0 4px">Deine Daten liegen online und zusätzlich auf diesem Gerät. Auf weiteren Handys mit demselben Konto anmelden – Änderungen erscheinen dort beim Öffnen und alle 20 Sekunden. Im Browser gilt der Login für alle Apps im Cockpit; als App auf dem Home-Bildschirm meldest du dich in jeder App einmal an.</p>`;
+      <details class="card cloud-help cloud-link"><summary>📱 Weiteres Gerät verbinden</summary>
+        <ol>
+          <li>Unten auf <b>Link senden</b> tippen und den Link an das andere Gerät schicken (z. B. per AirDrop oder Nachricht an dich selbst).</li>
+          <li>Dort den Link öffnen – die Server-Daten sind dann schon eingetragen.</li>
+          <li>Mit derselben E-Mail und demselben Passwort anmelden. Fertig.</li>
+        </ol>
+        <p class="small muted" style="margin:0 0 10px">Als App auf dem Home-Bildschirm: stattdessen in der App unter „Mehr → Online-Datenbank“ den Link in das Feld „Verbindungscode“ einfügen. Der Link enthält kein Passwort.</p>
+        <div class="cloud-acts"><button type="button" class="btn primary" data-cloud="linkShare">Link senden</button><button type="button" class="btn plain" data-cloud="linkCopy">Link kopieren</button></div>
+      </details>
+      <p class="small muted" style="margin:10px 4px 0">Deine Daten liegen online und zusätzlich auf diesem Gerät. Änderungen erscheinen auf allen angemeldeten Geräten beim Öffnen und alle 20 Sekunden – ohne Netz wird später automatisch nachgeholt.</p>`;
     } else {
+      const known = !!(a.url && a.key);
       h += `<form class="card cloud-form" data-cloud-form>
         ${a.email ? `<p class="small" style="color:var(--red-t);margin:0 2px 10px">Bitte (neu) anmelden.</p>` : ''}
-        <p class="small muted" style="margin:0 2px 12px">Daten online speichern – sicher vor Handy-Verlust und auf mehreren Geräten nutzbar. Ein Konto für alle Apps (Essen, Baby, …).</p>
-        <div class="field"><label>E-Mail</label><input type="email" name="email" autocomplete="username" value="${esc(a.email || '')}" required></div>
+        <p class="small muted" style="margin:0 2px 12px">Daten online speichern – sicher vor Geräte-Verlust und auf iPhone, iPad und Computer gleichzeitig nutzbar. Ein Konto für alle Apps (Essen, Baby, …).</p>
+        <div class="field"><label>E-Mail</label><input type="email" name="email" autocomplete="username" autocapitalize="off" value="${esc(a.email || '')}" required></div>
         <div class="field"><label>Passwort</label><input type="password" name="pw" autocomplete="current-password" minlength="6" required></div>
-        <details class="cloud-adv" ${a.key ? '' : 'open'}><summary>Server-Einstellungen</summary>
+        <details class="cloud-adv" ${known ? '' : 'open'}><summary>Server-Einstellungen${known ? ' ✓' : ''}</summary>
+          <div class="field"><label>Verbindungscode von einem anderen Gerät (optional)</label><input type="text" name="code" data-cloud-code placeholder="Link oder Code hier einfügen" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
           <div class="field"><label>Supabase-Projekt-URL</label><input type="url" name="url" value="${esc(a.url)}" required></div>
-          <div class="field"><label>API-Key (anon public oder publishable)</label><input type="text" name="key" value="${esc(a.key)}" placeholder="eyJhbGci… oder sb_publishable_…" autocomplete="off" required></div>
+          <div class="field"><label>API-Key (anon public oder publishable)</label><input type="text" name="key" value="${esc(a.key)}" placeholder="eyJhbGci… oder sb_publishable_…" autocomplete="off" autocapitalize="off" spellcheck="false" required></div>
         </details>
         <div class="cloud-acts">
           <button type="button" class="btn plain" data-cloud="signup">Konto erstellen</button>
@@ -241,7 +348,7 @@ create trigger app_items_touch before insert or update on public.app_items
           <li><b>SQL Editor</b> → <b>New query</b> → den Text unten einfügen → <b>Run</b>.</li>
           <li>Unter <b>Project Settings → API Keys</b> den Key <b>anon public</b> (beginnt mit eyJ…) oder den <b>Publishable key</b> (beginnt mit sb_publishable_) kopieren. Die <b>Project URL</b> steht unter <b>Project Settings → Data API</b> (bzw. <b>API</b>). Beides oben eintragen.</li>
           <li>Konto anlegen: hier „Konto erstellen“ und den Link in der Bestätigungs-Mail antippen (zeigt der Link eine Fehlerseite, ist die Mail trotzdem bestätigt). Einfacher: im Dashboard unter <b>Authentication → Users → Add user</b> mit „Auto Confirm User“.</li>
-          <li>Auf weiteren Handys mit derselben E-Mail und demselben Passwort anmelden.</li>
+          <li>Weitere Geräte: auf einem angemeldeten Gerät „Weiteres Gerät verbinden“ antippen – dann braucht das neue Gerät nur noch E-Mail und Passwort.</li>
         </ol>
         <textarea readonly rows="8" id="cloudSql">${esc(SQL)}</textarea>
         <button type="button" class="btn soft" style="width:100%;margin-top:8px" data-cloud="copy">SQL kopieren</button>
@@ -257,38 +364,58 @@ create trigger app_items_touch before insert or update on public.app_items
     const btns = [...form.querySelectorAll('button')]; btns.forEach(b => { b.disabled = true; });
     try {
       const j = await authCall(a, signup ? 'signup' : 'token?grant_type=password', { email, password: pw });
-      if (!j.access_token) { a.email = email; saveAuth(a); C.toast('Bestätigungs-Mail verschickt – Link antippen, dann anmelden'); return; }
+      if (!j.access_token || !j.user) { a.email = email; saveAuth(a); C.toast('Bestätigungs-Mail verschickt – Link antippen, dann anmelden'); return; }
       setSession(a, j); state(a.session.uid); saveState();
       C.refresh();
       await syncNow();
       C.toast(sy.err || 'Verbunden ✓ Daten sind online');
     } catch (e) {
       saveAuth(a);
-      C.toast(netErr(e) ? 'Server nicht erreichbar – URL prüfen' : e.message);
+      C.toast(netErr(e) ? 'Server nicht erreichbar – URL und Internet prüfen' : e.message);
     } finally { btns.forEach(b => { b.disabled = false; }); }
+  }
+  async function copyText(text, okMsg) {
+    try { await navigator.clipboard.writeText(text); C.toast(okMsg); return true; } catch (e) { return false; }
   }
 
   const ACTIONS = {
-    tap() { if (isOn()) syncNow(true); else if (C.openSettings) C.openSettings(); },
+    tap() { if (!isOn() || sy.hold) { if (C.openSettings) C.openSettings(); if (isOn()) syncNow(); } else syncNow(true); },
     signup(el) { const f = el.closest('form'); if (f.reportValidity()) login(f, true); },
     logout() {
       C.confirm('Abmelden? Die Daten bleiben auf diesem Gerät, werden aber nicht mehr online abgeglichen. Gilt für alle Apps.', 'Abmelden', () => {
-        const a = auth(); a.session = null; a.email = ''; saveAuth(a); sy.err = ''; C.refresh(); C.toast('Abgemeldet');
+        const a = auth(); a.session = null; a.email = ''; saveAuth(a); sy.err = ''; sy.hold = 0; C.refresh(); C.toast('Abgemeldet');
       });
     },
     async copy() {
-      try { await navigator.clipboard.writeText(SQL); C.toast('SQL kopiert'); }
-      catch (e) { const t = document.getElementById('cloudSql'); t.focus(); t.select(); C.toast('Text markiert – jetzt kopieren'); }
+      if (!(await copyText(SQL, 'SQL kopiert'))) { const t = document.getElementById('cloudSql'); t.focus(); t.select(); C.toast('Text markiert – jetzt kopieren'); }
+    },
+    async linkShare() {
+      const url = linkUrl();
+      if (navigator.share) { try { await navigator.share({ title: 'Gerät verbinden', text: 'Mit diesem Link meldest du ein weiteres Gerät an (enthält kein Passwort):', url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+      ACTIONS.linkCopy();
+    },
+    async linkCopy() { if (!(await copyText(linkUrl(), 'Link kopiert'))) window.prompt('Link kopieren:', linkUrl()); },
+    // Angehaltene Löschungen: alles vom Server zurückholen …
+    holdRestore() { const p = state(); p.snap = {}; p.cursor = null; p.adopt = true; delete p.allow; sy.hold = 0; saveState(); syncNow(true); },
+    // … oder die Löschungen bewusst auch online ausführen
+    holdDelete() {
+      C.confirm(`${sy.hold} Einträge wirklich auch online und auf allen Geräten löschen?`, 'Online löschen', () => { allowBulkDelete(); sy.hold = 0; syncNow(true); });
     },
   };
+  function allowBulkDelete() { if (!C) return; state().allow = Date.now(); saveState(); }
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-cloud]'); if (!el || !C) return;
-    e.preventDefault(); ACTIONS[el.dataset.cloud](el);
+    e.preventDefault();
+    try { const r = ACTIONS[el.dataset.cloud](el); if (r && r.catch) r.catch(err => console.error(err)); } catch (err) { console.error(err); C.toast('Das hat nicht geklappt'); }
   });
   document.addEventListener('submit', e => {
     if (!e.target.matches('[data-cloud-form]') || !C) return;
     e.preventDefault(); login(e.target, false);
   }, true);
+  document.addEventListener('input', e => {
+    if (!C || !e.target.matches || !e.target.matches('[data-cloud-code]')) return;
+    if (readCode(e.target.value)) { e.target.blur(); applyCode(e.target.value, false); }
+  });
   // Login/Logout in einer anderen App (anderer Tab) übernehmen
   window.addEventListener('storage', e => { if (e.key === AUTH_KEY && C) { ui(); if (isOn()) syncNow(); } });
 
@@ -296,6 +423,7 @@ create trigger app_items_touch before insert or update on public.app_items
   css.textContent = `
 .cloud-btn{background:var(--card2)!important;color:var(--t3)!important}
 .cloud-btn.ok{color:var(--ok)!important}
+.cloud-btn.off{color:var(--t2)!important}
 .cloud-btn.err{color:#e8590c!important;background:rgba(232,89,12,.13)!important}
 .cloud-btn.busy svg{animation:cloudPulse 1s ease-in-out infinite}
 @keyframes cloudPulse{50%{opacity:.35}}
@@ -306,11 +434,17 @@ create trigger app_items_touch before insert or update on public.app_items
 .cloud-adv summary,.cloud-help summary{cursor:pointer;font-size:14px;font-weight:700;color:var(--acc-t);padding:4px 2px 10px}
 .cloud-help{padding:12px 14px;margin-top:10px}.cloud-help summary{padding:2px}
 .cloud-help ol{margin:10px 0 10px 20px;font-size:14px;line-height:1.55;color:var(--t2)}.cloud-help ol b{color:var(--t1)}
-.cloud-help textarea{font:16px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;min-height:0}`;
+.cloud-help textarea{font:16px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;min-height:0}
+.cloud-hold{padding:14px;margin-top:10px;border:2px solid #e8590c}.cloud-hold p{font-size:14px;line-height:1.5;color:var(--t2);margin:6px 0 10px}`;
   document.head.appendChild(css);
 
   window.Cloud = {
-    init(cfg) { C = cfg; P = null; ui(); syncNow(); },
-    soon, now: syncNow, isOn, badge, section,
+    init(cfg) {
+      C = cfg; P = null;
+      // Lokaler Datenbestand wurde neu aufgebaut (Defekt, Speicher gelöscht): alles neu holen, Server gewinnt
+      if (cfg.rebuilt) { const p = state(); if (Object.keys(p.snap).length || p.cursor) { p.snap = {}; p.cursor = null; p.adopt = true; delete p.allow; saveState(); } }
+      ui(); syncNow(); setTimeout(takeLink, 60);
+    },
+    soon, now: syncNow, isOn, badge, section, status, allowBulkDelete,
   };
 })();
