@@ -42,10 +42,11 @@ function pickNext() {
 /* ── Ansicht ── */
 function viewSwipe() {
   const seg = [['swipe', '🔥 Swipen'], ['rank', '🏆 Ranking'], ['soon', '🍳 Demnächst']];
-  return `<div class="seg swseg">${seg.map(([k, l]) => `<button data-act="swMode" data-m="${k}" class="${sw.mode === k ? 'on' : ''}">${l}</button>`).join('')}</div><div id="swarea"></div>`;
+  return `<div class="swwrap"><div class="seg swseg">${seg.map(([k, l]) => `<button data-act="swMode" data-m="${k}" class="${sw.mode === k ? 'on' : ''}">${l}</button>`).join('')}</div></div><div id="swarea"></div>`;
 }
 function renderSwipe() {
   const el = $('#swarea'); if (!el) return;
+  el.className = sw.mode === 'swipe' ? 'swwrap' : '';
   if (sw.mode === 'rank') { el.innerHTML = rankHTML(); return; }
   if (sw.mode === 'soon') { el.innerHTML = soonHTML(); return; }
   const u = S.ui.who;
@@ -125,7 +126,7 @@ function swVote(v) {
   mine[id] = v; save();
   if (navigator.vibrate) navigator.vibrate(v === 2 || v === -2 ? 25 : 10);
   const other = USERS.find(x => x !== u), ov = voteOf(other, id);
-  if (v > 0 && ov > 0) { const r = recipeById(id); toast(`💘 Match! Ihr beide mögt „${r.name}“`); }
+  if (v > 0 && ov > 0) { const r = recipeById(id); if (r) toast(`💘 Match! Ihr beide mögt „${r.name}“`); }
   sw.cur = null;
   setTimeout(renderSwipe, card ? 260 : 0);
 }
@@ -144,15 +145,15 @@ function rankHTML() {
   const matches = rows.filter(x => x.vs.every(v => v > 0));
   const nogo = rows.filter(x => x.veto);
   const ranked = rows.filter(x => !x.veto);
-  const row = (x, i) => `<button class="card rrow" data-act="recipeOpen" data-id="${x.r.id}">
+  const row = (x, i) => `<button class="card rrow" data-act="recipeOpen" data-id="${esc(x.r.id)}">
       <span class="rk">${i != null ? i + 1 : ''}</span><span class="remoji">${esc(x.r.emoji || '🍽️')}</span>
       <span class="rbody"><b>${esc(x.r.name)}</b><small>${USERS.map((u, j) => `${u} ${voteBadge(x.vs[j])}`).join(' &nbsp; ')}</small></span>
       <span class="rs ${x.s > 0 ? 'pos' : x.s < 0 ? 'neg' : ''}">${x.s > 0 ? '+' : ''}${x.s}</span></button>`;
   let h = `<div class="small muted" style="margin:4px 4px 12px">Bewertet: ${USERS.map((u, i) => `${u} ${both[i]}`).join(' · ')} · Punkte: ⭐ +3 · ♥ +1 · ✕ −1 · ⛔ −3</div>`;
-  if (matches.length) h += `<div class="section-t">💘 Matches – beide mögen es (${matches.length})</div><div class="list">${matches.slice(0, 15).map(x => row(x, null)).join('')}</div>`;
-  h += `<div class="section-t">🏆 Gesamt-Ranking</div><div class="list">${ranked.slice(0, 100).map((x, i) => row(x, i)).join('')}</div>`;
+  if (matches.length) h += `<div class="section-t">💘 Matches – beide mögen es (${matches.length})</div><div class="list rgrid">${matches.slice(0, 15).map(x => row(x, null)).join('')}</div>`;
+  h += `<div class="section-t">🏆 Gesamt-Ranking</div><div class="list rgrid">${ranked.slice(0, 100).map((x, i) => row(x, i)).join('')}</div>`;
   if (ranked.length > 100) h += `<p class="small muted" style="text-align:center;margin-top:8px">Top 100 von ${ranked.length} angezeigt</p>`;
-  if (nogo.length) h += `<details class="nogo"><summary class="section-t">⛔ No-Gos (${nogo.length})</summary><div class="list">${nogo.map(x => row(x, null)).join('')}</div></details>`;
+  if (nogo.length) h += `<details class="nogo"><summary class="section-t">⛔ No-Gos (${nogo.length})</summary><div class="list rgrid">${nogo.map(x => row(x, null)).join('')}</div></details>`;
   h += `<button class="btn plain" data-act="swSync" style="width:100%;margin-top:18px">⇄ Bewertungen zwischen Handys übertragen</button>`;
   return h;
 }
@@ -196,14 +197,14 @@ function suggestions(opts = {}) {
 }
 function soonHTML() {
   const list = suggestions({ for: sw.sugFor, meal: sw.sugMeal }).slice(0, 12);
-  let h = `<div class="field"><div class="seg">${[['both', '👫 Beide'], ['Fee', '👩 Fee'], ['Flo', '👨 Flo']].map(([k, l]) => `<button data-act="swSugFor" data-v="${k}" class="${sw.sugFor === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+  let h = `<div class="swwrap"><div class="field"><div class="seg">${[['both', '👫 Beide'], ['Fee', '👩 Fee'], ['Flo', '👨 Flo']].map(([k, l]) => `<button data-act="swSugFor" data-v="${k}" class="${sw.sugFor === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <div class="field"><div class="seg">${[['main', 'Hauptgerichte'], ['breakfast', 'Frühstück'], ['all', 'Alles']].map(([k, l]) => `<button data-act="swSugMeal" data-v="${k}" class="${sw.sugMeal === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
-    <div class="row" style="margin-bottom:14px"><button class="btn" data-act="swReshuffle">🎲 Neue Vorschläge</button><button class="btn primary" data-act="swFillWeek">📅 Woche füllen</button></div>`;
+    <div class="row" style="margin-bottom:14px"><button class="btn" data-act="swReshuffle">🎲 Neue Vorschläge</button><button class="btn primary" data-act="swFillWeek">📅 Woche füllen</button></div></div>`;
   if (!list.length) return h + `<div class="empty"><div class="big">🤷</div><b>Keine Vorschläge</b>Bewertet ein paar Rezepte positiv, dann klappt's.</div>`;
-  h += `<div class="list">${list.map(x => `<div class="card sug">
-      <button class="sug-main" data-act="recipeOpen" data-id="${x.r.id}"><span class="remoji">${esc(x.r.emoji || '🍽️')}</span>
+  h += `<div class="list rgrid">${list.map(x => `<div class="card sug">
+      <button class="sug-main" data-act="recipeOpen" data-id="${esc(x.r.id)}"><span class="remoji">${esc(x.r.emoji || '🍽️')}</span>
         <span class="rbody"><b>${esc(x.r.name)}</b><small>${recipeMeta(x.r)}</small><small class="why">${x.why.map(esc).join(' · ')}</small></span></button>
-      <button class="hbtn" data-act="recipeToPlan" data-id="${x.r.id}" aria-label="Planen">📅</button></div>`).join('')}</div>
+      <button class="hbtn" data-act="recipeToPlan" data-id="${esc(x.r.id)}" aria-label="Planen">📅</button></div>`).join('')}</div>
     <p class="small muted" style="text-align:center;margin-top:10px">Basierend auf euren Bewertungen. „Nie“ wird nie vorgeschlagen, kürzlich Geplantes rutscht nach hinten.</p>`;
   return h;
 }
@@ -244,7 +245,7 @@ function openSync() {
 /* ── Aktionen ── */
 Object.assign(ACT, {
   swMode(el) { sw.mode = el.dataset.m; $$('.swseg button').forEach(b => b.classList.toggle('on', b.dataset.m === sw.mode)); renderSwipe(); window.scrollTo(0, 0); },
-  swWho(el) { S.ui.who = el.dataset.u; sw.cur = null; sw.last = []; save(); renderSwipe(); },
+  swWho(el) { S.ui.who = el.dataset.u; sw.cur = null; sw.last = []; saveUI(); renderSwipe(); },
   swVote(el) { swVote(+el.dataset.v); },
   swUndo() {
     const l = sw.last.pop(); if (!l) return;
@@ -266,11 +267,16 @@ Object.assign(ACT, {
   swImport() {
     const res = importVotes($('#swCode').value || '');
     if (!res) { toast('Kein gültiger Code'); return; }
-    closeSheet(); renderSwipe(); toast(`${res.n} Bewertungen von ${res.u} übernommen`);
+    closeSheet(true); renderSwipe(); toast(`${res.n} Bewertungen von ${res.u} übernommen`);
   },
   swReset(el) {
     const u = el.dataset.u;
-    confirmSheet(`Alle Bewertungen von ${u} löschen?`, 'Löschen', () => { S.votes[u] = {}; save(); closeAllSheets(); renderSwipe(); toast('Gelöscht'); });
+    const old = votesOf(u), n = Object.keys(old).length;
+    if (!n) { toast(`${u} hat noch nichts bewertet`); return; }
+    confirmSheet(`Alle ${n} Bewertungen von ${u} löschen?`, 'Löschen', () => {
+      S.votes[u] = {}; bulkOk(); save(); closeAllSheets(); renderSwipe();
+      toast('Bewertungen gelöscht', { label: 'Rückgängig', fn: () => { S.votes[u] = { ...old, ...votesOf(u) }; save(); renderSwipe(); } });
+    });
   },
 });
 CHANGE.swDeck = el => { sw.deck = el.value; sw.cur = null; renderSwipe(); };
@@ -287,15 +293,22 @@ ACT.weekRandom = function () {
     if (!x) return null;
     used.add(x.r.id); return x.r;
   };
-  let n = 0;
+  const added = [];
   for (const k of weekKeys()) {
     if (k < dkey(new Date())) continue;
     for (const m of S.settings.meals) {
       if (S.plan[k]?.[m]) continue;
       const r = take(m === 'f' ? 'breakfast' : 'main'); if (!r) continue;
-      S.plan[k] = S.plan[k] || {}; S.plan[k][m] = { r: r.id, s: S.settings.servings }; n++;
+      S.plan[k] = S.plan[k] || {}; S.plan[k][m] = { r: r.id, s: S.settings.servings }; added.push([k, m, r.id]);
     }
   }
+  const n = added.length;
+  if (!n) { toast(weekKeys()[6] < dkey(new Date()) ? 'Diese Woche ist schon vorbei' : 'Keine freien Plätze'); return; }
   save(); render();
-  toast(n ? `${n} Gerichte eingeplant – passend zu euren Bewertungen` : 'Keine freien Plätze');
+  toast(`${n} ${n === 1 ? 'Gericht' : 'Gerichte'} eingeplant – passend zu euren Bewertungen`, {
+    label: 'Rückgängig', fn: () => {
+      for (const [k, m, id] of added) if (S.plan[k]?.[m]?.r === id) { delete S.plan[k][m]; if (!Object.keys(S.plan[k]).length) delete S.plan[k]; }
+      save(); render();
+    },
+  });
 };
