@@ -239,7 +239,7 @@ function viewShot() {
   const sugTxt = sug ? `Vorschlag: ${fmt(sug.din)} g → ${fmt(sug.dout)} g · Mahlgrad ${fmtG(sug.grind)}` : `Ziel: ${fmt(T.dose)} g → ${fmt(T.dose * T.ratio)} g in ${st.tMin}–${st.tMax} s`;
   h += `<div class="cols"><div>
     <button class="newshot" data-act="newShot"><span class="ni"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M10 2.5h4"/></svg></span><span><b>Neuer Shot</b><small>${esc(sugTxt)}</small></span></button>`;
-  if (!S.shots.some(x => /^nb-/.test(x.id))) h += `<div class="card pad"><b>📓 Alte Notizen übernehmen</b><div class="small muted" style="margin:4px 0 10px">34 Shots aus dem Notizbuch (Green Lion, Melitta Bella Crema, Qaweh Decaf, Melitta Decaf) in die Datenbank aufnehmen.</div><button class="btn soft sm" data-act="importNotebook">Jetzt übernehmen</button></div>`;
+  if (!S.shots.some(x => /^nb-/.test(x.id))) h += `<div class="card pad"><b>📓 Alte Notizen übernehmen</b><div class="small muted" style="margin:4px 0 10px">34 Shots aus dem Notizbuch (Green Lion, Melitta Bella Crema Decaf, Qaweh Decaf) in die Datenbank aufnehmen.</div><button class="btn soft sm" data-act="importNotebook">Jetzt übernehmen</button></div>`;
   if (!S.beans.length) h += `<div class="card empty"><div class="big">🫘</div><b>Leg deine erste Bohne an</b>Dann merkt sich die App Rezept, Röstdatum und Mahlgrad pro Sorte.<div style="margin-top:12px"><button class="btn soft" data-act="newBean" style="margin:0 auto">+ Bohne anlegen</button></div></div>`;
   if (s) h += recipeCard(s, 'Aktuelle Rezeptur');
   else h += `<div class="card empty"><div class="big">☕</div><b>Noch kein Shot${b ? ' mit ' + esc(b.name) : ''}</b>Tippe auf „Neuer Shot“ – mit eingebauter Stoppuhr für Zeit und ersten Tropfen.</div>`;

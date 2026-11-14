@@ -19,7 +19,7 @@
   },
   {
    "id": "nb-bellacrema",
-   "name": "Melitta Bella Crema",
+   "name": "Melitta Bella Crema Decaf",
    "roaster": "Melitta",
    "origin": "",
    "roast": "",
@@ -34,15 +34,6 @@
    "roast": "",
    "roastDate": "",
    "created": 3
-  },
-  {
-   "id": "nb-melitta-decaf",
-   "name": "Melitta Decaf",
-   "roaster": "Melitta",
-   "origin": "",
-   "roast": "",
-   "roastDate": "",
-   "created": 4
   }
  ],
  "shots": [
@@ -491,7 +482,7 @@
   {
    "id": "nb-27",
    "d": "2026-11-12T08:00",
-   "bean": "nb-melitta-decaf",
+   "bean": "nb-bellacrema",
    "din": 19,
    "grind": 2.25,
    "dout": null,
@@ -508,7 +499,7 @@
   {
    "id": "nb-28",
    "d": "2026-11-12T08:15",
-   "bean": "nb-melitta-decaf",
+   "bean": "nb-bellacrema",
    "din": 19,
    "grind": 3.25,
    "dout": null,
@@ -525,7 +516,7 @@
   {
    "id": "nb-29",
    "d": "2026-11-12T08:30",
-   "bean": "nb-melitta-decaf",
+   "bean": "nb-bellacrema",
    "din": 18,
    "grind": 4.25,
    "dout": 39,
@@ -542,7 +533,7 @@
   {
    "id": "nb-30",
    "d": "2026-11-12T08:45",
-   "bean": "nb-melitta-decaf",
+   "bean": "nb-bellacrema",
    "din": 18,
    "grind": 4.25,
    "dout": 40,
@@ -559,7 +550,7 @@
   {
    "id": "nb-31",
    "d": "2026-11-12T09:00",
-   "bean": "nb-melitta-decaf",
+   "bean": "nb-bellacrema",
    "din": 18.9,
    "grind": 4,
    "dout": 40,
@@ -576,7 +567,7 @@
   {
    "id": "nb-32",
    "d": "2026-11-12T09:15",
-   "bean": "nb-melitta-decaf",
+   "bean": "nb-bellacrema",
    "din": 18.2,
    "grind": 4.25,
    "dout": 39,
@@ -593,7 +584,7 @@
   {
    "id": "nb-33",
    "d": "2026-11-12T09:30",
-   "bean": "nb-melitta-decaf",
+   "bean": "nb-bellacrema",
    "din": 18.3,
    "grind": 4.25,
    "dout": 41,
