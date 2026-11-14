@@ -252,7 +252,7 @@
           <button data-sub="assess">📋 Bestandsaufnahme</button>
           <button data-sub="plan">🏋️ Mein Plan</button>
         </div>
-        <div class="kp-score" id="kp-score"></div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap"><a class="kp-score" href="koerper/" style="text-decoration:none">📱 Als eigene App öffnen →</a><div class="kp-score" id="kp-score"></div></div>
       </div>
       <div class="kp-grid">
         <div class="card kp-mapcard" id="kp-mapcard">
