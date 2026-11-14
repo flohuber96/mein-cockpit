@@ -85,8 +85,7 @@
     // Zielfeld
     const zx = X(T.tMin), zy = Y(T.ratio + 0.12);
     h += `<rect x="${zx}" y="${zy}" width="${X(T.tMax) - zx}" height="${Y(T.ratio - 0.12) - zy}" rx="6" style="fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5;stroke-dasharray:4 3"/>`;
-    const zr = X(T.tMax) + 5 < W - R - 24;
-    h += `<text x="${zr ? X(T.tMax) + 5 : zx - 5}" y="${(zy + Y(T.ratio - 0.12)) / 2 + 4}" text-anchor="${zr ? 'start' : 'end'}" style="fill:var(--ok);font-size:11px;font-weight:800">Ziel</text>`;
+    h += `<text x="${zx + 3}" y="${zy - 5}" style="fill:var(--ok);font-size:11px;font-weight:800">Ziel</text>`;
     // Richtungshilfe
     h += `<text x="${L + 6}" y="${H - B - 6}" style="fill:var(--t3);font-size:10.5px;font-weight:700">◂ schneller</text><text x="${W - R - 6}" y="${H - B - 6}" text-anchor="end" style="fill:var(--t3);font-size:10.5px;font-weight:700">langsamer ▸</text>`;
     // Weg

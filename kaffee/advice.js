@@ -12,7 +12,7 @@
    derselben Bohne (lineare Regression); bis dahin gilt der Wert aus den Einstellungen. */
 (function () {
   const TEMPS = ['0', 'I', 'II'];
-  const TEMP_C = { 0: 'ca. 90 °C', I: 'ca. 93 °C', II: 'ca. 95 °C' };
+  const TEMP_C = { 0: 'ca. 90–91 °C', I: 'ca. 91–93 °C', II: 'ca. 93–95 °C' }; // eigene Messung
   const r05 = x => Math.round(x * 2) / 2;
   const fmt = (x, d = 1) => (x == null || isNaN(x)) ? '–' : (Math.round(x * 10 ** d) / 10 ** d).toFixed(d).replace('.', ',');
   const fmtG = x => {
