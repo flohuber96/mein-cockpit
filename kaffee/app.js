@@ -34,7 +34,7 @@ function fresh() {
     v: 1, shots: [], beans: [],
     settings: {
       theme: 'auto',
-      dose: 18, ratio: 2, tMin: 27, tMax: 33, fdMin: 8, fdMax: 11,
+      dose: 18, ratio: 2.1, tMin: 25, tMax: 30, fdMin: 8, fdMax: 11,
       machine: 'Lelit Mara X V2', temp: 'I', pi: true,
       grinder: 'Eureka Mignon Zero 65 AP', coarserUp: true, step: 0.25, spu: 5,
     },
@@ -75,7 +75,8 @@ function curBean() {
   return last ? bean(last.bean) : activeBeans()[0] || null;
 }
 const shotsOf = id => S.shots.filter(s => id === 'all' || (s.bean || '') === (id || '')).sort((a, b) => a.ts - b.ts);
-const lastShot = id => { const l = shotsOf(id); return l[l.length - 1] || null; };
+const complete = s => s.din > 0 && s.dout > 0 && s.t > 0;
+const lastShot = id => { const l = shotsOf(id); return [...l].reverse().find(complete) || l[l.length - 1] || null; };
 function targets(b) {
   const st = S.settings;
   return { ratio: (b && b.ratio) || st.ratio, dose: (b && b.dose) || st.dose, tMin: st.tMin, tMax: st.tMax, fdMin: st.fdMin, fdMax: st.fdMax };
@@ -231,13 +232,14 @@ function compassCard(list, T, s) {
 
 function viewShot() {
   const b = curBean(), id = b ? b.id : '';
-  const list = shotsOf(id), s = list[list.length - 1];
+  const list = shotsOf(id), s = [...list].reverse().find(complete);
   let h = beanBar(id);
   const sug = s ? analyze(s).next : null;
   const st = S.settings, T = targets(b);
   const sugTxt = sug ? `Vorschlag: ${fmt(sug.din)} g → ${fmt(sug.dout)} g · Mahlgrad ${fmtG(sug.grind)}` : `Ziel: ${fmt(T.dose)} g → ${fmt(T.dose * T.ratio)} g in ${st.tMin}–${st.tMax} s`;
   h += `<div class="cols"><div>
     <button class="newshot" data-act="newShot"><span class="ni"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M10 2.5h4"/></svg></span><span><b>Neuer Shot</b><small>${esc(sugTxt)}</small></span></button>`;
+  if (!S.shots.some(x => /^nb-/.test(x.id))) h += `<div class="card pad"><b>📓 Alte Notizen übernehmen</b><div class="small muted" style="margin:4px 0 10px">34 Shots aus dem Notizbuch (Green Lion, Melitta Bella Crema, Qaweh Decaf, Melitta Decaf) in die Datenbank aufnehmen.</div><button class="btn soft sm" data-act="importNotebook">Jetzt übernehmen</button></div>`;
   if (!S.beans.length) h += `<div class="card empty"><div class="big">🫘</div><b>Leg deine erste Bohne an</b>Dann merkt sich die App Rezept, Röstdatum und Mahlgrad pro Sorte.<div style="margin-top:12px"><button class="btn soft" data-act="newBean" style="margin:0 auto">+ Bohne anlegen</button></div></div>`;
   if (s) h += recipeCard(s, 'Aktuelle Rezeptur');
   else h += `<div class="card empty"><div class="big">☕</div><b>Noch kein Shot${b ? ' mit ' + esc(b.name) : ''}</b>Tippe auf „Neuer Shot“ – mit eingebauter Stoppuhr für Zeit und ersten Tropfen.</div>`;
@@ -257,7 +259,7 @@ function viewLog() {
   let h = beanBar(sel, 'logBean');
   if (!list.length) return h + `<div class="card empty"><div class="big">📈</div><b>Noch keine Shots</b>Sobald du Shots einträgst, siehst du hier Verlauf und Diagramme.</div>`;
   const okN = list.filter(s => shotState(s) === 'ok').length;
-  const avgT = list.reduce((a, s) => a + s.t, 0) / list.length;
+  const timed = list.filter(s => s.t > 0), avgT = timed.reduce((a, s) => a + s.t, 0) / (timed.length || 1);
   const rated = list.filter(s => s.rating > 0);
   h += `<div class="stats">
     <div><small>Shots</small><b>${list.length}</b></div>
@@ -350,6 +352,7 @@ function viewMore() {
   ${window.Cloud ? Cloud.section() : ''}
   <div class="section-t">Daten</div>
   <div class="card menu">
+    <button data-act="importNotebook"><span class="ico">📓</span>Notizbuch-Daten übernehmen</button>
     <button data-act="exportCsv"><span class="ico">📄</span>Shots als CSV exportieren</button>
     <button data-act="exportJson"><span class="ico">💾</span>Sicherung herunterladen (JSON)</button>
     <button data-act="importJson"><span class="ico">📥</span>Sicherung einspielen</button>
@@ -634,11 +637,24 @@ const ACT = {
   exportCsv() {
     const head = ['Datum', 'Kaffee', 'Röster', 'In (g)', 'Out (g)', 'Ratio', 'Zeit (s)', '1. Tropfen (s)', 'Mahlgrad', 'Temp', 'Pre-Infusion', 'Geschmack', 'Bewertung', 'Getränk', 'Auffälligkeiten', 'Notiz'];
     const q = v => { const t = String(v ?? ''); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
-    const rows = shotsOf('all').map(s => { const b = bean(s.bean); return [new Date(s.ts).toLocaleString('de-DE'), b ? b.name : '', b ? b.roaster : '', fmt(s.din), fmt(s.dout), fmt(s.dout / s.din, 2), fmt(s.t, 0), s.fd ? fmt(s.fd, 0) : '', fmtG(s.grind), s.temp || '', s.pi ? 'an' : 'aus', s.taste == null ? '' : Charts.TASTE[s.taste], s.rating || '', s.drink || '', (s.tags || []).join(', '), s.notes || ''].map(q).join(';'); });
+    const rows = shotsOf('all').map(s => { const b = bean(s.bean); return [new Date(s.ts).toLocaleString('de-DE'), b ? b.name : '', b ? b.roaster : '', fmt(s.din), fmt(s.dout), s.dout && s.din ? fmt(s.dout / s.din, 2) : '', fmt(s.t, 0), s.fd ? fmt(s.fd, 0) : '', fmtG(s.grind), s.temp || '', s.pi ? 'an' : 'aus', s.taste == null ? '' : Charts.TASTE[s.taste], s.rating || '', s.drink || '', (s.tags || []).join(', '), s.notes || ''].map(q).join(';'); });
     download(`kaffee-shots-${dayKey(Date.now())}.csv`, '﻿' + [head.join(';'), ...rows].join('\n'), 'text/csv');
   },
   exportJson() { download(`kaffee-sicherung-${dayKey(Date.now())}.json`, JSON.stringify({ app: 'kaffee', v: 1, shots: S.shots, beans: S.beans, settings: S.settings }, null, 1), 'application/json'); },
   importJson() { $('#importFile').click(); },
+  async importNotebook() {
+    let j;
+    try { const r = await fetch('notizbuch.json', { cache: 'no-cache' }); j = await r.json(); } catch (e) { toast('Notizbuch-Daten nicht erreichbar – Internet prüfen'); return; }
+    const have = new Set(S.shots.map(s => s.id)), newShots = j.shots.filter(s => !have.has(s.id));
+    if (!newShots.length) { toast('Notizbuch ist schon übernommen'); return; }
+    confirmSheet(`${newShots.length} Shots aus dem Notizbuch übernehmen? Das Datum ist dort nicht notiert – die Reihenfolge bleibt erhalten, die Tage sind Platzhalter. Außerdem werden deine notierten Ziele gesetzt: 18 g → 36–40 g in 25–30 s.`, 'Übernehmen', () => {
+      for (const b of j.beans) if (!bean(b.id)) S.beans.push(b);
+      for (const x of newShots) { const { d, ...s } = x; s.ts = new Date(d).getTime(); S.shots.push(s); }
+      Object.assign(S.settings, j.settings);
+      S.ui.bean = 'nb-greenlion';
+      save(); render(); toast(`${newShots.length} Shots übernommen ✓`);
+    });
+  },
   wipe() {
     confirmSheet(window.Cloud && Cloud.isOn() ? 'Alle Shots, Bohnen und Einstellungen löschen – auch online und auf allen verbundenen Geräten?' : 'Alle Shots, Bohnen und Einstellungen auf diesem Gerät löschen?', 'Alles löschen', () => {
       if (window.Cloud) Cloud.allowBulkDelete();
