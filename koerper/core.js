@@ -34,19 +34,21 @@ const painCol = l => l >= 7 ? '#e5484d' : l >= 4 ? '#d99a00' : '#2f9e44';
 
 /* ───────── Zustand ───────── */
 const KEY = 'koerper.v1';
+const boot = { rebuilt: false };
 function fresh() {
   return {
-    v: 1, pains: {}, tests: {}, snaps: [], sessions: [], routines: [], templates: [], rides: [], favs: {}, well: {},
+    v: 1, sid: uid(), pains: {}, tests: {}, snaps: [], sessions: [], routines: [], templates: [], rides: [], favs: {}, well: {},
     settings: { theme: 'auto', rest: 90, sound: true, vib: true, prep: 5, goalK: 2, goalM: 4, ftp: null },
     active: null, ui: { view: 'home' }
   };
 }
 function migrate(s) {
   const f = fresh();
-  return Object.assign({}, f, s, { settings: Object.assign({}, f.settings, s.settings), ui: Object.assign({}, f.ui, s.ui) });
+  return Object.assign({}, f, s, { sid: s.sid || f.sid, settings: Object.assign({}, f.settings, s.settings), ui: Object.assign({}, f.ui, s.ui) });
 }
 function load() {
-  try { const raw = localStorage.getItem(KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) { /* ignore */ }
+  try { const raw = localStorage.getItem(KEY); if (raw) { const j = JSON.parse(raw); if (j && typeof j === 'object') return migrate(j); } } catch (e) { /* beschädigt */ }
+  boot.rebuilt = true; // kein lesbarer Bestand (neu oder vom System geleert): die Online-Datenbank ist die Wahrheit
   const s = fresh();
   // Beim ersten Start: Bestandsaufnahme aus dem Körper-Tab des Cockpits übernehmen
   try {

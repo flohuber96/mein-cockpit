@@ -86,7 +86,8 @@ function askText(title, label, value, onOk) {
   openSheet({ title, left: 'Abbrechen', body: `<div class="field"><label>${esc(label)}</label><input type="text" id="askIn" value="${esc(value)}"></div><button class="btn primary" data-act="askOk">Speichern</button>` });
   pending.ask = onOk;
 }
-const exportData = () => { const o = {}; ['v', 'pains', 'tests', 'snaps', 'sessions', 'routines', 'templates', 'rides', 'favs', 'well', 'settings'].forEach(k => { o[k] = S[k]; }); return o; };
+const bulkOk = () => { if (window.Cloud && Cloud.allowBulkDelete) Cloud.allowBulkDelete(); }; // gewollte Massenlöschung ankündigen
+const exportData = () => { const o = {}; ['v', 'sid', 'pains', 'tests', 'snaps', 'sessions', 'routines', 'templates', 'rides', 'favs', 'well', 'settings'].forEach(k => { o[k] = S[k]; }); return o; };
 document.addEventListener('change', e => {
   if (e.target.id !== 'impFile' || !e.target.files[0]) return;
   const fr = new FileReader();
@@ -94,7 +95,7 @@ document.addEventListener('change', e => {
     try {
       const j = JSON.parse(String(fr.result));
       if (!j || typeof j !== 'object' || !Array.isArray(j.sessions)) throw new Error('x');
-      confirmSheet('Sicherung einspielen? Die aktuellen Daten auf diesem Gerät werden ersetzt.', 'Einspielen', () => { S = migrate(Object.assign({}, j, { active: null, ui: S.ui })); save(); applyTheme(); closeAllSheets(); render(); toast('Sicherung eingespielt'); });
+      confirmSheet('Sicherung einspielen? Die aktuellen Daten auf diesem Gerät werden ersetzt.', 'Einspielen', () => { bulkOk(); S = migrate(Object.assign({}, j, { active: null, ui: S.ui })); save(); applyTheme(); closeAllSheets(); render(); toast('Sicherung eingespielt'); });
     } catch (err) { toast('Das ist keine gültige Sicherungsdatei'); }
   };
   fr.readAsText(e.target.files[0]);
@@ -119,7 +120,7 @@ Object.assign(ACT, {
   dataImport() { const f = $('#impFile'); if (f) { f.value = ''; f.click(); } },
   dataWipe() {
     confirmSheet(window.Cloud && Cloud.isOn() ? 'Alle Daten löschen – auch in der Online-Datenbank und auf allen verbundenen Geräten? Das kann nicht rückgängig gemacht werden.' : 'Alle Daten auf diesem Gerät löschen? Das kann nicht rückgängig gemacht werden.', 'Alles löschen', () => {
-      const keep = S.settings; S = fresh(); S.settings = keep; save(); closeAllSheets(); closeFull(); restStop(); render(); toast('Alles gelöscht');
+      const keep = S.settings, sid = S.sid; bulkOk(); S = fresh(); S.settings = keep; S.sid = sid; save(); closeAllSheets(); closeFull(); restStop(); render(); toast('Alles gelöscht');
     });
   }
 });
@@ -153,17 +154,24 @@ if (window.Cloud) Cloud.init({
   apply(r) {
     if (CLOUD_ARR[r.kind]) {
       const arr = S[CLOUD_ARR[r.kind][1]], rid = r.id.slice(2), i = arr.findIndex(x => String(x.id) === rid);
-      if (r.deleted) { if (i >= 0) arr.splice(i, 1); } else if (i >= 0) arr[i] = r.data; else arr.push(r.data);
-    } else if (r.kind === 'pain') { if (r.deleted) delete S.pains[r.id.slice(2)]; else S.pains[r.id.slice(2)] = r.data; }
-    else if (r.kind === 'well') { if (r.deleted) delete S.well[r.id.slice(2)]; else S.well[r.id.slice(2)] = r.data; }
+      if (r.deleted) { if (i >= 0) arr.splice(i, 1); } else if (r.data && typeof r.data === 'object') { if (i >= 0) arr[i] = r.data; else arr.push(r.data); }
+    } else if (r.kind === 'pain') { if (r.deleted) delete S.pains[r.id.slice(2)]; else if (r.data) S.pains[r.id.slice(2)] = r.data; }
+    else if (r.kind === 'well') { if (r.deleted) delete S.well[r.id.slice(2)]; else if (r.data) S.well[r.id.slice(2)] = r.data; }
     else if (r.kind === 'tests') S.tests = r.deleted ? {} : (r.data || {});
     else if (r.kind === 'favs') S.favs = r.deleted ? {} : (r.data || {});
-    else if (r.kind === 'settings' && r.data) Object.assign(S.settings, r.data);
+    else if (r.kind === 'settings' && r.data && !r.deleted) Object.assign(S.settings, r.data);
+  },
+  // Wurde der lokale Speicher neu aufgebaut (z. B. vom iPhone geleert), gewinnt die Online-Datenbank
+  storeId: () => S.sid, rebuilt: boot.rebuilt,
+  // Sicherheitsnetz: verschwindet mehr, als übrig bleibt, wird erst nachgefragt statt online zu löschen
+  guardDeletes(dels) {
+    const left = S.sessions.length + S.rides.length + S.snaps.length + S.routines.length + S.templates.length + Object.keys(S.pains).length + Object.keys(S.well).length;
+    return dels.length >= 15 && dels.length > left;
   },
   persist() { save(true); },
   refresh() { if (!$('#full').hidden) return; keepScroll(render); },
   toast, confirm: confirmSheet, badgeHost: '#hact',
-  openSettings() { closeAllSheets(); openSettings(); setTimeout(() => { const b = $('#cloudBox'); if (b) b.scrollIntoView({ behavior: 'smooth' }); }, 400); }
+  openSettings() { closeAllSheets(); if (!$('#full').hidden) return; openSettings(); setTimeout(() => { const b = $('#cloudBox'); if (b) b.scrollIntoView({ behavior: 'smooth' }); }, 400); }
 });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
