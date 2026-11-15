@@ -54,6 +54,9 @@ VIEWS.home = {
         ${ring(64, 7, sc == null ? 0 : sc / 100, scoreCol(sc), `<span style="font-size:20px;color:${scoreCol(sc)}">${sc == null ? '–' : sc}</span>`)}
         <div style="flex:1;min-width:0">${sc == null && !pains.length ? '<b>Noch kein Check</b><p class="small muted">17 kurze Selbsttests zeigen, was verkürzt und was schwach ist.</p>' : `<b>${sc == null ? 'Score offen' : 'Körper-Score ' + sc}</b><p class="small muted">${plural(Object.keys(S.tests).length, 'Test', 'Tests')} · ${plural(pains.length, 'Beschwerde', 'Beschwerden')}</p>`}</div></div>
         ${pains.length || top.length ? `<div class="chips" style="margin-top:12px">${pains.slice(0, 3).map(([id]) => chip(id, 'pain')).join('')}${top.filter(x => !S.pains[x.id]).map(x => chip(x.id, x.v.tight >= x.v.weak ? 'tight' : 'weak')).join('')}</div>` : ''}</div>
+      ${S.rides.length ? (() => { const P = pmc(), l = P.days[P.days.length - 1]; if (!l) return ''; const z = fzone(l.tsb), wk7 = sumRides(ridesIn(Date.now() - 7 * DAY, Date.now() + DAY)); return `<div class="section-t">Rad<button data-act="tab" data-view="ride">Analyse ›</button></div>
+      <button class="card pad" data-act="tab" data-view="ride" style="display:block;width:100%"><div class="stats k3" style="gap:4px"><div class="stat" style="padding:0"><small>Fitness</small><b style="color:var(--acc-t)">${Math.round(l.ctl)}</b></div><div class="stat" style="padding:0"><small>Form</small><b style="color:${z[1]}">${l.tsb > 0 ? '+' : ''}${Math.round(l.tsb)}</b></div><div class="stat" style="padding:0"><small>7 Tage</small><b>${hTxt(wk7.min)}<i>h</i></b></div></div>
+        <p class="small muted" style="margin-top:8px;text-align:left"><b style="color:var(--t1)">${z[2]}.</b> ${esc(z[3])}</p></button>`; })() : ''}
       <div class="section-t">Schnellstart</div>
       <div class="tiles">
         <button class="tile" data-act="tab" data-view="mob"><span class="te">🧘</span><b>Dehnen & Mobility</b><small>${X.ROUTINES.length} Routinen mit Timer</small></button>
@@ -137,7 +140,7 @@ document.addEventListener('visibilitychange', () => {
 
 /* ───────── Online-Datenbank (../shared/cloud.js) ───────── */
 const CLOUD_ARR = { session: ['w:', 'sessions'], ride: ['b:', 'rides'], snap: ['s:', 'snaps'], routine: ['r:', 'routines'], template: ['t:', 'templates'] };
-const SYNC_SET = ['rest', 'prep', 'goalK', 'goalM', 'ftp'];
+const SYNC_SET = ['rest', 'prep', 'goalK', 'goalM', 'ftp', 'kg', 'lthr', 'sex'];
 if (window.Cloud) Cloud.init({
   app: 'koerper',
   records() {

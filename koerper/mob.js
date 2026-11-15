@@ -90,13 +90,14 @@ function renderPlayer() {
   openFull(`<div class="fhead"><button class="lnk" data-act="plClose">✕ Beenden</button><div class="ft"><b>${esc(pl.r.n)}</b><small>${pl.i + 1} von ${pl.steps.length}</small></div><button class="lnk r" data-act="plSound">${S.settings.sound ? '🔔 Ton an' : '🔕 Ton aus'}</button></div>
     <div class="fbody"><div class="player${prep ? ' prep' : ''}">
       <div class="pprog">${pl.steps.map((s, n) => `<i class="${n < pl.i || (n === pl.i && !prep) ? 'on' : ''}"></i>`).join('')}</div>
-      <div class="ps">${prep ? (st.second ? 'Seite wechseln' : 'Bereit machen') : st.side ? st.side + 'e Seite' : 'Halten / bewegen'}</div>
+      <div class="ps">${prep ? (st.second ? 'Seite wechseln' : 'Bereit machen') : st.side ? (st.side === 'Links' ? 'Linke' : 'Rechte') + ' Seite' : 'Halten / bewegen'}</div>
       <div class="pn">${esc(e.n)}${st.side ? ` <span class="muted" style="font-size:17px">· ${st.side.toLowerCase()}</span>` : ''}</div>
-      ${ring(210, 12, 1, prep ? 'var(--run)' : 'var(--acc)', `<div><b id="plT"></b><small>${prep ? 'gleich geht’s los' : 'Sekunden'}</small></div>`)}
+      ${Moves.has(st.x) ? `<div class="card mvbox big" data-mv="${st.x}"></div>` : ''}
+      <div class="plrow">${ring(118, 9, 1, prep ? 'var(--run)' : 'var(--acc)', `<div><b id="plT"></b><small>${prep ? 'gleich' : 'Sek.'}</small></div>`)}
+        <div class="plinfo"><b>${esc(e.m.slice(0, 2).map(nm).join(' · '))}</b><span>${esc(e.err || '')}</span></div></div>
       <div class="pctl"><button data-act="plPrev" aria-label="Zurück">⏮</button><button class="main" data-act="plPause" id="plPauseB" aria-label="Pause">⏸</button><button data-act="plAdd" aria-label="15 Sekunden länger">+15</button><button data-act="plNext" aria-label="Weiter">⏭</button></div>
       <p class="small muted" style="min-height:18px">${nx ? 'Danach: ' + esc(E[nx.x].n) + (nx.side ? ' · ' + nx.side.toLowerCase() : '') : 'Letzte Übung 🎉'}</p>
-      <div class="card pad" style="width:100%;text-align:left"><div class="sec">So geht’s</div><ol class="ol">${e.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol>${e.err ? `<p class="small" style="margin-top:10px;color:var(--c-tight)">⚠️ ${esc(e.err)}</p>` : ''}</div>
-      <div class="card mapcard" style="width:100%">${bodySVG({ hl: targetHL(e.m), mini: true })}<div class="legend" style="justify-content:center"><span><i style="background:var(--c-pain)"></i>${esc(nm(e.m[0]))}</span>${e.m.slice(1, 3).map(m => `<span><i style="background:var(--c-syn)"></i>${esc(nm(m))}</span>`).join('')}</div></div>
+      <details class="card pad" style="width:100%;text-align:left"><summary class="lnk">So geht’s – Schritt für Schritt ▾</summary><ol class="ol" style="margin-top:8px">${e.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol></details>
     </div></div>`);
 }
 function plFinish(partial) {

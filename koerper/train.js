@@ -50,11 +50,11 @@ function tplSheet(id) {
 /* ── Workout ── */
 const numVal = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : null; };
 function newSets(e, it) {
-  const last = exHistory(e.id)[0], n = it.s || 3, out = [];
+  const last = exHistory(e.id)[0], n = it.s || 3, out = [], sg = suggest(e, it.r ? '× ' + it.r : '');
   const rDef = it.r ? parseInt(it.r, 10) || null : null;
   for (let i = 0; i < n; i++) {
     const p = last ? (last.sets[i] || last.sets[last.sets.length - 1]) : null;
-    out.push({ w: p && p.w != null ? p.w : null, r: p && p.r != null ? p.r : rDef, t: e.tr === 't' || e.tr === 'wt' ? (it.sec || (p && p.t) || e.hold) : null, done: false });
+    out.push({ w: sg && sg.w != null ? sg.w : p && p.w != null ? p.w : null, r: p && p.r != null ? p.r : rDef, t: e.tr === 't' || e.tr === 'wt' ? (sg && sg.t) || it.sec || (p && p.t) || e.hold : null, done: false });
   }
   return out;
 }
@@ -81,8 +81,10 @@ function renderWorkout() {
     <div class="fbody" style="padding-bottom:110px">
       ${a.ex.map((x, xi) => {
         const e = E[x.x], last = exHistory(x.x)[0];
-        return `<div class="card wx" data-xi="${xi}"><div class="wh">${tierB(e.tier, true)}<button class="bd" data-act="ex" data-id="${x.x}"><b>${esc(e.n)}</b><small>${esc(x.tg || e.dose)} · Pause ${x.rest} s</small></button><button class="hbtn" data-act="wExMenu" aria-label="Optionen">⋯</button></div>
+        const sg = suggest(e, x.tg);
+        return `<div class="card wx" data-xi="${xi}"><div class="wh"><button class="thw" data-act="ex" data-id="${x.x}" aria-label="Bewegung ansehen">${Moves.has(x.x) ? `<span class="th" data-mvs="${x.x}"></span>` : ''}${tierB(e.tier, true)}</button><button class="bd" data-act="ex" data-id="${x.x}"><b>${esc(e.n)}</b><small>${esc(x.tg || e.dose)} · Pause ${x.rest} s</small></button><button class="hbtn" data-act="wExMenu" aria-label="Optionen">⋯</button></div>
           ${last ? `<div class="last">Letztes Mal (${fmtDay(last.ts)}): ${esc(last.sets.map(s => setTxt(e, s).replace(' kg', '')).join(' · '))}</div>` : ''}
+          ${sg ? `<div class="sugg">💡 Heute: ${esc(sg.txt)}</div>` : ''}
           ${x.sets.map((s, si) => setRow(e, x, xi, s, si)).join('')}
           <div class="wf"><button data-act="wAddSet">＋ Satz</button><button data-act="wDelSet">− Satz</button></div></div>`;
       }).join('') || '<div class="empty"><div class="big">🏋️</div><b>Noch keine Übung</b>Füge deine erste Übung hinzu.</div>'}

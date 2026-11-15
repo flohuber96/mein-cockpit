@@ -222,10 +222,25 @@ function testCard(k, t, prev) {
   const cur = S.tests[k], s = cur != null && t.opts[cur] ? t.opts[cur].s : null;
   const pv = prev && prev.tests && prev.tests[k] != null && t.opts[prev.tests[k]] ? t.opts[prev.tests[k]] : null;
   return `<details class="test" id="t-${k}"><summary><span class="amp${s == null ? '' : ' ' + 'gar'[s]}"></span><span style="flex:1;min-width:0"><b>${esc(t.n)}</b><small>${esc(t.what)}</small></span><span class="muted">▾</span></summary>
-    <div class="tb"><ol class="ol">${t.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol>
+    <div class="tb">${Moves.has('t:' + k) ? `<div class="mvbox" data-mv="t:${k}" style="margin-top:10px"></div>` : ''}<ol class="ol">${t.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol>
       <div class="sec">Dein Ergebnis</div><div class="opts">${t.opts.map((o, n) => `<button class="opt s${o.s}${cur === n ? ' on' : ''}" data-act="testOpt" data-t="${k}" data-n="${n}"><i></i><span>${esc(o.l)}</span></button>`).join('')}</div>
+      ${cur != null && t.opts[cur] ? testMeaning(t.opts[cur]) : ''}
       ${pv ? `<p class="small muted" style="margin-top:8px">Letztes Mal (${fmtDate(fromKey(prev.d))}): ${esc(pv.l)}</p>` : ''}
       <div class="sec" style="margin-top:12px">Betrifft</div><div class="chips">${t.m.map(m => chip(m)).join('')}</div></div></details>`;
+}
+
+// Einordnung eines Testergebnisses: was es bedeutet und womit du anfängst
+function testMeaning(o) {
+  if (!o.f || !o.s) return `<div class="box ins" style="margin-top:10px;font-weight:500;font-size:14.5px">✅ <b>Im grünen Bereich.</b> Hier musst du nichts Besonderes tun – erhalten reicht.</div>`;
+  const ord = 'SABCD', lines = [], ex = [];
+  Object.entries(o.f).forEach(([id, typ]) => {
+    lines.push(`${nm(id)}: ${typ === 'tight' ? 'eingeschränkt → dehnen & mobilisieren' : 'schwach → kräftigen'}`);
+    const best = Object.values(E).filter(e => (typ === 'tight' ? e.t === 'mob' : e.t !== 'mob') && 'SA'.includes(e.tier) && e.m.includes(id))
+      .sort((a, b) => (a.m[0] === id ? 0 : 1) - (b.m[0] === id ? 0 : 1) || ord.indexOf(a.tier) - ord.indexOf(b.tier))[0];
+    if (best && !ex.includes(best.id)) ex.push(best.id);
+  });
+  return `<div class="box ${o.s === 2 ? 'red' : 'tight'}" style="margin-top:10px"><div class="sec">${o.s === 2 ? 'Deutliches Defizit' : 'Ausbaufähig'} – das bedeutet es</div>${ul(lines, o.s === 2 ? 'var(--c-pain)' : 'var(--c-tight)')}</div>
+    ${ex.length ? `<div class="sec" style="margin-top:10px">Damit fängst du an</div><div class="card list">${ex.slice(0, 3).map(x => exRow(x)).join('')}</div>` : ''}`;
 }
 
 /* ── Beschwerde eintragen ── */

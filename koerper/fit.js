@@ -162,14 +162,28 @@ function parse(u8) {
 const SPORT = { 0: 'Aktivität', 1: 'Laufen', 4: 'Fitnessgerät', 5: 'Schwimmen', 10: 'Training', 11: 'Gehen', 12: 'Langlauf', 13: 'Ski alpin', 15: 'Rudern', 17: 'Wandern', 19: 'Paddeln', 31: 'Klettern', 37: 'Stand-up-Paddling' };
 const SUB = { 6: 'Indoor-Fahrt', 7: 'Rennradfahrt', 8: 'Mountainbike', 46: 'Gravel-Fahrt', 58: 'Virtuelle Fahrt', 11: 'Cyclocross', 28: 'E-Bike' };
 const r1 = (n, d) => { const f = Math.pow(10, d || 0); return Math.round(n * f) / f; };
-// Sekundenraster der Leistung: kurze Lücken auffüllen, Pausen (> 10 s) auslassen
-function powerSeries(recs) {
+// Sekundenraster: kurze Lücken auffüllen, Pausen (> 10 s) auslassen
+function series(recs, key) {
   const out = [];
   for (let i = 0; i < recs.length; i++) {
-    const r = recs[i], nx = recs[i + 1], gap = nx ? nx.ts - r.ts : 1, v = r.pw == null ? 0 : r.pw;
+    const r = recs[i], nx = recs[i + 1], gap = nx ? nx.ts - r.ts : 1, v = r[key] == null ? 0 : r[key];
     for (let k = 0, n = gap > 0 && gap <= 10 ? gap : 1; k < n; k++) out.push(v);
   }
   return out;
+}
+const powerSeries = recs => series(recs, 'pw');
+// Dauern der Leistungskurve (Sekunden)
+const DUR = [1, 5, 10, 15, 30, 60, 120, 180, 300, 480, 600, 900, 1200, 1800, 2700, 3600, 5400, 7200];
+const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+// Aerobe Entkopplung (Pw:HR): Leistung/Puls in der 1. gegen die 2. Hälfte. Unter 5 % = gute Grundlagenausdauer
+function decoupling(ps, hs) {
+  const n = Math.min(ps.length, hs.length); if (n < 1800) return null;
+  const h = Math.floor(n / 2), m = i => i < h;
+  let p1 = 0, h1 = 0, c1 = 0, p2 = 0, h2 = 0, c2 = 0;
+  for (let i = 0; i < n; i++) { if (!hs[i]) continue; if (m(i)) { p1 += ps[i]; h1 += hs[i]; c1++; } else { p2 += ps[i]; h2 += hs[i]; c2++; } }
+  if (c1 < 600 || c2 < 600 || !p1 || !p2) return null;
+  const r1 = (p1 / c1) / (h1 / c1), r2 = (p2 / c2) / (h2 / c2);
+  return Math.round((r1 - r2) / r1 * 1000) / 10;
 }
 function bestAvg(a, win) {
   if (a.length < win) return null;
@@ -205,7 +219,7 @@ function summarize(u8) {
   if (asc == null) { asc = 0; let ref = null; recs.forEach(r => { const a = r.ealt != null ? r.ealt / 5 - 500 : r.alt != null ? r.alt / 5 - 500 : null; if (a == null) return; if (ref == null) ref = a; else if (a - ref >= 3) { asc += a - ref; ref = a; } else if (ref - a >= 3) ref = a; }); }
   const sport = s.sport == null ? (recs.some(r => r.pw != null || r.cad != null) ? 2 : 0) : s.sport;
   const isRide = sport === 2 || sport === 21;
-  const out = { start: (t0 + EPOCH) * 1000, ride: isRide, name: isRide ? (sport === 21 ? 'E-Bike-Fahrt' : SUB[s.sub] || 'Radfahrt') : SPORT[sport] || 'Aktivität', min: r1(sec / 60, 1) };
+  const out = { ver: 2, start: (t0 + EPOCH) * 1000, ride: isRide, name: isRide ? (sport === 21 ? 'E-Bike-Fahrt' : SUB[s.sub] || 'Radfahrt') : SPORT[sport] || 'Aktivität', min: r1(sec / 60, 1) };
   if (dist) out.km = r1(dist / 1000, 2);
   if (asc) out.hm = Math.round(asc);
   const spd = s.espd || s.spd; if (spd) out.kmh = r1(spd / 1000 * 3.6, 1); else if (dist && sec) out.kmh = r1(dist / sec * 3.6, 1);
@@ -221,14 +235,17 @@ function summarize(u8) {
     const np = s.np || normPower(ps); if (np) out.np = np;
     if (s.pwmax) out.wmax = s.pwmax;
     if (s.work) out.kj = Math.round(s.work / 1000); else out.kj = Math.round(w * sec / 1000);
-    if (ps.length) { const pb = {}; [5, 60, 300, 1200].forEach(n => { const b = bestAvg(ps, n); if (b) pb[n] = b; }); if (Object.keys(pb).length) out.pb = pb; }
+    if (ps.length) { const pb = {}; DUR.forEach(n => { const b = bestAvg(ps, n); if (b) pb[n] = b; }); if (Object.keys(pb).length) out.pb = pb; }
     if (ps.length) out.ph = histogram(ps);
+    if (ps.length && hr && out.np) out.ef = Math.round(out.np / hr * 100) / 100;
+    const hs = recs.some(r => r.hr != null) ? series(recs, 'hr') : null;
+    if (ps.length && hs) { const dc = decoupling(ps, hs); if (dc != null) out.dec = dc; }
     if (s.tss) out.tssDev = Math.round(s.tss / 10);
     if (s.ftp) out.ftpDev = s.ftp;
   }
   return out;
 }
 
-return { inflate, gunzip, unzip, parse, summarize };
+return { inflate, gunzip, unzip, parse, summarize, DUR };
 })();
 if (typeof module !== 'undefined') module.exports = FIT;
