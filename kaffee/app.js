@@ -85,9 +85,12 @@ const ageDays = (b, ts = Date.now()) => b && b.roastDate ? Math.floor((ts - new 
 function ctxFor(s) {
   const b = bean(s.bean), T = targets(b), st = S.settings;
   const hist = shotsOf(s.bean || '').filter(x => x.ts <= s.ts);
-  const l = Advice.learn(hist, T.ratio, st.coarserUp);
-  return { targets: T, coarserUp: st.coarserUp, step: st.step, spu: l ? l.spu : st.spu, learned: !!l, ageDays: ageDays(b, s.ts), roast: b && b.roast };
+  const F = Advice.fit(hist, T.ratio, st.coarserUp, T, st.step);
+  return { targets: T, coarserUp: st.coarserUp, step: st.step, spu: F.ok ? F.spu : st.spu, learned: F.ok, fit: F, ageDays: ageDays(b, s.ts), roast: b && b.roast };
 }
+// Modell (Mahlgrad → Zeit) über alle Shots einer Sorte
+function beanFit(id) { const T = targets(bean(id)), st = S.settings; return Advice.fit(shotsOf(id), T.ratio, st.coarserUp, T, st.step); }
+const rangeTxt = r => fmtG(r[0]) + (r[1] !== r[0] ? '–' + fmtG(r[1]) : '');
 const analyze = s => Advice.analyze(s, ctxFor(s));
 function shotState(s) {
   const T = targets(bean(s.bean));
@@ -152,16 +155,16 @@ function confirmSheet(text, okLabel, onOk) {
 }
 
 /* ───────── Render ───────── */
-const TITLES = { shot: 'Shot', log: 'Verlauf', beans: 'Bohnen', more: 'Mehr' };
+const TITLES = { shot: 'Shot', log: 'Verlauf', beans: 'Bohnen', know: 'Wissen', more: 'Mehr' };
 function render() {
   const v = S.ui.view;
   $('#title').textContent = TITLES[v];
   const b = curBean();
-  $('#sub').textContent = v === 'shot' ? (b ? `${b.name}${b.roaster ? ' · ' + b.roaster : ''}` : S.settings.machine) : v === 'log' ? `${S.shots.length} Shots` : v === 'beans' ? `${activeBeans().length} Sorten` : `${S.settings.machine} · ${S.settings.grinder}`;
+  $('#sub').textContent = v === 'shot' ? (b ? `${b.name}${b.roaster ? ' · ' + b.roaster : ''}` : S.settings.machine) : v === 'log' ? `${S.shots.length} Shots` : v === 'beans' ? `${activeBeans().length} Sorten` : v === 'know' ? 'Was jede Stellschraube bewirkt' : `${S.settings.machine} · ${S.settings.grinder}`;
   $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '');
   $$('#tabbar button').forEach(x => x.classList.toggle('on', x.dataset.view === v));
   const m = $('#main');
-  m.innerHTML = v === 'shot' ? viewShot() : v === 'log' ? viewLog() : v === 'beans' ? viewBeans() : viewMore();
+  m.innerHTML = v === 'shot' ? viewShot() : v === 'log' ? viewLog() : v === 'beans' ? viewBeans() : v === 'know' ? viewKnow() : viewMore();
 }
 
 function beanBar(sel, withAll) {
@@ -183,6 +186,7 @@ function recipeCard(s, title) {
   return `<div class="card recipe">
     <div class="rh"><b>${esc(title)}</b><small>${dayLabel(s.ts)}, ${hm(s.ts)}</small></div>
     ${Charts.recipe(s, T)}
+    ${checks(s)}
     <div class="kv">
       <div><small>Mahlgrad</small><b>${fmtG(s.grind)}</b></div>
       <div><small>Temp.</small><b>${s.temp ? esc(s.temp) : '–'}</b></div>
@@ -192,24 +196,81 @@ function recipeCard(s, title) {
   </div>`;
 }
 
+// Ergebnis auf einen Blick: was passte, was nicht
+function checks(s) {
+  const T = targets(bean(s.bean)), m = Advice.metrics(s, T.ratio); if (!m) return '';
+  const rOk = Math.abs(m.ratio - T.ratio) <= 0.12, ts = Advice.timeState(m.tAdj, T);
+  const fdS = s.fd > 0 && s.fd < s.t ? (s.fd < T.fdMin ? 'früh' : s.fd > T.fdMax ? 'spät' : 'ok') : null;
+  const conv = Math.abs(m.tAdj - s.t) >= 1 ? `<em>≈ ${fmt(m.tAdj, 0)} s bei Ziel-Out</em>` : '';
+  const c = [
+    ['Ratio', '1 : ' + fmt(m.ratio), rOk ? 'good' : 'warn', rOk ? 'passt' : m.ratio > T.ratio ? 'zu viel Out' : 'zu wenig Out', ''],
+    ['Zeit', fmt(s.t, 0) + ' s', ts === 'ok' ? 'good' : 'warn', ts === 'ok' ? 'im Ziel' : ts === 'fast' ? 'zu schnell' : 'zu langsam', conv],
+    ['1. Tropfen', fdS ? fmt(s.fd, 0) + ' s' : '–', fdS === 'ok' ? 'good' : fdS ? 'warn' : '', fdS === 'ok' ? 'normal' : fdS === 'früh' ? 'zu früh' : fdS === 'spät' ? 'zu spät' : 'nicht gemessen', ''],
+    ['Geschmack', s.taste == null ? '–' : Charts.TASTE[s.taste], s.taste === 0 ? 'good' : s.taste == null ? '' : 'warn', s.taste == null ? 'nicht bewertet' : s.taste === 0 ? 'Ziel' : s.taste < 0 ? 'zu wenig gelöst' : 'zu viel gelöst', ''],
+  ];
+  return `<div class="checks">${c.map(x => `<div class="ck ${x[2]}"><small>${x[0]}</small><b>${esc(x[1])}</b><span>${x[2] === 'good' ? '✓ ' : x[2] === 'warn' ? '! ' : ''}${x[3]}</span>${x[4]}</div>`).join('')}</div>`;
+}
+
+const TASTE_BTNS = ['sehr<br>sauer', 'sauer', 'ausge&shy;wogen', 'bitter', 'sehr<br>bitter'];
 function adviceCard(s, withBtn) {
   const a = analyze(s);
   const icon = { good: '✓', warn: '!', bad: '!!', none: '?' }[a.status];
   let h = `<div class="card advice ${a.status}">
-    <div class="ah"><div class="ai">${icon}</div><div><div class="at">Empfehlung für den nächsten Shot</div><h3>${esc(a.title)}</h3>${a.text ? `<p>${a.text}</p>` : ''}</div></div>`;
+    <div class="ah"><div class="ai">${icon}</div><div><div class="at">Empfehlung für den nächsten Shot</div><h3>${esc(a.title)}</h3>${a.text ? `<p>${a.text}</p>` : ''}
+      ${a.status !== 'none' ? `<div class="confl"><span class="conf ${a.conf}">Sicherheit: ${a.conf}</span><small>${esc(a.confTxt)}</small></div>` : ''}</div></div>`;
+  if (withBtn && s.taste == null) h += `<div class="qt"><div class="tl"><span>Wie hat er geschmeckt?</span><small>macht die Empfehlung genauer</small></div><div class="tscale">${[-2, -1, 0, 1, 2].map(v => `<button type="button" data-act="quickTaste" data-id="${s.id}" data-v="${v}">${TASTE_BTNS[v + 2]}</button>`).join('')}</div></div>`;
   if (a.next) {
     const n = a.next, ch = k => a.changes.includes(k) ? 'ch' : '';
     const old = (k, v, f) => a.changes.includes(k) ? `<s>${f(v)}</s>` : '';
     h += `<div class="next">
-      <div><small>In</small><b>${fmt(n.din)} g</b></div>
+      <div class="${ch('din')}"><small>In</small><b>${fmt(n.din)} g</b>${old('din', s.din, x => fmt(x))}</div>
       <div class="${ch('dout')}"><small>Out</small><b>${fmt(n.dout)} g</b>${old('dout', s.dout, x => fmt(x))}</div>
       <div class="${ch('grind')}"><small>Mahlgrad</small><b>${fmtG(n.grind)}</b>${old('grind', s.grind, fmtG)}</div>
       ${n.temp ? `<div class="${ch('temp')}"><small>Temp.</small><b>${esc(n.temp)}</b>${old('temp', s.temp, x => x)}</div>` : ''}
     </div>`;
   }
-  if (a.reasons.length) h += `<ul class="reasons">${a.reasons.map(r => `<li data-i="${r.i}">${r.t}</li>`).join('')}</ul>`;
+  const li = r => `<li data-i="${r.i}">${r.t}</li>`;
+  if (a.reasons.length) h += `<ul class="reasons">${a.reasons.slice(0, 2).map(li).join('')}</ul>`;
+  if (a.reasons.length > 2) h += `<details class="more-r"><summary>Weitere Hinweise (${a.reasons.length - 2})</summary><ul class="reasons">${a.reasons.slice(2).map(li).join('')}</ul></details>`;
   if (withBtn && a.next) h += `<button class="btn primary" data-act="newShot" data-from="advice">Nächsten Shot so starten</button>`;
   return h + '</div>';
+}
+
+/* „Dein Weg“: Ziel-Mahlgrad dieser Sorte aus allen Shots – mit ehrlicher Sicherheit */
+function wegCard(b, s) {
+  const id = b ? b.id : '', T = targets(b), st = S.settings, F = beanFit(id);
+  if (!F.n) return '';
+  const a = s ? analyze(s) : null, name = b ? esc(b.name) : 'diese Sorte';
+  const last5 = shotsOf(id).filter(complete).slice(-5), ok5 = last5.filter(x => shotState(x) === 'ok').length;
+  const nz = F.noise;
+  const cons = nz == null ? ['', 'noch offen', 'Noch keine zwei Shots mit gleichem Mahlgrad.'] : nz <= 3.5 ? ['good', 'gut', `Shots mit gleichem Mahlgrad liegen nur ±${fmt(nz, 0)} s auseinander.`] : nz <= 6 ? ['warn', 'mittel', `Bei gleichem Mahlgrad ±${fmt(nz, 0)} s Unterschied.`] : ['bad', 'schwankt stark', `Bei gleichem Mahlgrad ±${fmt(nz, 0)} s – erst Dosis und Puck gleich machen.`];
+  let top;
+  if (F.range) {
+    const [lo, hi] = F.range, g = s && s.grind != null ? +s.grind : null;
+    let where = '';
+    if (g != null) {
+      const inR = g >= lo - st.step / 2 && g <= hi + st.step / 2;
+      const finer = (g > hi) === st.coarserUp;
+      where = inR ? `Dein letzter Shot (${fmtG(g)}) liegt <b>im Bereich</b>.` : `Dein letzter Shot lag bei ${fmtG(g)} – also <b>${finer ? 'feiner' : 'gröber'}</b> stellen, Richtung ${rangeTxt(F.range)}.`;
+    }
+    top = `<div class="weg-main"><div><small>Ziel-Mahlgrad für ${name}</small><b>${rangeTxt(F.range)}</b></div><span class="conf ${F.conf}">Sicherheit: ${F.conf}</span></div>
+      <p>${F.method === 'data' ? `So kommt die Zahl zustande: Bei ${rangeTxt(F.range)} ${F.hits === 1 ? 'lag einer' : 'lagen ' + F.hits} deiner Shots im Zeitfenster.` : F.method === 'between' ? `So kommt die Zahl zustande: Bei ${fmtG(F.between[0])} und ${fmtG(F.between[1])} lagen deine Shots auf beiden Seiten des Zeitfensters – dazwischen liegt das Ziel.` : `So kommt die Zahl zustande: aus der Trendlinie deiner Shots.${F.extrap ? ' <b>Achtung:</b> Das liegt außerhalb deiner bisherigen Mahlgrade – eine Hochrechnung, taste dich in Schritten heran.' : ''}`} ${where}${F.ok ? ` Eine Mahlgrad-Einheit verändert die Zeit hier um ca. <b>${fmt(F.spu, 1)} s</b>.` : ''}${F.doseOnly ? ` Gezählt werden nur Shots mit ca. ${fmt(T.dose)} g Dosis.` : ''}</p>`;
+  } else if (F.n >= 3 && new Set(F.pts.map(p => p.x)).size >= 2) {
+    top = `<p><b>Noch kein klarer Trend.</b> Eigentlich gilt: feiner = langsamer. Deine Shots dieser Sorte zeigen das noch nicht eindeutig – meist, weil Dosis oder Puck-Vorbereitung schwanken. Ein paar gleichmäßige Shots, dann wird es klar.</p>`;
+  } else {
+    top = `<p><b>Noch zu wenig Daten für einen Ziel-Mahlgrad.</b> Dafür brauche ich mindestens 3 Shots mit 2 verschiedenen Mahlgraden.</p>`;
+  }
+  return `<div class="card chart weg">
+    <div class="chh"><b>Dein Weg mit ${name}</b><small>${F.n} Shots</small></div>
+    ${top}
+    <div class="facts">
+      <div class="${cons[0]}"><small>Konstanz</small><b>${cons[1]}</b><span>${cons[2]}</span></div>
+      <div class="${last5.length && ok5 >= 3 ? 'good' : last5.length ? 'warn' : ''}"><small>Im Zeitfenster</small><b>${ok5} von ${last5.length}</b><span>der letzten Shots</span></div>
+    </div>
+    ${Charts.dial(F, T, { coarserUp: st.coarserUp, step: st.step, tip: tipFor, nextGrind: a && a.changes.includes('grind') ? a.next.grind : null })}
+    ${Charts.legendTaste()}
+    <p class="small muted cap">Jeder Punkt ist ein Shot, die Farbe zeigt den Geschmack. Die gestrichelte Linie ist der Trend: je feiner, desto länger. Das waagerechte Band ist deine Ziel-Zeit${F.range ? `, der senkrechte Streifen der Ziel-Mahlgrad – ${F.method === 'data' ? 'dort sind deine Shots schon im Zeitfenster gelandet' : F.method === 'between' ? 'zwischen zwei Mahlgraden, die links und rechts danebenlagen' : 'dort, wo die Trendlinie das Zeitband kreuzt'}` : '. Sobald genug Shots da sind, erscheint hier der Ziel-Mahlgrad als senkrechter Streifen'}. Dreiecke oben: Shots, die länger liefen, als das Diagramm hoch ist.</p>
+  </div>`;
 }
 
 function compassCard(list, T, s) {
@@ -245,7 +306,7 @@ function viewShot() {
   else h += `<div class="card empty"><div class="big">☕</div><b>Noch kein Shot${b ? ' mit ' + esc(b.name) : ''}</b>Tippe auf „Neuer Shot“ – mit eingebauter Stoppuhr für Zeit und ersten Tropfen.</div>`;
   h += `</div><div>`;
   if (s) h += adviceCard(s, true);
-  h += compassCard(list.slice(-10), T, s);
+  h += wegCard(b, s);
   if (s && b) {
     const best = bestShot(id);
     if (best && best.id !== s.id) h += `<div class="card pad"><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">Bestes Rezept mit ${esc(b.name)}</div><div style="font-size:17px;font-weight:800;margin-top:2px" class="num">${fmt(best.din)} → ${fmt(best.dout)} g · ${fmt(best.t, 0)} s · Mahlgrad ${fmtG(best.grind)}</div><div class="small muted">${'★'.repeat(best.rating)} · ${dayLabel(best.ts)}${best.temp ? ' · Temp. ' + esc(best.temp) : ''}</div><button class="btn soft sm" style="margin-top:10px" data-act="newShot" data-from="best" data-id="${best.id}">Damit starten</button></div>`;
@@ -263,10 +324,11 @@ function viewLog() {
   const rated = list.filter(s => s.rating > 0);
   h += `<div class="stats">
     <div><small>Shots</small><b>${list.length}</b></div>
-    <div><small>Im Ziel</small><b>${Math.round(okN / list.length * 100)} %</b></div>
+    <div><small>Im Zeitfenster</small><b>${list.filter(complete).length ? Math.round(okN / list.filter(complete).length * 100) : 0} %</b></div>
     <div><small>${rated.length ? 'Ø Bewertung' : 'Ø Zeit'}</small><b>${rated.length ? fmt(rated.reduce((a, s) => a + s.rating, 0) / rated.length) + '★' : fmt(avgT, 0) + ' s'}</b></div>
   </div>`;
   const recent = list.slice(-30), T = targets(sel !== 'all' ? bean(sel) : null);
+  if (sel !== 'all') { const last = [...list].reverse().find(complete); h += compassCard(list.slice(-10), T, last); }
   h += `<div class="cols"><div>
     <div class="card chart"><div class="chh"><b>Zeit pro Shot</b><small>Sekunden · letzte ${recent.length}</small></div>
       ${Charts.line(recent.map(s => ({ y: s.t, label: dShort(s.ts), tip: tipFor(s), color: Charts.tasteVar(s.taste) || 'var(--acc)' })), { band: [T.tMin, T.tMax], label: 'Zeit pro Shot', minSpan: 10 })}
@@ -317,6 +379,13 @@ function setRow(label, key, o = {}) {
   const v = S.settings[key];
   return `<div class="setting"><span><span class="lbl">${label}</span>${o.sub ? `<br><span class="sub">${o.sub}</span>` : ''}</span><input type="${o.type || 'text'}" inputmode="${o.type === 'text' ? 'text' : 'decimal'}" data-set="${key}" value="${esc(o.type === 'text' ? v : String(v).replace('.', ','))}" ${o.type === 'text' ? 'style="width:55%"' : ''}></div>`;
 }
+function viewKnow() {
+  const b = curBean(), st = S.settings;
+  const beans = activeBeans().map(x => { const F = beanFit(x.id); return { name: x.name, n: F.n, range: F.range && !F.extrap ? F.range : null, spu: F.ok ? F.spu : null }; });
+  const F = b ? beanFit(b.id) : null;
+  return Wissen.html({ targets: targets(b), settings: st, temps: TEMP_C, beans, noise: F && F.noise });
+}
+
 function viewMore() {
   const st = S.settings, b = curBean();
   const l = b ? Advice.learn(shotsOf(b.id), targets(b).ratio, st.coarserUp) : null;
@@ -402,10 +471,12 @@ function shotForm(s, isNew) {
       <div class="stars">${[1, 2, 3, 4, 5].map(v => `<button type="button" data-act="fRate" data-v="${v}" class="${s.rating >= v ? 'on' : ''}" aria-label="${v} Sterne">★</button>`).join('')}</div>
     </div></div>
     <div class="field"><label class="flabel">Auffälligkeiten</label><div class="chiprow wrap">${TAGS.map(t => `<button type="button" class="chip ${(s.tags || []).includes(t) ? 'on' : ''}" data-act="fTag" data-v="${t}">${t}</button>`).join('')}</div></div>
+    <details class="morefields"><summary>Weitere Angaben <small>Getränk, Pre-Infusion, Notiz, Datum</small></summary>
     <div class="field"><label class="flabel">Getränk</label><div class="chiprow wrap">${DRINKS.map(t => `<button type="button" class="chip ${s.drink === t ? 'on' : ''}" data-act="fSeg" data-k="drink" data-v="${t}">${t}</button>`).join('')}</div></div>
     <div class="field"><label class="flabel">Pre-Infusion</label><div class="seg"><button type="button" class="${s.pi ? 'on' : ''}" data-act="fSeg" data-k="pi" data-v="1">an</button><button type="button" class="${!s.pi ? 'on' : ''}" data-act="fSeg" data-k="pi" data-v="0">aus</button></div></div>
     <div class="field"><label class="flabel">Notiz</label><textarea data-f="notes" rows="2" placeholder="z. B. neues Sieb, WDT, Puck-Screen …">${esc(s.notes || '')}</textarea></div>
     <div class="field"><label class="flabel">Datum & Uhrzeit (automatisch)</label><input type="datetime-local" data-f="ts" value="${toLocalInput(s.ts)}"></div>
+    </details>
     <div class="stack" style="margin-top:6px"><button class="btn primary" data-act="saveShot">Shot speichern</button>
     ${!isNew ? `<button class="btn danger" data-act="delShot">Shot löschen</button>` : ''}</div>`;
   return h;
@@ -547,6 +618,11 @@ const ACT = {
   confirmOk() { const fn = pending.confirm; pending.confirm = null; closeSheet(); fn && fn(); },
   toastAct() { const fn = pending.toast; pending.toast = null; $('#toast').classList.remove('show'); fn && fn(); },
 
+  quickTaste(el) {
+    const s = S.shots.find(x => x.id === el.dataset.id); if (!s) return;
+    s.taste = +el.dataset.v; vib(8); save(); render();
+    toast(`Geschmack „${Charts.TASTE[s.taste]}“ gespeichert – Empfehlung angepasst`);
+  },
   newShot(el) { openShot(newShotDraft(el.dataset.from, el.dataset.id), true); },
   editShot(el) { const s = S.shots.find(x => x.id === el.dataset.id); if (s) openShot(s, false); },
   bump(el) {
