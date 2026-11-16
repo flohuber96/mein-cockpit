@@ -37,10 +37,11 @@ function tStart() {
 }
 function tplSheet(id) {
   const t = getTemplate(id); if (!t) { toast('Mach zuerst den Körper-Check'); return; }
-  const custom = S.templates.some(x => x.id === id);
+  const custom = S.templates.some(x => x.id === id), items = resolveItems(t.items), sw = items.filter(it => it.orig || it.na).length;
   openSheet({
     title: t.n, body: `<p class="p" style="margin:0 4px 12px">${esc(t.d || 'Eigene Vorlage')}</p>
-      <div class="card list">${t.items.map(it => exRow(it.x, { rt: targetTxt(it), sub: t.why && t.why[it.x] ? t.why[it.x] : `Pause ${it.rest || S.settings.rest} s` })).join('')}</div>
+      ${gearOn() ? `<div class="row" style="margin:0 2px 8px">${gearChip()}${sw ? `<span class="small muted">${plural(sw, 'Übung angepasst', 'Übungen angepasst')}</span>` : '<span class="small muted">alles machbar ✓</span>'}</div>` : ''}
+      <div class="card list">${items.map((it, i) => exRow(it.x, { rt: targetTxt(it), wrap: !!(it.orig || it.na), sub: it.orig || it.na ? swapNote(it.orig || it.x, it) : t.why && t.why[it.x] ? t.why[it.x] : `Pause ${it.rest || S.settings.rest} s` })).join('')}</div>
       <div class="stack" style="margin-top:14px"><button class="btn primary" data-act="wStart" data-id="${esc(id)}">▶ Workout starten</button>
       ${custom ? `<button class="btn danger" data-act="tplDel" data-id="${esc(id)}">Vorlage löschen</button>` : ''}</div>
       <p class="note">Vorher kurz aufwärmen: 5 Minuten Mobility („Aufwärmen vor dem Krafttraining“) reichen.</p>`
@@ -50,18 +51,18 @@ function tplSheet(id) {
 /* ── Workout ── */
 const numVal = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : null; };
 function newSets(e, it) {
-  const last = exHistory(e.id)[0], n = it.s || 3, out = [];
+  const last = exHistory(e.id)[0], n = it.s || 3, out = [], sg = suggest(e, it.r ? '× ' + it.r : '');
   const rDef = it.r ? parseInt(it.r, 10) || null : null;
   for (let i = 0; i < n; i++) {
     const p = last ? (last.sets[i] || last.sets[last.sets.length - 1]) : null;
-    out.push({ w: p && p.w != null ? p.w : null, r: p && p.r != null ? p.r : rDef, t: e.tr === 't' || e.tr === 'wt' ? (it.sec || (p && p.t) || e.hold) : null, done: false });
+    out.push({ w: sg && sg.w != null ? sg.w : p && p.w != null ? p.w : null, r: p && p.r != null ? p.r : rDef, t: e.tr === 't' || e.tr === 'wt' ? (sg && sg.t) || it.sec || (p && p.t) || e.hold : null, done: false });
   }
   return out;
 }
 function startWorkout(t) {
   const begin = () => {
     S.active = { id: uid(), n: t ? t.n : 'Freies Workout', tpl: t ? t.id : null, s: Date.now(),
-      ex: (t ? t.items : []).filter(it => E[it.x]).map(it => ({ x: it.x, tg: targetTxt(it), rest: it.rest || S.settings.rest, sets: newSets(E[it.x], it) })) };
+      ex: (t ? resolveItems(t.items) : []).filter(it => E[it.x] && !it.na).map(it => ({ x: it.x, tg: targetTxt(it), rest: it.rest || S.settings.rest, sets: newSets(E[it.x], it) })) };
     ui.fullMin = false; save(true); closeAllSheets(); wake(true); renderWorkout();
     if (!t) openPicker({ title: 'Übung hinzufügen', act: 'wAddEx' });
   };
@@ -81,8 +82,10 @@ function renderWorkout() {
     <div class="fbody" style="padding-bottom:110px">
       ${a.ex.map((x, xi) => {
         const e = E[x.x], last = exHistory(x.x)[0];
-        return `<div class="card wx" data-xi="${xi}"><div class="wh">${tierB(e.tier, true)}<button class="bd" data-act="ex" data-id="${x.x}"><b>${esc(e.n)}</b><small>${esc(x.tg || e.dose)} · Pause ${x.rest} s</small></button><button class="hbtn" data-act="wExMenu" aria-label="Optionen">⋯</button></div>
+        const sg = suggest(e, x.tg);
+        return `<div class="card wx" data-xi="${xi}"><div class="wh"><button class="thw" data-act="ex" data-id="${x.x}" aria-label="Bewegung ansehen">${Moves.has(x.x) ? `<span class="th" data-mvs="${x.x}"></span>` : ''}${tierB(e.tier, true)}</button><button class="bd" data-act="ex" data-id="${x.x}"><b>${esc(e.n)}</b><small>${esc(x.tg || e.dose)} · Pause ${x.rest} s</small></button><button class="hbtn" data-act="wExMenu" aria-label="Optionen">⋯</button></div>
           ${last ? `<div class="last">Letztes Mal (${fmtDay(last.ts)}): ${esc(last.sets.map(s => setTxt(e, s).replace(' kg', '')).join(' · '))}</div>` : ''}
+          ${sg ? `<div class="sugg">💡 Heute: ${esc(sg.txt)}</div>` : ''}
           ${x.sets.map((s, si) => setRow(e, x, xi, s, si)).join('')}
           <div class="wf"><button data-act="wAddSet">＋ Satz</button><button data-act="wDelSet">− Satz</button></div></div>`;
       }).join('') || '<div class="empty"><div class="big">🏋️</div><b>Noch keine Übung</b>Füge deine erste Übung hinzu.</div>'}
@@ -134,7 +137,7 @@ function finishWorkout() {
 let pick = null;
 function pickList() {
   const q = pick.q.trim().toLowerCase(), ord = 'SABCD';
-  const xs = Object.values(E).filter(e => e.tier !== 'D' && (pick.types ? pick.types.includes(e.t) : true) && (q ? (e.n.toLowerCase().includes(q) || e.m.some(m => nm(m).toLowerCase().includes(q))) : (pick.grp === 'fav' ? S.favs[e.id] : e.tiers[pick.grp])))
+  const xs = Object.values(E).filter(e => e.tier !== 'D' && (q || canDo(e.id)) && (pick.types ? pick.types.includes(e.t) : true) && (q ? (e.n.toLowerCase().includes(q) || e.m.some(m => nm(m).toLowerCase().includes(q))) : (pick.grp === 'fav' ? S.favs[e.id] : e.tiers[pick.grp])))
     .sort((a, b) => ord.indexOf(q ? a.tier : a.tiers[pick.grp] || a.tier) - ord.indexOf(q ? b.tier : b.tiers[pick.grp] || b.tier) || a.n.localeCompare(b.n)).slice(0, 40);
   return xs.length ? `<div class="card list">${xs.map(e => exRow(e.id, { act: pick.act, tierOf: q || pick.grp === 'fav' ? null : pick.grp, rt: '＋' })).join('')}</div>` : '<div class="empty">Nichts gefunden.</div>';
 }
@@ -143,6 +146,7 @@ function openPicker({ title, act, mob }) {
   pick = { q: '', act, grp: Object.keys(groups)[0], types: mob ? null : ['kraft', 'akt'] };
   openSheet({
     title, onClose() { pick = null; }, body: `<div class="field"><input type="search" placeholder="🔍 Übung oder Muskel suchen" data-in="pickQ" autocomplete="off"></div>
+      <div style="margin:-4px 0 10px">${gearChip()}</div>
       <div class="chiprow" id="pickGrps">${[['fav', { n: '★ Favoriten' }]].concat(Object.entries(groups)).map(([k, g]) => `<button class="chip${pick.grp === k ? ' on' : ''}" data-act="pickGrp" data-v="${k}">${g.e ? g.e + ' ' : ''}${esc(g.n)}</button>`).join('')}</div>
       <div id="pickList">${pickList()}</div>`
   });
@@ -156,15 +160,15 @@ function tLib() {
   const chips = [['you', { n: '🎯 Für dich' }], ['fav', { n: '★ Favoriten' }]].concat(Object.entries(X.GROUPS));
   let list;
   if (t.grp === 'you') {
-    const ord = 'SABCD', xs = Object.values(E).filter(e => e.t !== 'mob' && 'SAB'.includes(e.tier) && e.m.some(m => weak.includes(m)) && (!t.home || !e.eq)).sort((a, b) => ord.indexOf(a.tier) - ord.indexOf(b.tier));
+    const ord = 'SABCD', xs = Object.values(E).filter(e => e.t !== 'mob' && 'SAB'.includes(e.tier) && e.m.some(m => weak.includes(m)) && canDo(e.id)).sort((a, b) => ord.indexOf(a.tier) - ord.indexOf(b.tier));
     list = xs.length ? `<p class="small muted" style="margin:0 4px 8px">Übungen für das, was in deinen Tests schwach war: ${esc(weak.map(nm).join(', '))}.</p><div class="card list">${xs.slice(0, 14).map(e => exRow(e.id, { sub: e.m.filter(m => weak.includes(m)).map(nm).join(', ') })).join('')}</div>`
       : '<div class="card empty"><div class="big">🎯</div><b>Noch keine Daten</b>Mach die Selbsttests im Körper-Check – dann erscheinen hier die Übungen, die dir am meisten bringen.<button class="btn soft sm" data-act="goCheck" style="margin:12px auto 0">Zum Check</button></div>';
   } else if (t.grp === 'fav') {
     const xs = Object.keys(S.favs).filter(id => E[id] && E[id].t !== 'mob');
     list = xs.length ? `<div class="card list">${xs.map(id => exRow(id)).join('')}</div>` : '<div class="card empty"><div class="big">☆</div>Noch keine Favoriten. Öffne eine Übung und tippe auf „Als Favorit merken“.</div>';
-  } else list = tierList(t.grp, e => e.t !== 'mob' && (!t.home || !e.eq));
+  } else list = tierList(t.grp, e => e.t !== 'mob');
   return `<div class="chiprow">${chips.map(([k, g]) => `<button class="chip${t.grp === k ? ' on' : ''}" data-act="tGrp" data-v="${k}">${g.e ? g.e + ' ' : ''}${esc(g.n)}</button>`).join('')}</div>
-    <div class="row" style="margin:0 4px 4px"><button class="chip${t.home ? ' on' : ''}" data-act="tHome">🏠 nur ohne Geräte</button><button class="lnk" data-act="rules" data-v="kraft">Wie lese ich das?</button></div>
+    <div class="row" style="margin:0 4px 4px">${gearChip()}<button class="lnk" data-act="rules" data-v="kraft">Wie lese ich das?</button></div>
     ${list}`;
 }
 function rulesSheet(k) {
@@ -251,7 +255,6 @@ function timerSheet() {
 Object.assign(ACT, {
   tSub(el) { ui.train.sub = el.dataset.v; render(); window.scrollTo(0, 0); },
   tGrp(el) { ui.train.grp = el.dataset.v; keepScroll(render); },
-  tHome() { ui.train.home = !ui.train.home; keepScroll(render); },
   rules(el) { rulesSheet(el.dataset.v); },
   goCheck() { go('body', { sub: 'check' }); },
   tpl(el) { tplSheet(el.dataset.id); },

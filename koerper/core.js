@@ -337,7 +337,7 @@ const TIER_W = { S: 1.35, A: 1.1, B: 0.85 };
 function buildPlan() {
   const f = profile(), items = {};
   const add = (ex, sc, why) => {
-    const e = E[ex]; if (!e || sc <= 0 || !TIER_W[e.tier]) return;
+    const e = E[ex]; if (!e || sc <= 0 || !TIER_W[e.tier] || !canDo(ex)) return;
     const it = items[ex] = items[ex] || { sc: 0, why: [] };
     it.sc += sc * TIER_W[e.tier];
     if (why && !it.why.includes(why)) it.why.push(why);
@@ -414,8 +414,10 @@ const grpName = g => (X.GROUPS[g] || X.MGROUPS[g] || {}).n || g;
 function exRow(id, o) {
   o = o || {};
   const e = E[id]; if (!e) return '';
-  const sub = o.sub != null ? o.sub : (e.eq ? e.eq : 'ohne Geräte');
-  return `<button class="li" data-act="${o.act || 'ex'}" data-id="${id}"${o.attr || ''}>${o.tier === false ? `<span class="ic">${EX_ICO[e.t]}</span>` : tierB(o.tierOf ? e.tiers[o.tierOf] : e.tier)}<span class="bd"><b>${esc(e.n)}</b><small${o.wrap ? '' : ' class="clip"'}>${esc(sub)}</small></span>${o.rt ? `<span class="rt">${o.rt}</span>` : '<span class="go">›</span>'}</button>`;
+  const na = !canDo(id), sub = na ? `⚠️ fehlt: ${missTxt(id)}` : o.sub != null ? o.sub : (e.eq ? e.eq : 'ohne Geräte');
+  const t = o.tier === false ? '' : (o.tierOf ? e.tiers[o.tierOf] : e.tier);
+  const pic = Moves.has(id) ? `<span class="th" data-mvs="${id}"></span>` : `<span class="ic">${EX_ICO[e.t]}</span>`;
+  return `<button class="li li-ex${na ? ' na' : ''}" data-act="${o.act || 'ex'}" data-id="${id}"${o.attr || ''}><span class="thw">${pic}${t ? tierB(t, true) : ''}</span><span class="bd"><b>${esc(e.n)}</b><small${o.wrap ? '' : ' class="clip"'}>${esc(sub)}</small></span>${o.rt ? `<span class="rt">${o.rt}</span>` : '<span class="go">›</span>'}</button>`;
 }
 function ring(size, sw, pct, color, inner) {
   const r = (size - sw) / 2, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct || 0));
@@ -445,20 +447,49 @@ function bestSet(e, sets) {
   return sets.reduce((b, s) => !b || val(s) > val(b) ? s : b, null);
 }
 
+// Verlauf einer Übung als kleine Linie (geschätztes Maximum bzw. bester Satz pro Einheit)
+function exTrend(e, hist) {
+  if (hist.length < 2) return '';
+  const val = s => e.tr === 'wr' ? e1rm(s) : e.tr === 'wt' ? (s.w || 0) : e.tr === 't' ? (s.t || 0) : (s.r || 0);
+  const pts = hist.slice(0, 12).reverse().map(h => val(bestSet(e, h.sets)));
+  const lo = Math.min.apply(null, pts), hi = Math.max.apply(null, pts), rg = hi - lo || 1, W = 280, H = 60;
+  const xy = pts.map((v, i) => [8 + i * (W - 16) / (pts.length - 1), H - 8 - (v - lo) / rg * (H - 22)]);
+  const d = pts[pts.length - 1] - pts[0], unit = e.tr === 'wr' || e.tr === 'wt' ? ' kg' : e.tr === 't' ? ' s' : ' Wdh.';
+  return `<svg viewBox="0 0 ${W} ${H}" class="spark"><polyline points="${xy.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ')}"/>${xy.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === xy.length - 1 ? 4 : 2.5}"/>`).join('')}</svg>
+    <p class="small" style="margin:2px 0 8px;color:${d > 0 ? 'var(--ok)' : 'var(--t2)'}">${e.tr === 'wr' ? 'Geschätztes Maximum' : 'Bester Satz'}: ${d > 0 ? '▲ +' + num(d) + unit + ' seit ' + fmtDay(hist[Math.min(11, hist.length - 1)].ts).toLowerCase() : d < 0 ? '▼ ' + num(d) + unit + ' – an Erholung und Technik denken' : 'gleichbleibend'}</p>`;
+}
+// Steigerungsvorschlag nach dem Prinzip „erst Wiederholungen, dann Gewicht“
+function repRange(txt) { const m = String(txt || '').match(/(?:×\s*)?(\d+)\s*(?:[–-]\s*(\d+))?\s*(?:Wdh|je|$|\b)/); return m ? [+m[1], +(m[2] || m[1])] : null; }
+function suggest(e, tg) {
+  const last = exHistory(e.id)[0]; if (!last) return null;
+  const rr = repRange((tg || '').split('×').pop()) || repRange(e.dose.split('×').pop()) || [8, 12], top = rr[1];
+  const sets = last.sets;
+  if (e.tr === 'wr') {
+    const w = Math.max.apply(null, sets.map(s => s.w || 0)); if (!w) return null;
+    const allTop = sets.filter(s => (s.w || 0) >= w).every(s => (s.r || 0) >= top);
+    if (allTop) { const inc = w < 10 ? 1 : w < 40 ? 2 : 2.5, nw = Math.round((w + inc) * 2) / 2; return { w: nw, txt: `${num(nw)} kg × ${rr[0]}${rr[1] !== rr[0] ? '–' + rr[1] : ''} – letztes Mal hast du alle Sätze mit ${top} Wdh. geschafft` }; }
+    return { w, txt: `${num(w)} kg halten und eine Wiederholung mehr schaffen (Ziel ${top})` };
+  }
+  if (e.tr === 't' || e.tr === 'wt') { const t = Math.max.apply(null, sets.map(s => s.t || 0)); return t ? { t: t + 5, txt: `${t + 5} s – 5 Sekunden mehr als letztes Mal` } : null; }
+  const r = Math.max.apply(null, sets.map(s => s.r || 0)); return r ? { r: r + 1, txt: `${r + 1} Wdh. – eine mehr als letztes Mal` } : null;
+}
+
 // Übungs-Details als Sheet
 function exSheet(id) {
   const e = E[id]; if (!e) return;
   const hist = exHistory(id), tiers = Object.entries(e.tiers);
   const body = `
     <div class="tags" style="margin:0 0 10px"><span class="tag acc">${EX_ICO[e.t]} ${EX_LBL[e.t]}</span>${e.eq ? `<span class="tag">🧰 ${esc(e.eq)}</span>` : '<span class="tag grn">ohne Geräte</span>'}${e.dose && e.dose !== '–' ? `<span class="tag">${esc(e.dose)}</span>` : ''}</div>
-    <div class="card mapcard">${bodySVG({ hl: targetHL(e.m), mini: true })}${legend({ pain: 'Hauptziel', syn: 'arbeitet mit' })}</div>
-    <div class="sec">Zielbereich</div><div class="chips" style="margin-bottom:14px">${e.m.map((m, i) => chip(m, i === 0 ? 'pain' : 'syn')).join('')}</div>
+    ${!canDo(id) ? (() => { const a = altFor(id); return `<div class="box warn" style="margin-bottom:10px">🧰 Mit deiner Ausrüstung (${esc(GP[gearState().p].n)}) nicht machbar – fehlt: <b>${esc(missTxt(id))}</b>.${a ? ' Gleichwertiger Ersatz:' : ''}</div>${a ? `<div class="card list" style="margin-bottom:10px">${exRow(a, { act: 'exSwap' })}</div>` : ''}`; })() : ''}
+    ${Moves.has(id) ? `<div class="card mvbox" data-mv="${id}"></div>` : ''}
     <div class="card pad" style="margin-bottom:10px"><div class="sec">So geht’s</div><ol class="ol">${e.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol></div>
+    <div class="card pad" style="margin-bottom:10px"><div class="row" style="align-items:flex-start;gap:12px"><div style="flex:1;min-width:0"><div class="sec">Zielbereich</div><div class="chips">${e.m.map((m, i) => chip(m, i === 0 ? 'pain' : 'syn')).join('')}</div></div>
+      <div style="width:120px;flex:none">${bodySVG({ hl: targetHL(e.m), mini: true })}</div></div></div>
     ${e.err ? `<div class="box warn" style="margin-bottom:10px">⚠️ ${esc(e.err)}</div>` : ''}
     <div class="card pad" style="margin-bottom:10px"><div class="sec">Einstufung</div>
       ${tiers.map(([g, t]) => `<div class="row" style="justify-content:flex-start;margin-bottom:8px">${tierB(t)}<span><b>${esc(X.TIERS[t].t)}</b> <span class="muted">für ${esc(grpName(g))}</span></span></div>`).join('')}
       <p class="p">${esc(e.why || '')}</p></div>
-    ${hist.length ? `<div class="card pad" style="margin-bottom:10px"><div class="sec">Dein Verlauf</div>${hist.slice(0, 5).map(h => `<div class="row" style="padding:4px 0;font-size:15px"><span class="muted">${fmtDay(h.ts)}</span><b>${esc(h.sets.map(s => setTxt(e, s).replace(' kg', '')).join(' · '))}</b></div>`).join('')}
+    ${hist.length ? `<div class="card pad" style="margin-bottom:10px"><div class="sec">Dein Verlauf</div>${exTrend(e, hist)}${hist.slice(0, 5).map(h => `<div class="row" style="padding:4px 0;font-size:15px"><span class="muted">${fmtDay(h.ts)}</span><b>${esc(h.sets.map(s => setTxt(e, s).replace(' kg', '')).join(' · '))}</b></div>`).join('')}
       <div class="row" style="padding-top:8px;margin-top:6px;border-top:1px solid var(--line)"><span class="muted">Bestwert</span><b>${esc(setTxt(e, bestSet(e, hist.reduce((a, h) => a.concat(h.sets), []))))}</b></div></div>` : ''}
     <div class="stack">
       ${S.active ? `<button class="btn primary" data-act="wAddEx" data-id="${id}">＋ Zum laufenden Workout</button>` : ''}
@@ -469,6 +500,7 @@ function exSheet(id) {
 }
 Object.assign(ACT, {
   ex(el) { exSheet(el.dataset.id); },
+  exSwap(el) { closeSheet(); setTimeout(() => exSheet(el.dataset.id), 330); },
   fav(el) { const id = el.dataset.id; if (S.favs[id]) delete S.favs[id]; else S.favs[id] = 1; save(); el.textContent = S.favs[id] ? '★ Favorit entfernen' : '☆ Als Favorit merken'; toast(S.favs[id] ? 'Als Favorit gemerkt' : 'Favorit entfernt'); },
   st(el) { go('body', { sub: 'map', sel: el.dataset.id, deep: !!(D.M[el.dataset.id] && D.M[el.dataset.id].deep) }); },
   topic(el) { go('body', { sub: 'topics', topic: el.dataset.id }); },
@@ -481,11 +513,13 @@ Object.assign(ACT, {
 
 // Tier-Liste einer Gruppe (Training und Mobility nutzen dieselbe Darstellung)
 function tierList(grp, filter) {
-  const list = Object.values(E).filter(e => e.tiers[grp] && (!filter || filter(e)));
+  const all = Object.values(E).filter(e => e.tiers[grp] && (!filter || filter(e))), hid = all.filter(e => !canDo(e.id));
+  const list = ui.gearShow ? all : all.filter(e => canDo(e.id));
   return ['S', 'A', 'B', 'C', 'D'].map(t => {
     const xs = list.filter(e => e.tiers[grp] === t).sort((a, b) => (a.t === b.t ? 0 : a.t === 'kraft' ? -1 : 1) || a.n.localeCompare(b.n));
     if (!xs.length) return '';
     return `<div class="tierh">${tierB(t)}<span><b>${X.TIERS[t].t}</b><br><small>${X.TIERS[t].d}</small></span></div>
       <div class="card list">${xs.map(e => exRow(e.id, { tierOf: grp, sub: e.why, wrap: true })).join('')}</div>`;
-  }).join('') || '<div class="empty"><div class="big">🔍</div>Keine Übung mit diesem Filter.</div>';
+  }).join('') + (hid.length ? `<button class="btn plain sm" data-act="gearShowNA" style="margin-top:12px;width:100%">${ui.gearShow ? 'Nicht machbare ausblenden' : `${plural(hid.length, 'Übung braucht', 'Übungen brauchen')} Ausrüstung, die dir fehlt – anzeigen`}</button>` : '')
+    || '<div class="empty"><div class="big">🔍</div>Keine Übung mit diesem Filter.</div>';
 }

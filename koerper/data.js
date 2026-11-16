@@ -424,5 +424,31 @@ const RULES = {
   mob: ['Für mehr Beweglichkeit: 30–60 s halten, 2–3 Durchgänge, an mindestens 5 Tagen pro Woche.', 'Dehnen soll deutlich ziehen, aber du musst ruhig weiteratmen können.', 'Nach dem Dehnen die neue Reichweite aktiv nutzen (z. B. Hocke nach der Hüftdehnung).', 'Vor dem Sport lieber dynamisch bewegen, lange Haltedehnungen danach oder abends.', 'Was dauerhaft „zu“ ist, ist oft auch schwach – Kräftigen gehört dazu.']
 };
 
-return { TIERS, GROUPS, MGROUPS, E, ROUTINES, TEMPLATES, ANAT, BIKEFIT, RULES };
+/* ── Ausrüstung ───────────────────────────────────────────────────────────
+   req: Liste von Oder-Gruppen, die alle erfüllt sein müssen.
+   [['db','kb']] = Kurzhantel ODER Kettlebell · [['bb'],['rack']] = Langhantel UND Rack.
+   Wand, Türrahmen, Stuhl, Sofa, Bett, Handtuch, Besenstiel, Tisch gelten als immer vorhanden. */
+const GEAR = {
+  db: { n: 'Kurzhanteln', e: '🏋️' }, kb: { n: 'Kettlebell', e: '🔔' }, bb: { n: 'Langhantel', e: '➖' }, rack: { n: 'Rack / Kniebeugeständer', e: '🏗️' },
+  bench: { n: 'Hantelbank', e: '🛋️' }, step: { n: 'Stufe, Treppe oder Kasten', e: '🪜' },
+  pullup: { n: 'Klimmzugstange', e: '🔩' }, dipbar: { n: 'Dip-Barren', e: '⏸️' },
+  band: { n: 'Widerstandsband (lang)', e: '🎗️' }, mini: { n: 'Miniband', e: '⭕' },
+  roller: { n: 'Faszienrolle', e: '🧻' }, ball: { n: 'Massage- oder Tennisball', e: '🎾' }, gymball: { n: 'Gymnastikball', e: '🔵' }, wheel: { n: 'Ab Wheel', e: '🛞' },
+  cable: { n: 'Kabelzug', e: '🪢' }, machine: { n: 'Kraftgeräte (Beinpresse, Latzug …)', e: '🏢' }
+};
+const REQ = {
+  thoracic_ext: [['roller']], foam_tfl: [['roller']], dead_hang: [['pullup']], band_pull_apart: [['band']], pallof: [['band', 'cable']],
+  suitcase_carry: [['db', 'kb']], rdl: [['bb', 'db', 'kb']], back_ext: [['machine', 'gymball']], step_down: [['step']], goblet_squat: [['kb', 'db']], row: [['cable', 'band', 'db', 'kb']], face_pull: [['band', 'cable']],
+  ext_rot: [['band', 'cable']], pulldown: [['machine', 'cable', 'pullup']], glute_roll: [['ball']], jefferson: [['db', 'kb', 'bb'], ['step']],
+  subocc: [['ball']], plantar_roll: [['ball']], squat: [['bb'], ['rack']], deadlift: [['bb']], leg_curl: [['machine']], kb_swing: [['kb']],
+  good_morning: [['bb', 'band']], step_up: [['bench', 'step']], leg_press: [['machine']], leg_ext: [['machine']],
+  lateral_walk: [['mini']], psoas_march: [['mini']], hip_abd_machine: [['machine']], seated_calf: [['machine', 'db', 'kb', 'bb']], ab_wheel: [['wheel']],
+  hanging_raise: [['pullup']], farmer_walk: [['db', 'kb']], bench: [['bb', 'db'], ['bench']], ohp: [['db', 'bb', 'kb']], dips: [['dipbar']],
+  db_row: [['db', 'kb']], reverse_fly: [['db', 'band', 'cable']], lateral_raise: [['db', 'band', 'cable']], shrug: [['db', 'bb', 'kb']],
+  upright_row: [['bb', 'db']], behind_neck: [['machine', 'bb']], curl: [['db', 'band', 'kb', 'bb', 'cable']], pushdown: [['cable', 'band']]
+};
+Object.keys(REQ).forEach(id => { if (E[id]) E[id].req = REQ[id]; });
+const GEAR_PRESETS = { home: ['step', 'band', 'mini', 'roller', 'ball'], gym: Object.keys(GEAR), travel: ['band', 'mini', 'ball'] };
+
+return { TIERS, GROUPS, MGROUPS, E, ROUTINES, TEMPLATES, ANAT, BIKEFIT, RULES, GEAR, REQ, GEAR_PRESETS };
 })();

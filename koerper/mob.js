@@ -29,11 +29,12 @@ function mRoutines() {
 }
 function rtSheet(id) {
   const r = getRoutine(id); if (!r) { toast('Mach zuerst den Körper-Check'); return; }
-  const custom = S.routines.some(x => x.id === id);
+  const custom = S.routines.some(x => x.id === id), items = resolveItems(r.items), sw = items.filter(it => it.orig || it.na).length;
   openSheet({
     title: r.n, body: `<p class="p" style="margin:0 4px 12px">${esc(r.d || 'Eigene Routine')} <b style="color:var(--t1)">· ca. ${rtMin(r)} min</b></p>
       <button class="btn primary" data-act="rtStart" data-id="${esc(id)}" style="margin-bottom:12px">▶ Routine starten</button>
-      <div class="card list">${r.items.filter(([x]) => E[x]).map(([x, sec]) => exRow(x, { rt: holdTxt(x, sec), sub: r.why && r.why[x] ? r.why[x] : E[x].m.slice(0, 3).map(nm).join(', ') })).join('')}</div>
+      ${gearOn() ? `<div class="row" style="margin:0 2px 8px">${gearChip()}${sw ? `<span class="small muted">${plural(sw, 'Übung angepasst', 'Übungen angepasst')}</span>` : '<span class="small muted">alles machbar ✓</span>'}</div>` : ''}
+      <div class="card list">${items.filter(it => E[it[0]]).map(it => exRow(it[0], { rt: holdTxt(it[0], it[1]), wrap: !!(it.orig || it.na), sub: it.orig || it.na ? swapNote(it.orig || it[0], it) : r.why && r.why[it[0]] ? r.why[it[0]] : E[it[0]].m.slice(0, 3).map(nm).join(', ') })).join('')}</div>
       ${custom ? `<div class="stack" style="margin-top:14px"><button class="btn plain" data-act="rbEdit" data-id="${esc(id)}">✏️ Bearbeiten</button><button class="btn danger" data-act="rbDel" data-id="${esc(id)}">Routine löschen</button></div>` : ''}
       <p class="note">Der Player führt dich Übung für Übung mit Countdown und Signalton durch die Routine.</p>`
   });
@@ -45,7 +46,7 @@ function mLib() {
   const chips = [['you', { n: '🎯 Für dich' }], ['fav', { n: '★ Favoriten' }]].concat(Object.entries(X.MGROUPS));
   let list;
   if (m.grp === 'you') {
-    const ord = 'SABCD', xs = Object.values(E).filter(e => e.t === 'mob' && 'SAB'.includes(e.tier) && e.m.some(x => tight.includes(x))).sort((a, b) => ord.indexOf(a.tier) - ord.indexOf(b.tier));
+    const ord = 'SABCD', xs = Object.values(E).filter(e => e.t === 'mob' && 'SAB'.includes(e.tier) && e.m.some(x => tight.includes(x)) && canDo(e.id)).sort((a, b) => ord.indexOf(a.tier) - ord.indexOf(b.tier));
     list = xs.length ? `<p class="small muted" style="margin:0 4px 8px">Dehnübungen für das, was in deinen Tests eingeschränkt war: ${esc(tight.map(nm).join(', '))}.</p><div class="card list">${xs.slice(0, 14).map(e => exRow(e.id, { sub: e.m.filter(x => tight.includes(x)).map(nm).join(', ') })).join('')}</div>`
       : '<div class="card empty"><div class="big">🎯</div><b>Noch keine Daten</b>Mach die Selbsttests im Körper-Check – dann siehst du hier, was du dehnen solltest.<button class="btn soft sm" data-act="goCheck" style="margin:12px auto 0">Zum Check</button></div>';
   } else if (m.grp === 'fav') {
@@ -53,14 +54,14 @@ function mLib() {
     list = xs.length ? `<div class="card list">${xs.map(id => exRow(id)).join('')}</div>` : '<div class="card empty"><div class="big">☆</div>Noch keine Favoriten. Öffne eine Übung und tippe auf „Als Favorit merken“.</div>';
   } else list = tierList(m.grp, e => e.t === 'mob');
   return `<div class="chiprow">${chips.map(([k, g]) => `<button class="chip${m.grp === k ? ' on' : ''}" data-act="mGrp" data-v="${k}">${g.e ? g.e + ' ' : ''}${esc(g.n)}</button>`).join('')}</div>
-    <div class="row" style="margin:0 4px 4px;justify-content:flex-end"><button class="lnk" data-act="rules" data-v="mob">Wie lese ich das?</button></div>${list}`;
+    <div class="row" style="margin:0 4px 4px">${gearChip()}<button class="lnk" data-act="rules" data-v="mob">Wie lese ich das?</button></div>${list}`;
 }
 
 /* ── Player ── */
 let pl = null;
 function startPlayer(r) {
   const steps = [];
-  r.items.forEach(([x, sec]) => { if (!E[x]) return; if (E[x].sides) { steps.push({ x, sec, side: 'Links' }); steps.push({ x, sec, side: 'Rechts', second: true }); } else steps.push({ x, sec }); });
+  resolveItems(r.items).forEach(it => { const x = it[0], sec = it[1]; if (!E[x] || it.na) return; if (E[x].sides) { steps.push({ x, sec, side: 'Links' }); steps.push({ x, sec, side: 'Rechts', second: true }); } else steps.push({ x, sec }); });
   if (!steps.length) return;
   pl = { r, steps, i: 0, ph: 'prep', c: null, t0: Date.now(), done: 0, seen: {} };
   closeAllSheets(); wake(true); plStep(0);
@@ -90,13 +91,14 @@ function renderPlayer() {
   openFull(`<div class="fhead"><button class="lnk" data-act="plClose">✕ Beenden</button><div class="ft"><b>${esc(pl.r.n)}</b><small>${pl.i + 1} von ${pl.steps.length}</small></div><button class="lnk r" data-act="plSound">${S.settings.sound ? '🔔 Ton an' : '🔕 Ton aus'}</button></div>
     <div class="fbody"><div class="player${prep ? ' prep' : ''}">
       <div class="pprog">${pl.steps.map((s, n) => `<i class="${n < pl.i || (n === pl.i && !prep) ? 'on' : ''}"></i>`).join('')}</div>
-      <div class="ps">${prep ? (st.second ? 'Seite wechseln' : 'Bereit machen') : st.side ? st.side + 'e Seite' : 'Halten / bewegen'}</div>
+      <div class="ps">${prep ? (st.second ? 'Seite wechseln' : 'Bereit machen') : st.side ? (st.side === 'Links' ? 'Linke' : 'Rechte') + ' Seite' : 'Halten / bewegen'}</div>
       <div class="pn">${esc(e.n)}${st.side ? ` <span class="muted" style="font-size:17px">· ${st.side.toLowerCase()}</span>` : ''}</div>
-      ${ring(210, 12, 1, prep ? 'var(--run)' : 'var(--acc)', `<div><b id="plT"></b><small>${prep ? 'gleich geht’s los' : 'Sekunden'}</small></div>`)}
+      ${Moves.has(st.x) ? `<div class="card mvbox big" data-mv="${st.x}"></div>` : ''}
+      <div class="plrow">${ring(118, 9, 1, prep ? 'var(--run)' : 'var(--acc)', `<div><b id="plT"></b><small>${prep ? 'gleich' : 'Sek.'}</small></div>`)}
+        <div class="plinfo"><b>${esc(e.m.slice(0, 2).map(nm).join(' · '))}</b><span>${esc(e.err || '')}</span></div></div>
       <div class="pctl"><button data-act="plPrev" aria-label="Zurück">⏮</button><button class="main" data-act="plPause" id="plPauseB" aria-label="Pause">⏸</button><button data-act="plAdd" aria-label="15 Sekunden länger">+15</button><button data-act="plNext" aria-label="Weiter">⏭</button></div>
       <p class="small muted" style="min-height:18px">${nx ? 'Danach: ' + esc(E[nx.x].n) + (nx.side ? ' · ' + nx.side.toLowerCase() : '') : 'Letzte Übung 🎉'}</p>
-      <div class="card pad" style="width:100%;text-align:left"><div class="sec">So geht’s</div><ol class="ol">${e.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol>${e.err ? `<p class="small" style="margin-top:10px;color:var(--c-tight)">⚠️ ${esc(e.err)}</p>` : ''}</div>
-      <div class="card mapcard" style="width:100%">${bodySVG({ hl: targetHL(e.m), mini: true })}<div class="legend" style="justify-content:center"><span><i style="background:var(--c-pain)"></i>${esc(nm(e.m[0]))}</span>${e.m.slice(1, 3).map(m => `<span><i style="background:var(--c-syn)"></i>${esc(nm(m))}</span>`).join('')}</div></div>
+      <details class="card pad" style="width:100%;text-align:left"><summary class="lnk">So geht’s – Schritt für Schritt ▾</summary><ol class="ol" style="margin-top:8px">${e.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol></details>
     </div></div>`);
 }
 function plFinish(partial) {
