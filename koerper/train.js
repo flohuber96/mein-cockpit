@@ -186,9 +186,38 @@ function tLog() {
   S.sessions.forEach(s => { if (s.k === 'kraft') s.ex.forEach(x => { const e = E[x.x]; if (!e || e.tr !== 'wr') return; const b = bestSet(e, x.sets); if (b && b.w && (!best[x.x] || e1rm(b) > e1rm(best[x.x]))) best[x.x] = b; }); });
   const bl = Object.entries(best).sort((a, b) => e1rm(b[1]) - e1rm(a[1])).slice(0, 8);
   return `<div class="stats k3"><div class="card stat"><small>Kraft</small><b>${st.kraft}<i>/ ${S.settings.goalK}</i></b><span>diese Woche</span></div><div class="card stat"><small>Mobility</small><b>${st.mob}<i>/ ${S.settings.goalM}</i></b><span>${fmtMin(st.mobMin)}</span></div><div class="card stat"><small>Serie</small><b>${streak()}<i>Tage</i></b><span>in Folge aktiv</span></div></div>
+    ${(() => { const now = Date.now(), bal = muscleBal(now - 7 * DAY, now + DAY); if (!S.sessions.some(s => s.k === 'kraft')) return '';
+      const wk = []; for (let i = 7; i >= 0; i--) { const a = w - i * 7 * DAY; wk.push({ v: muscleBal(a, a + 7 * DAY).tot, l: i === 0 ? 'jetzt' : i % 2 ? '' : '−' + i + ' W', now: i === 0 }); }
+      return `<div class="section-t">Muskel-Bilanz<span class="muted">letzte 7 Tage · Sätze</span></div>
+      <div class="card pad"><div class="row" style="align-items:flex-start;gap:10px"><div style="flex:1;min-width:0">${bal.tot ? balRows(bal) : '<p class="small muted">In den letzten 7 Tagen kein Krafttraining.</p>'}</div></div>
+        ${bal.tot ? `<div style="max-width:230px;margin:10px auto 0">${balMap(bal)}</div><p class="small muted" style="margin-top:6px">${bal.none.length ? `Diese Woche noch nicht trainiert: <b style="color:var(--t1)">${esc(bal.none.map(k => X.GROUPS[k].n).join(', '))}</b>.` : 'Alle wichtigen Bereiche haben einen Reiz bekommen.'} Als Ausgleich zum Radfahren reichen meist 4–12 Sätze pro Bereich und Woche.</p>` : ''}</div>
+      <div class="section-t">Umfang<span class="muted">Sätze pro Woche</span></div><div class="card pad">${barsSVG(wk, 'n')}</div>`; })()}
     ${bl.length ? `<div class="section-t">Bestwerte</div><div class="card list">${bl.map(([id, b]) => exRow(id, { tier: false, sub: `geschätztes Maximum ${Math.round(e1rm(b))} kg`, rt: `${num(b.w)} × ${b.r}` })).join('')}</div>` : ''}
     <div class="section-t">Einheiten<span class="muted">${list.length}</span></div>
     ${list.length ? `<div class="card list">${list.slice(0, 60).map(actRow).join('')}</div>` : '<div class="card empty"><div class="big">📒</div><b>Noch nichts eingetragen</b>Starte ein Workout oder eine Mobility-Routine – hier siehst du dann deinen Fortschritt.</div>'}`;
+}
+// Muskel-Bilanz: harte Sätze je Gruppe (Hauptgruppe zählt voll, Nebengruppen halb)
+const BAL_T = { glutes: [4, 12], post: [4, 12], quads: [3, 12], hipstab: [3, 10], calves: [2, 10], core: [6, 16], back: [4, 14], chest: [3, 12], shoulder: [4, 14], arms: [0, 10], neck: [0, 8] };
+function muscleBal(a, b) {
+  const g = {}, m = {}; let tot = 0;
+  S.sessions.forEach(s => {
+    if (s.k !== 'kraft' || s.s < a || s.s >= b) return;
+    s.ex.forEach(x => { const e = E[x.x]; if (!e) return; const n = x.sets.length; tot += n;
+      Object.keys(e.tiers).forEach((k, i) => { if (X.GROUPS[k]) g[k] = (g[k] || 0) + n * (i === 0 ? 1 : 0.5); });
+      e.m.forEach((id, i) => { m[id] = (m[id] || 0) + n * (i === 0 ? 1 : 0.5); }); });
+  });
+  return { g, m, tot, none: Object.keys(BAL_T).filter(k => BAL_T[k][0] > 0 && !g[k]) };
+}
+function balRows(bal) {
+  return Object.keys(BAL_T).sort((x, y) => (bal.g[y] || 0) - (bal.g[x] || 0)).map(k => {
+    const v = bal.g[k] || 0, [lo, hi] = BAL_T[k], st = v > hi ? ['', 'viel'] : v >= lo && v > 0 ? ['grn', 'gut'] : lo > 0 ? ['amb', v ? 'wenig' : 'fehlt'] : ['', '–'];
+    return `<div class="bl" style="grid-template-columns:minmax(0,1fr) 70px 34px 52px"><span>${X.GROUPS[k].e} ${esc(X.GROUPS[k].n)}</span><span class="meter"><i style="width:${Math.min(100, v / hi * 100)}%;background:${st[0] === 'amb' ? 'var(--c-tight)' : 'var(--acc)'}"></i></span><em>${num(v, 0)}</em><span class="tag ${st[0]}" style="justify-content:center">${st[1]}</span></div>`;
+  }).join('');
+}
+function balMap(bal) {
+  const hl = {}, max = Math.max(1, ...Object.values(bal.m));
+  Object.entries(bal.m).forEach(([id, v]) => { hl[id] = { role: 'syn', o: (0.25 + 0.65 * v / max).toFixed(2) }; });
+  return bodySVG({ hl, mini: true });
 }
 function sessionSheet(id) {
   const s = S.sessions.find(x => x.id === id); if (!s) return;

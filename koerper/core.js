@@ -37,7 +37,7 @@ const KEY = 'koerper.v1';
 const boot = { rebuilt: false };
 function fresh() {
   return {
-    v: 1, sid: uid(), pains: {}, tests: {}, snaps: [], sessions: [], routines: [], templates: [], rides: [], favs: {}, well: {},
+    v: 1, sid: uid(), pains: {}, tests: {}, snaps: [], sessions: [], routines: [], templates: [], rides: [], favs: {}, well: {}, testv: {}, painLog: {},
     settings: { theme: 'auto', rest: 90, sound: true, vib: true, prep: 5, goalK: 2, goalM: 4, ftp: null },
     active: null, ui: { view: 'home' }
   };
@@ -75,6 +75,7 @@ const ui = {
   train: { sub: 'start', grp: 'glutes', home: false },
   mob: { sub: 'routines', grp: 'm_hipflex' },
   ride: { chart: 'h', all: false },
+  cal: null, rep: 0,
   fullMin: false
 };
 
@@ -217,13 +218,14 @@ function renderDock() {
 setInterval(() => { $$('[data-live="wtime"]').forEach(n => { if (S.active) n.textContent = fmtClock((Date.now() - S.active.s) / 1000); }); }, 1000);
 
 /* ───────── Aktionen & Ansichten ───────── */
-const ACT = {}, IN = {}, VIEWS = {};
+const ACT = {}, IN = {}, CH = {}, VIEWS = {};
 document.addEventListener('click', e => {
   audio(); // Ton erst nach einer Berührung erlaubt (iOS)
   const el = e.target.closest('[data-act]'); if (!el) return;
   const fn = ACT[el.dataset.act]; if (fn) fn(el, e);
 });
 document.addEventListener('input', e => { const el = e.target.closest('[data-in]'); if (el && IN[el.dataset.in]) IN[el.dataset.in](el, e); });
+document.addEventListener('change', e => { const el = e.target.closest('[data-ch]'); if (el && CH[el.dataset.ch]) CH[el.dataset.ch](el, e); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && sheetStack.length) closeSheet(); });
 
 Object.assign(ACT, {

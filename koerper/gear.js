@@ -83,12 +83,12 @@ function gearSheet() { openSheet({ title: 'Meine Ausrüstung', body: gearBody(),
 
 Object.assign(ACT, {
   gear() { gearSheet(); },
-  gearP(el) { gearState().p = el.dataset.v; save(); sheetBody(gearBody()); },
+  gearP(el) { const g = gearState(); g.p = el.dataset.v; g.t = 1; save(); sheetBody(gearBody()); },
   gearTog(el) {
     const g = gearState(), k = el.dataset.k, a = g.sets[g.p] = g.sets[g.p] || [];
     const i = a.indexOf(k); if (i >= 0) a.splice(i, 1); else a.push(k);
     save(); const y = $('.sheet-body', topSheet()).scrollTop; sheetBody(gearBody()); $('.sheet-body', topSheet()).scrollTop = y;
   },
-  gearDone() { closeSheet(); },
+  gearDone() { gearState().t = 1; save(); closeSheet(); },
   gearShowNA() { ui.gearShow = !ui.gearShow; keepScroll(render); }
 });

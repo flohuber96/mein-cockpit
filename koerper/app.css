@@ -452,3 +452,32 @@ a.btn{text-decoration:none}
 .gi i{flex:none;width:22px;height:22px;border-radius:50%;background:var(--card2);color:#fff;font-style:normal;font-size:13px;font-weight:800;display:grid;place-items:center}
 .gi.on{border-color:var(--acc);background:var(--acc-soft)}
 .gi.on i{background:var(--acc)}
+
+/* Wochenplan, Kalender, Bericht */
+.li.dn{opacity:.6}
+.li.dn .bd b{text-decoration:line-through;text-decoration-color:var(--t3)}
+.tri3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px}
+.tri3 button{min-height:40px;border-radius:11px;background:var(--card2);font-size:13px;font-weight:700;text-align:center;color:var(--t1)}
+.pday{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 12px;margin-bottom:6px}
+.pday>b{flex:none;width:26px;font-size:15px}
+.pday.today>b{color:var(--acc-t)}
+.pday .hbtn{width:34px;height:34px;flex:none}
+.pitems{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:5px}
+.pchip{display:inline-flex;align-items:center;gap:4px;padding:5px 4px 5px 9px;border-radius:999px;background:var(--card2);font-size:13px;font-weight:600;max-width:100%}
+.pchip button{width:22px;height:22px;border-radius:50%;font-size:11px;color:var(--t3);text-align:center;flex:none}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center}
+.cal em{font-style:normal;font-size:11px;font-weight:700;color:var(--t3);padding-bottom:4px}
+.cd{position:relative;min-height:46px;border-radius:10px;padding:4px 0 2px;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.cd b{font-size:13.5px;font-weight:600}
+.cd span{font-size:10.5px;line-height:1.1;min-height:12px;letter-spacing:-1px}
+.cd i{position:absolute;top:4px;right:5px;width:6px;height:6px;border-radius:50%}
+.cd.today{background:var(--acc-soft)}.cd.today b{color:var(--acc-t);font-weight:800}
+.cd.sel{box-shadow:inset 0 0 0 2px var(--acc)}
+.cd.fut b{color:var(--t3)}
+
+/* Messwerte */
+.meas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.mfield{display:flex;align-items:baseline;gap:6px;background:var(--card2);border-radius:12px;padding:0 12px;min-height:48px}
+.mfield span{font-size:13px;font-weight:700;color:var(--t2);flex:none}
+.mfield input{background:transparent;border:0;padding:0;min-height:48px;font-size:20px;font-weight:800;text-align:right;min-width:0;font-variant-numeric:tabular-nums}
+.mfield em{font-style:normal;font-size:13px;font-weight:700;color:var(--t2);flex:none}
