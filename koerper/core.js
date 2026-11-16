@@ -337,7 +337,7 @@ const TIER_W = { S: 1.35, A: 1.1, B: 0.85 };
 function buildPlan() {
   const f = profile(), items = {};
   const add = (ex, sc, why) => {
-    const e = E[ex]; if (!e || sc <= 0 || !TIER_W[e.tier]) return;
+    const e = E[ex]; if (!e || sc <= 0 || !TIER_W[e.tier] || !canDo(ex)) return;
     const it = items[ex] = items[ex] || { sc: 0, why: [] };
     it.sc += sc * TIER_W[e.tier];
     if (why && !it.why.includes(why)) it.why.push(why);
@@ -414,10 +414,10 @@ const grpName = g => (X.GROUPS[g] || X.MGROUPS[g] || {}).n || g;
 function exRow(id, o) {
   o = o || {};
   const e = E[id]; if (!e) return '';
-  const sub = o.sub != null ? o.sub : (e.eq ? e.eq : 'ohne Geräte');
+  const na = !canDo(id), sub = na ? `⚠️ fehlt: ${missTxt(id)}` : o.sub != null ? o.sub : (e.eq ? e.eq : 'ohne Geräte');
   const t = o.tier === false ? '' : (o.tierOf ? e.tiers[o.tierOf] : e.tier);
   const pic = Moves.has(id) ? `<span class="th" data-mvs="${id}"></span>` : `<span class="ic">${EX_ICO[e.t]}</span>`;
-  return `<button class="li li-ex" data-act="${o.act || 'ex'}" data-id="${id}"${o.attr || ''}><span class="thw">${pic}${t ? tierB(t, true) : ''}</span><span class="bd"><b>${esc(e.n)}</b><small${o.wrap ? '' : ' class="clip"'}>${esc(sub)}</small></span>${o.rt ? `<span class="rt">${o.rt}</span>` : '<span class="go">›</span>'}</button>`;
+  return `<button class="li li-ex${na ? ' na' : ''}" data-act="${o.act || 'ex'}" data-id="${id}"${o.attr || ''}><span class="thw">${pic}${t ? tierB(t, true) : ''}</span><span class="bd"><b>${esc(e.n)}</b><small${o.wrap ? '' : ' class="clip"'}>${esc(sub)}</small></span>${o.rt ? `<span class="rt">${o.rt}</span>` : '<span class="go">›</span>'}</button>`;
 }
 function ring(size, sw, pct, color, inner) {
   const r = (size - sw) / 2, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct || 0));
@@ -480,6 +480,7 @@ function exSheet(id) {
   const hist = exHistory(id), tiers = Object.entries(e.tiers);
   const body = `
     <div class="tags" style="margin:0 0 10px"><span class="tag acc">${EX_ICO[e.t]} ${EX_LBL[e.t]}</span>${e.eq ? `<span class="tag">🧰 ${esc(e.eq)}</span>` : '<span class="tag grn">ohne Geräte</span>'}${e.dose && e.dose !== '–' ? `<span class="tag">${esc(e.dose)}</span>` : ''}</div>
+    ${!canDo(id) ? (() => { const a = altFor(id); return `<div class="box warn" style="margin-bottom:10px">🧰 Mit deiner Ausrüstung (${esc(GP[gearState().p].n)}) nicht machbar – fehlt: <b>${esc(missTxt(id))}</b>.${a ? ' Gleichwertiger Ersatz:' : ''}</div>${a ? `<div class="card list" style="margin-bottom:10px">${exRow(a, { act: 'exSwap' })}</div>` : ''}`; })() : ''}
     ${Moves.has(id) ? `<div class="card mvbox" data-mv="${id}"></div>` : ''}
     <div class="card pad" style="margin-bottom:10px"><div class="sec">So geht’s</div><ol class="ol">${e.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol></div>
     <div class="card pad" style="margin-bottom:10px"><div class="row" style="align-items:flex-start;gap:12px"><div style="flex:1;min-width:0"><div class="sec">Zielbereich</div><div class="chips">${e.m.map((m, i) => chip(m, i === 0 ? 'pain' : 'syn')).join('')}</div></div>
@@ -499,6 +500,7 @@ function exSheet(id) {
 }
 Object.assign(ACT, {
   ex(el) { exSheet(el.dataset.id); },
+  exSwap(el) { closeSheet(); setTimeout(() => exSheet(el.dataset.id), 330); },
   fav(el) { const id = el.dataset.id; if (S.favs[id]) delete S.favs[id]; else S.favs[id] = 1; save(); el.textContent = S.favs[id] ? '★ Favorit entfernen' : '☆ Als Favorit merken'; toast(S.favs[id] ? 'Als Favorit gemerkt' : 'Favorit entfernt'); },
   st(el) { go('body', { sub: 'map', sel: el.dataset.id, deep: !!(D.M[el.dataset.id] && D.M[el.dataset.id].deep) }); },
   topic(el) { go('body', { sub: 'topics', topic: el.dataset.id }); },
@@ -511,11 +513,13 @@ Object.assign(ACT, {
 
 // Tier-Liste einer Gruppe (Training und Mobility nutzen dieselbe Darstellung)
 function tierList(grp, filter) {
-  const list = Object.values(E).filter(e => e.tiers[grp] && (!filter || filter(e)));
+  const all = Object.values(E).filter(e => e.tiers[grp] && (!filter || filter(e))), hid = all.filter(e => !canDo(e.id));
+  const list = ui.gearShow ? all : all.filter(e => canDo(e.id));
   return ['S', 'A', 'B', 'C', 'D'].map(t => {
     const xs = list.filter(e => e.tiers[grp] === t).sort((a, b) => (a.t === b.t ? 0 : a.t === 'kraft' ? -1 : 1) || a.n.localeCompare(b.n));
     if (!xs.length) return '';
     return `<div class="tierh">${tierB(t)}<span><b>${X.TIERS[t].t}</b><br><small>${X.TIERS[t].d}</small></span></div>
       <div class="card list">${xs.map(e => exRow(e.id, { tierOf: grp, sub: e.why, wrap: true })).join('')}</div>`;
-  }).join('') || '<div class="empty"><div class="big">🔍</div>Keine Übung mit diesem Filter.</div>';
+  }).join('') + (hid.length ? `<button class="btn plain sm" data-act="gearShowNA" style="margin-top:12px;width:100%">${ui.gearShow ? 'Nicht machbare ausblenden' : `${plural(hid.length, 'Übung braucht', 'Übungen brauchen')} Ausrüstung, die dir fehlt – anzeigen`}</button>` : '')
+    || '<div class="empty"><div class="big">🔍</div>Keine Übung mit diesem Filter.</div>';
 }

@@ -76,6 +76,7 @@ function settingsBody() {
   const tg = (k, lbl) => `<div class="setting"><span class="lbl">${lbl}</span><div class="seg sm"><button data-act="setTog" data-k="${k}" data-v="1" class="${s[k] !== false ? 'on' : ''}">An</button><button data-act="setTog" data-k="${k}" data-v="0" class="${s[k] === false ? 'on' : ''}">Aus</button></div></div>`;
   return `<div class="section-t" style="margin-top:4px">Wochenziele</div><div class="card">${st('goalK', '🏋️ Krafteinheiten', s.goalK, '×', 1)}${st('goalM', '🧘 Mobility-Einheiten', s.goalM, '×', 1)}</div>
     <div class="section-t">Timer</div><div class="card">${st('rest', 'Satzpause', s.rest, 's', 15)}${st('prep', 'Vorlauf im Player', s.prep, 's', 1)}${tg('sound', 'Signalton')}${tg('vib', 'Vibration')}</div>
+    <div class="section-t">Training</div><div class="card menu"><button data-act="gear"><span class="ico">🧰</span>Meine Ausrüstung<span class="muted" style="margin-left:auto;font-size:14px">${esc(GP[gearState().p].n)} ›</span></button></div>
     <div class="section-t">Darstellung</div><div class="card"><div class="setting"><span class="lbl">Design</span><div class="seg sm">${[['auto', 'Auto'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([k, n]) => `<button data-act="setTheme" data-v="${k}" class="${s.theme === k ? 'on' : ''}">${n}</button>`).join('')}</div></div></div>
     ${window.Cloud ? Cloud.section() : ''}
     <div class="section-t">Daten</div>
@@ -90,7 +91,7 @@ function askText(title, label, value, onOk) {
   pending.ask = onOk;
 }
 const bulkOk = () => { if (window.Cloud && Cloud.allowBulkDelete) Cloud.allowBulkDelete(); }; // gewollte Massenlöschung ankündigen
-const exportData = () => { const o = {}; ['v', 'sid', 'pains', 'tests', 'snaps', 'sessions', 'routines', 'templates', 'rides', 'favs', 'well', 'settings'].forEach(k => { o[k] = S[k]; }); return o; };
+const exportData = () => { const o = {}; ['v', 'sid', 'pains', 'tests', 'snaps', 'sessions', 'routines', 'templates', 'rides', 'favs', 'well', 'gear', 'settings'].forEach(k => { o[k] = S[k]; }); return o; };
 document.addEventListener('change', e => {
   if (e.target.id !== 'impFile' || !e.target.files[0]) return;
   const fr = new FileReader();
@@ -150,6 +151,7 @@ if (window.Cloud) Cloud.init({
     for (const d of Object.keys(S.well)) m['d:' + d] = { kind: 'well', data: S.well[d] };
     m.tests = { kind: 'tests', data: S.tests, soft: !Object.keys(S.tests).length };
     m.favs = { kind: 'favs', data: S.favs, soft: !Object.keys(S.favs).length };
+    const g = gearState(); m.gear = { kind: 'gear', data: g, soft: g.p === 'all' && JSON.stringify(g.sets) === JSON.stringify(X.GEAR_PRESETS) };
     const st = {}, def = fresh().settings; SYNC_SET.forEach(k => { st[k] = S.settings[k]; });
     m.settings = { kind: 'settings', data: st, soft: SYNC_SET.every(k => st[k] === def[k]) };
     return m;
@@ -162,6 +164,7 @@ if (window.Cloud) Cloud.init({
     else if (r.kind === 'well') { if (r.deleted) delete S.well[r.id.slice(2)]; else if (r.data) S.well[r.id.slice(2)] = r.data; }
     else if (r.kind === 'tests') S.tests = r.deleted ? {} : (r.data || {});
     else if (r.kind === 'favs') S.favs = r.deleted ? {} : (r.data || {});
+    else if (r.kind === 'gear' && r.data && !r.deleted && r.data.sets) S.gear = r.data;
     else if (r.kind === 'settings' && r.data && !r.deleted) Object.assign(S.settings, r.data);
   },
   // Wurde der lokale Speicher neu aufgebaut (z. B. vom iPhone geleert), gewinnt die Online-Datenbank
