@@ -226,6 +226,7 @@ function rOver() {
       ${tile('Höhe', Math.round(A.hm).toLocaleString('de-DE'), 'hm', B ? [A.hm, B.hm] : null)}${tile('Belastung', Math.round(A.tss), '', B ? [A.tss, B.tss] : null)}${tile('Arbeit', A.kj ? Math.round(A.kj).toLocaleString('de-DE') : '–', A.kj ? 'kJ' : '', null, A.kj ? '≈ ' + Math.round(A.kj) + ' kcal' : 'braucht Leistung')}</div>
     <div class="section-t">Einordnung<span class="muted">${esc(R.lbl)}</span></div>
     <div class="card pad stack s6">${notes.map(([i, t]) => `<div class="note-row"><span>${i}</span><p>${t}</p></div>`).join('')}</div>
+    ${nextRideCard()}
     <div class="section-t">${R.days <= 28 ? 'Pro Tag' : 'Pro Woche'} · ${unit}<div class="seg sm">${[['h', 'Zeit'], ['km', 'km'], ['hm', 'hm'], ['tss', 'Last']].map(([k, n]) => `<button data-act="rChart" data-v="${k}" class="${c === k ? 'on' : ''}">${n}</button>`).join('')}</div></div>
     <div class="card pad">${barsSVG(items, c)}</div>
     ${R.days >= 28 && P.days.length > 14 ? `<div class="section-t">Fitness & Form${rinfo('pmc')}</div><div class="card pad" data-act="rTab" data-v="load" style="cursor:pointer">${pmcSVG(P.days.slice(-Math.min(R.days, 400)))}${pmcLegend()}</div>` : ''}
@@ -294,7 +295,8 @@ function rPower() {
       <div class="row"><span><b>eFTP ${eftp ? eftp + ' W' : '–'}</b>${eftp && kg ? ` <span class="muted">· ${num(eftp / kg, 2)} W/kg</span>` : ''}<br><span class="small muted">${e20 ? '95 % deines 20-min-Bestwerts im Zeitraum' : cp ? 'aus dem CP-Modell' : 'braucht einen harten 20-min-Abschnitt'}</span></span>
         ${eftp && Math.abs(eftp - (ftp || 0)) >= 5 ? `<button class="btn soft sm" data-act="ftpSet" data-v="${eftp}">Als FTP</button>` : ''}</div>
       ${cp ? `<div class="row"><span><b>CP ${cp.cp} W · W′ ${num(cp.wp)} kJ</b><br><span class="small muted">Kritische Leistung (Dauerleistung) und anaerobe Reserve – aus deinen 3–20-min-Bestwerten</span></span></div>` : ''}
-      <div class="row"><span><b>Eingestellter FTP ${ftp ? ftp + ' W' : '–'}</b><br><span class="small muted">${ftp && eftp ? (eftp > ftp + 5 ? 'Deine Werte deuten auf mehr hin – Zonen & Belastung werden sonst zu hoch bewertet.' : eftp < ftp - 10 ? 'Liegt über deinen aktuellen Werten – evtl. nur, weil im Zeitraum kein harter Test dabei war.' : 'Passt zu deinen aktuellen Werten.') : 'Grundlage für Zonen und Belastung.'}</span></span><button class="lnk" data-act="perfEdit">Ändern</button></div></div>
+      <div class="row"><span><b>Eingestellter FTP ${ftp ? ftp + ' W' : '–'}</b><br><span class="small muted">${ftp && eftp ? (eftp > ftp + 5 ? 'Deine Werte deuten auf mehr hin – Zonen & Belastung werden sonst zu hoch bewertet.' : eftp < ftp - 10 ? 'Liegt über deinen aktuellen Werten – evtl. nur, weil im Zeitraum kein harter Test dabei war.' : 'Passt zu deinen aktuellen Werten.') : 'Grundlage für Zonen und Belastung.'}</span></span><button class="lnk" data-act="perfEdit">Ändern</button></div>
+      <button class="btn soft sm" data-act="zones">📋 Zonentabelle in Watt und Puls</button></div>
     ${pf.length ? `<div class="section-t">Leistungsprofil${rinfo('prof')}</div>
     <div class="card pad">${type ? `<div class="row" style="margin-bottom:10px"><span><b>Typ: ${type[0]}</b><br><span class="small muted">${type[1]} Ausbaupotenzial: ${type[2]}.</span></span></div>` : ''}
       ${pf.map(p => `<div class="prow"><span class="pl">${p.l}</span><div class="pm"><div class="pscale">${PROF_LV.map((_, i) => `<i style="opacity:${0.25 + i * 0.1}"></i>`).join('')}</div><span class="pmark" style="left:${Math.min(100, p.lv / 7 * 100)}%"></span></div><span class="pv"><b>${num(p.v, 1)}</b> W/kg<br><small>${PROF_LV[Math.max(0, Math.min(6, Math.floor(p.lv) - (p.lv >= 1 ? 1 : 0)))]}</small></span></div>`).join('')}
@@ -303,6 +305,8 @@ function rPower() {
     <div class="card pad">${zoneBar(z)}${zoneLegend(z)}
       ${dt ? `<div class="tri"><div style="flex:${dt.f1}"><b>${Math.round(dt.f1 * 100)} %</b><span>locker</span></div><div style="flex:${Math.max(dt.f2, 0.08)}"><b>${Math.round(dt.f2 * 100)} %</b><span>mittel</span></div><div style="flex:${Math.max(dt.f3, 0.08)}"><b>${Math.round(dt.f3 * 100)} %</b><span>hart</span></div></div>
       <p class="p" style="margin-top:8px"><b style="color:var(--t1)">${dt.c[0]}.</b> ${dt.c[1]}</p>` : ''}</div>` : ''}
+    ${hrZonesHTML(ridesIn(R.from, R.to))}
+    ${durHTML(R, cR)}
     ${efr.length ? `<div class="section-t">Aerobe Effizienz${rinfo('ef')}</div>
     <div class="card pad">${efSVG(efr, fit, R.from)}
       <p class="p">${efChg == null ? 'Für einen Trend braucht es mindestens 3 lockere Fahrten über 45 min mit Leistung und Puls.' : Math.abs(efChg) < 2 ? 'Deine Effizienz ist stabil.' : efChg > 0 ? `<b style="color:var(--ok)">Deine Effizienz ist um ${Math.round(efChg)} % gestiegen</b> – du trittst bei gleichem Puls mehr Watt. Ein klares Zeichen wachsender Grundlagenausdauer.` : `<b style="color:var(--c-tight)">Deine Effizienz ist um ${Math.round(-efChg)} % gesunken.</b> Mögliche Gründe: Ermüdung, Hitze, Infekt oder weniger Grundlagentraining.`}</p></div>` : ''}
@@ -325,7 +329,7 @@ function rList() {
   return `${list.length ? `<div class="card list">${list.slice(0, ui.ride.all ? 500 : 30).map(row).join('')}</div>${list.length > 30 && !ui.ride.all ? '<button class="btn plain sm" data-act="rAll" style="margin-top:8px;width:100%">Alle ' + list.length + ' anzeigen</button>' : ''}` : '<div class="card empty">Keine Fahrten in diesem Zeitraum.</div>'}
     <div class="section-t">Import</div>
     <div class="card menu"><button data-act="fitPick"><span class="ico">⬆︎</span>FIT-Dateien oder ZIP importieren</button><button data-act="rideNew"><span class="ico">＋</span>Fahrt von Hand eintragen</button></div>
-    <p class="small muted" style="margin:-4px 4px 0">Exportiere deine Aktivitäten z. B. in intervals.icu als FIT-Dateien (ZIP) und wähle die ZIP hier aus. Schon importierte Fahrten werden erkannt; ältere Importe werden dabei um die neue Leistungsanalyse ergänzt.</p>`;
+    <p class="small muted" style="margin:-4px 4px 0">Exportiere deine Aktivitäten z. B. in intervals.icu als FIT-Dateien (ZIP) und wähle die ZIP hier aus. Schon importierte Fahrten werden erkannt; ältere Importe werden dabei um neue Auswertungen (Verlaufskurve, Puls-Zonen, Ermüdungsresistenz) ergänzt.</p>`;
 }
 
 /* ── Einzelne Fahrt ── */
@@ -346,8 +350,11 @@ function rideSheet(id) {
     title: r.n || 'Radfahrt', body: `<p class="p" style="margin:0 4px 12px">${DAYS[d.getDay()]}, ${fmtDate(d)} ${d.getFullYear()} · ${pad(d.getHours())}:${pad(d.getMinutes())} Uhr</p>
       <div class="stats k3" style="margin-bottom:10px">${cell('Distanz', r.km ? num(r.km) : '', 'km')}${cell('Zeit', r.min ? hTxt(r.min) : '', 'h')}${cell('Höhe', r.hm ? Math.round(r.hm) : '', 'hm')}${cell('Tempo', kmh ? num(kmh) : '', 'km/h')}${cell('Ø Leistung', r.w || '', 'W')}${cell('NP', r.np || '', 'W')}${cell('Puls', r.hr || '', 'bpm')}${cell('Kadenz', r.cad || '', '/min')}${cell('Arbeit', r.kj || '', 'kJ')}${cell('Belastung', Math.round(t.v), '')}${cell('W/kg', n && kg ? num(n / kg, 2) : '', '')}${cell('Puls max', r.hrmax || '', 'bpm')}</div>
       ${pts.length ? `<div class="card pad stack s6" style="margin-bottom:10px">${pts.map(p => `<p class="p" style="color:var(--t1)">• ${p}</p>`).join('')}<p class="small muted">${t.src === 'ftp' ? 'Belastung mit deinem FTP von ' + ftp + ' W berechnet' : t.src === 'dev' ? 'Belastung vom Radcomputer' : t.src === 'hr' ? 'Belastung aus dem Puls (Schwellenpuls ' + S.settings.lthr + ')' : 'Belastung nur über die Dauer geschätzt'}</p></div>` : ''}
+      ${r.st ? `<div class="card pad" style="margin-bottom:10px"><div class="sec">Verlauf</div>${streamSVG(r.st, r.min, ftp)}<div class="legend" style="padding:6px 0 0">${r.st.p ? '<span><i style="background:var(--acc)"></i>Leistung</span>' : ''}${r.st.h ? '<span><i style="background:var(--c-pain)"></i>Puls</span>' : ''}${r.st.p && ftp ? '<span><i style="background:var(--t3)"></i>FTP</span>' : ''}</div></div>` : ''}
       ${cr && Object.keys(cr).length > 2 ? `<div class="card pad" style="margin-bottom:10px"><div class="sec">Leistungskurve dieser Fahrt</div>${curveSVG(cr, c90, null)}<div class="legend" style="padding:6px 0 0"><span><i style="background:var(--acc)"></i>diese Fahrt</span><span><i style="background:var(--t3)"></i>Bestwerte 90 Tage</span></div></div>` : ''}
-      ${z ? `<div class="card pad" style="margin-bottom:10px"><div class="sec">Zonen</div>${zoneBar(z)}${zoneLegend(z)}</div>` : ''}
+      ${z ? `<div class="card pad" style="margin-bottom:10px"><div class="sec">Leistungs-Zonen</div>${zoneBar(z)}${zoneLegend(z)}</div>` : ''}
+      ${S.settings.lthr && r.hh ? (() => { const hz = hrZonesOf([r], S.settings.lthr); return `<div class="card pad" style="margin-bottom:10px"><div class="sec">Puls-Zonen</div>${zoneBar5(hz)}${zoneLegend5(hz)}</div>`; })() : ''}
+      ${r.du ? `<div class="card pad" style="margin-bottom:10px"><div class="sec">Ermüdungsresistenz</div><p class="p" style="color:var(--t1)">Beste 5 min ${r.pb && r.pb[300] ? 'frisch <b>' + r.pb[300] + ' W</b>' : ''}${Object.keys(r.du).map(k => r.du[k][300] ? ` · nach ${k} kJ <b>${r.du[k][300]} W</b>` : '').join('')}</p></div>` : ''}
       <div class="stack"><button class="btn soft" data-act="rt" data-id="r_bike">🧘 Ausgleich: „Nach dem Radfahren“</button>
       <button class="btn plain" data-act="rideName" data-id="${esc(id)}">✏️ Umbenennen</button>
       <button class="btn danger" data-act="rideDel" data-id="${esc(id)}">Fahrt löschen</button></div>`
@@ -393,7 +400,7 @@ function perfSheet() {
 
 /* ── Import von FIT-Dateien / ZIP ── */
 const fitName = n => /\.fit(\.gz)?$/i.test(n) && !/(^|\/)(\.|__MACOSX)/.test(n);
-const RKEYS = ['ver', 'km', 'min', 'hm', 'kmh', 'hr', 'hrmax', 'cad', 'w', 'np', 'wmax', 'kj', 'pb', 'ph', 'ef', 'dec', 'tssDev', 'ftpDev'];
+const RKEYS = ['ver', 'km', 'min', 'hm', 'kmh', 'hr', 'hrmax', 'cad', 'w', 'np', 'wmax', 'kj', 'pb', 'ph', 'hh', 'du', 'st', 'ef', 'dec', 'tssDev', 'ftpDev'];
 async function importFiles(fileList) {
   const files = [].slice.call(fileList); if (!files.length) return;
   const res = { rides: 0, upd: 0, other: 0, dup: 0, bad: 0, total: 0 }, known = new Set(S.rides.map(r => r.id).concat(S.sessions.map(s => s.id)));
@@ -404,7 +411,7 @@ async function importFiles(fileList) {
       const a = FIT.summarize(/\.gz$/i.test(name) ? FIT.gunzip(bytes) : bytes), id = 'f' + Math.round(a.start / 1000);
       if (known.has(id)) {
         const ex = a.ride && S.rides.find(r => r.id === id);
-        if (ex && !ex.ver) { RKEYS.forEach(k => { if (a[k] != null) ex[k] = a[k]; }); if (!ex.nm) ex.n = a.name; res.upd++; } else res.dup++;
+        if (ex && (ex.ver || 0) < 3) { RKEYS.forEach(k => { if (a[k] != null) ex[k] = a[k]; }); if (!ex.nm) ex.n = a.name; res.upd++; } else res.dup++;
         return;
       }
       known.add(id);
@@ -434,7 +441,7 @@ async function importFiles(fileList) {
   render();
   const line = (ico, txt) => `<div class="li"><span class="ic">${ico}</span><span class="bd"><b>${txt}</b></span></div>`;
   sheetBody(`${res.err ? `<div class="box red" style="margin-bottom:10px">${esc(res.err)}</div>` : ''}
-    <div class="card list" style="margin-bottom:14px">${line('🚴', plural(res.rides, 'neue Fahrt', 'neue Fahrten'))}${res.upd ? line('✨', `${res.upd} um die Leistungsanalyse ergänzt`) : ''}${res.other ? line('🏃', plural(res.other, 'andere Aktivität', 'andere Aktivitäten')) : ''}${res.dup ? line('↩︎', `${res.dup} schon vorhanden – übersprungen`) : ''}${res.bad ? line('⚠️', `${res.bad} nicht lesbar`) : ''}</div>
+    <div class="card list" style="margin-bottom:14px">${line('🚴', plural(res.rides, 'neue Fahrt', 'neue Fahrten'))}${res.upd ? line('✨', `${res.upd} um neue Auswertungen ergänzt`) : ''}${res.other ? line('🏃', plural(res.other, 'andere Aktivität', 'andere Aktivitäten')) : ''}${res.dup ? line('↩︎', `${res.dup} schon vorhanden – übersprungen`) : ''}${res.bad ? line('⚠️', `${res.bad} nicht lesbar`) : ''}</div>
     ${!res.total && !res.err ? '<p class="p" style="text-align:center;margin-bottom:14px">In der Auswahl waren keine FIT-Dateien. Unterstützt werden .fit, .fit.gz und ZIP-Archive mit solchen Dateien.</p>' : ''}
     ${(res.rides || res.upd) && !myFtp() ? '<button class="btn soft" data-act="perfEdit" style="margin-bottom:8px">FTP & Gewicht eintragen – für genaue Analyse</button>' : ''}
     <button class="btn primary" data-act="closeSheet">Fertig</button>`);
@@ -449,6 +456,8 @@ const RINFO = {
   prof: ['Leistungsprofil', ['Vergleicht deine Bestwerte pro kg Körpergewicht mit Richtwerten nach Andrew Coggan.', '5 s = Sprint · 1 min = anaerobe Kapazität · 5 min = VO₂max · FTP = Schwelle.', 'Wo du im Vergleich am stärksten bist, ergibt deinen Fahrertyp; wo am schwächsten, liegt das größte Potenzial.']],
   dist: ['Intensitätsverteilung', ['Zeit in den 7 Leistungszonen, Rollphasen ausgenommen.', 'Zusammengefasst: <b>locker</b> = Z1–Z2 (bis 75 % FTP), <b>mittel</b> = Z3–Z4 (76–105 %), <b>hart</b> = Z5+ (über 105 %).', '<b>Polarisiert</b> (viel locker, wenig mittel, etwas hart) und <b>pyramidal</b> gelten als besonders wirksam. Viel „mittel“ ist anstrengend, bringt aber vergleichsweise wenig.']],
   ef: ['Aerobe Effizienz (EF)', ['Normalisierte Leistung geteilt durch den Durchschnittspuls – also Watt pro Herzschlag.', 'Gewertet werden nur lockere Fahrten über 45 min, damit die Werte vergleichbar sind.', 'Steigt der EF, ist deine Grundlagenausdauer besser geworden.']],
+  dur: ['Ermüdungsresistenz', ['Wie viel Leistung du noch bringst, nachdem du schon viel Arbeit geleistet hast (1000 bzw. 2000 kJ – das entspricht grob 1,5 bzw. 3 Stunden zügiger Fahrt).', 'Verglichen wird deine beste 5-Minuten-Leistung „frisch“ mit der besten nach dieser Vorbelastung.', 'Unter 5–10 % Abfall gilt als sehr gut. Im Rennen entscheidet oft nicht die frische Leistung, sondern was am Ende noch geht.', 'Aussagekräftig nur, wenn du spät in einer Fahrt noch einmal richtig hart gefahren bist.']],
+  hz: ['Puls-Zonen', ['Zeit in fünf Puls-Zonen, berechnet aus deinem Schwellenpuls (nach Joe Friel).', 'Z1 unter 81 % · Z2 81–89 % · Z3 90–93 % · Z4 94–99 % · Z5 ab 100 % des Schwellenpulses.', 'Der Puls reagiert träge und hängt von Hitze, Schlaf und Koffein ab – für kurze Intervalle ist die Leistung genauer, für lange Grundlagenfahrten ist der Puls ein guter Maßstab.']],
   dec: ['Entkopplung (Pw:HR)', ['Vergleicht Leistung pro Puls in der ersten und zweiten Hälfte einer Fahrt.', 'Unter 5 %: der Puls blieb stabil – deine Ausdauer reicht für diese Intensität.', 'Über 8 %: der Puls lief davon – Ermüdung, Hitze, wenig Trinken oder die Fahrt war für deine aktuelle Ausdauer zu intensiv.']]
 };
 
@@ -484,4 +493,152 @@ Object.assign(ACT, {
     Object.assign(S.settings, { ftp: pd.ftp, kg: pd.kg, lthr: l ? Math.round(l) : null, sex: pd.sex });
     save(); closeSheet(); keepScroll(render); toast('Leistungsdaten gespeichert');
   }
+});
+
+
+/* ── Puls-Zonen (nach Friel, Anteil am Schwellenpuls) ── */
+const HZN = ['Z1 Erholung', 'Z2 Grundlage', 'Z3 Tempo', 'Z4 Schwelle', 'Z5 Maximal'], HZL = [0.81, 0.9, 0.94, 1.0], HZC = ['#9aa5a2', '#3b82f6', '#2f9e44', '#d9a400', '#e5484d'];
+function hrZonesOf(rides, lthr) {
+  const z = [0, 0, 0, 0, 0];
+  rides.forEach(r => (r.hh || []).forEach((sec, i) => { if (!sec) return; const f = (i * 5 + 2.5) / lthr; let k = 0; while (k < 4 && f >= HZL[k]) k++; z[k] += sec; }));
+  return z;
+}
+const zoneBar5 = z => { const t = z.reduce((a, b) => a + b, 0) || 1; return `<div class="zbar">${z.map((v, i) => v ? `<i style="width:${v / t * 100}%;background:${HZC[i]}"></i>` : '').join('')}</div>`; };
+const zoneLegend5 = z => { const t = z.reduce((a, b) => a + b, 0) || 1; return `<div class="legend" style="padding:8px 0 0">${z.map((v, i) => v / t >= 0.005 ? `<span><i style="background:${HZC[i]}"></i>${HZN[i].split(' ')[0]} ${Math.round(v / t * 100)} %</span>` : '').join('')}</div>`; };
+function hrZonesHTML(rides) {
+  const l = S.settings.lthr, has = rides.some(r => r.hh);
+  if (!has) return '';
+  if (!l) return `<div class="section-t">Puls-Zonen</div><div class="card pad"><p class="small muted">Trag deinen Schwellenpuls ein, dann siehst du die Zeit in Puls-Zonen – wichtig für Fahrten ohne Wattmessung.</p><button class="btn soft sm" data-act="perfEdit" style="margin-top:8px;width:100%">Schwellenpuls eintragen</button></div>`;
+  const z = hrZonesOf(rides, l), t = z.reduce((a, b) => a + b, 0);
+  if (t < 600) return '';
+  return `<div class="section-t">Puls-Zonen${rinfo('hz')}</div><div class="card pad">${zoneBar5(z)}${zoneLegend5(z)}<p class="small muted" style="margin-top:8px">${hTxt(t / 60)} h mit Pulsdaten · ${Math.round((z[0] + z[1]) / t * 100)} % im lockeren Bereich (Z1–Z2).</p></div>`;
+}
+function durHTML(R, cR) {
+  const rs = ridesIn(R.from, R.to).filter(r => r.du), fresh = cR[300] ? cR[300].w : null;
+  if (!rs.length || !fresh) return '';
+  const best = kj => rs.reduce((m, r) => r.du[kj] && r.du[kj][300] > m ? r.du[kj][300] : m, 0);
+  const a = best(1000), b = best(2000), ref = b || a, drop = (fresh - ref) / fresh * 100;
+  const g = drop <= 5 ? ['grn', 'sehr stabil'] : drop <= 10 ? ['grn', 'gut'] : drop <= 20 ? ['', 'normal'] : ['amb', 'deutlicher Abfall'];
+  const row = (l, w) => w ? `<div class="row" style="padding:6px 0;font-size:15px"><span class="muted">${l}</span><b>${w} W${w !== fresh ? ` <span style="font-weight:500;font-size:13px;color:var(--t2)">−${Math.round((fresh - w) / fresh * 100)} %</span>` : ''}</b></div>` : '';
+  return `<div class="section-t">Ermüdungsresistenz${rinfo('dur')}</div><div class="card pad"><div class="row" style="margin-bottom:6px"><b>Beste 5 Minuten</b><span class="tag ${g[0]}">${g[1]}</span></div>
+    ${row('frisch', fresh)}${row('nach 1000 kJ', a)}${row('nach 2000 kJ', b)}
+    <p class="small muted" style="margin-top:6px">${drop > 20 ? 'Deine Leistung fällt nach Vorbelastung deutlich ab – oder du bist spät in den Fahrten nie mehr voll gefahren. Lange Grundlagenfahrten mit einem harten Abschnitt am Ende trainieren genau das.' : 'So viel bringst du noch, wenn schon viel Arbeit in den Beinen steckt – oft wichtiger als die frische Bestleistung.'}</p></div>`;
+}
+function streamSVG(st, min, ftp) {
+  const W = 340, H = 130, n = (st.p || st.h).length, x = i => 10 + i * (W - 20) / (n - 1);
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="chart">`;
+  if (st.p) {
+    const max = Math.max(50, ...st.p, ftp || 0) * 1.08, y = v => 6 + (1 - v / max) * (H - 26);
+    s += `<path d="M${x(0).toFixed(1)},${H - 20} ${st.p.map((v, i) => 'L' + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ')} L${x(n - 1).toFixed(1)},${H - 20} Z" style="fill:var(--acc);opacity:.22"/><polyline class="cl" points="${st.p.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ')}"/>`;
+    if (ftp) s += `<line class="cl cl2" x1="10" x2="${W - 10}" y1="${y(ftp).toFixed(1)}" y2="${y(ftp).toFixed(1)}"/>` + tx(12, y(ftp) - 3, 'FTP ' + ftp + ' W');
+    s += tx(W - 10, 12, 'max ' + Math.max(...st.p) + ' W', 'end');
+  }
+  if (st.h) {
+    const hv = st.h.filter(v => v > 0), lo = Math.min(...hv) - 5, hi = Math.max(...hv) + 5, y = v => 6 + (1 - (v - lo) / (hi - lo || 1)) * (H - 26);
+    s += `<polyline class="cl" style="stroke:var(--c-pain);stroke-width:1.8" points="${st.h.map((v, i) => x(i).toFixed(1) + ',' + y(v || lo).toFixed(1)).join(' ')}"/>`;
+    if (!st.p) s += tx(W - 10, 12, 'max ' + Math.max(...hv) + ' bpm', 'end');
+  }
+  return s + tx(10, H - 5, '0:00') + tx(W / 2, H - 5, hTxt(min / 2), 'middle') + tx(W - 10, H - 5, hTxt(min) + ' h', 'end') + '</svg>';
+}
+
+/* ── Zonentabelle ── */
+const ZDESC = ['Locker rollen, aktive Erholung', 'Stundenlang fahrbar, Gespräch möglich', 'Zügig, 1–3 h am Stück', 'Hart: Intervalle von 8–30 min (Sweet Spot: 88–94 %)', 'Sehr hart: Intervalle von 3–8 min', 'Maximal: 30 s bis 2 min', 'Sprints unter 30 s'];
+const ZPCT = ['< 55 %', '56–75 %', '76–90 %', '91–105 %', '106–120 %', '121–150 %', '> 150 %'];
+function zoneSheet() {
+  const ftp = myFtp(), l = S.settings.lthr, lim = [0, 0.55, 0.75, 0.9, 1.05, 1.2, 1.5];
+  const pw = i => !ftp ? ZPCT[i] : i === 0 ? '< ' + Math.round(ftp * 0.55) : i === 6 ? '> ' + Math.round(ftp * 1.5) : (Math.round(ftp * lim[i]) + 1) + '–' + Math.round(ftp * lim[i + 1]);
+  const hl = [0, 0.81, 0.9, 0.94, 1.0], hr = i => i === 0 ? '< ' + Math.round(l * 0.81) : i === 4 ? '≥ ' + Math.round(l) : Math.round(l * hl[i]) + '–' + (Math.round(l * hl[i + 1]) - 1);
+  openSheet({
+    title: 'Zonentabelle', body: `<div class="section-t" style="margin-top:4px">Leistung${ftp ? `<span class="muted">FTP ${ftp} W</span>` : ''}</div>
+      <div class="card list">${ZN.map((n, i) => `<div class="li" style="min-height:52px"><span class="tier sm" style="background:${ZC[i]}">${i + 1}</span><span class="bd"><b>${n.replace(/^Z\d /, '')}</b><small>${ZDESC[i]}</small></span><span class="rt" style="font-size:15px;color:var(--t1)"><b>${pw(i)}</b>${ftp ? ' W' : ''}<br><span style="font-size:11.5px;color:var(--t3)">${ftp ? ZPCT[i] : ''}</span></span></div>`).join('')}</div>
+      ${!ftp ? '<button class="btn soft sm" data-act="perfEdit" style="margin-top:8px;width:100%">FTP eintragen für Watt-Werte</button>' : ''}
+      <div class="section-t">Puls${l ? `<span class="muted">Schwellenpuls ${l}</span>` : ''}</div>
+      ${l ? `<div class="card list">${HZN.map((n, i) => `<div class="li" style="min-height:48px"><span class="tier sm" style="background:${HZC[i]}">${i + 1}</span><span class="bd"><b>${n.replace(/^Z\d /, '')}</b></span><span class="rt" style="font-size:15px;color:var(--t1)"><b>${hr(i)}</b> bpm</span></div>`).join('')}</div>` : '<div class="card pad"><p class="small muted">Dein Schwellenpuls ist etwa der Durchschnittspuls der letzten 20 Minuten eines 30-minütigen, voll gefahrenen Zeitfahrens.</p><button class="btn soft sm" data-act="perfEdit" style="margin-top:8px;width:100%">Schwellenpuls eintragen</button></div>'}
+      <p class="note">Leistungszonen nach Coggan, Puls-Zonen nach Friel. Zonen sind Bereiche zur Orientierung – die Übergänge sind fließend.</p>`
+  });
+}
+
+/* ── Trainingseinheiten mit Zielwerten aus dem FTP ── */
+const rpt = (n, a) => { let o = []; for (let i = 0; i < n; i++) o = o.concat(a); return o; };
+const RW = [
+  { id: 'rec', n: 'Erholungsfahrt', e: '🌿', lo: 0.4, hi: 0.55, main: '45–60 min locker rollen', feel: 'Sehr leicht – du könntest dabei singen.', d: 'Fördert die Durchblutung, ohne einen neuen Reiz zu setzen. Ideal am Tag nach harten Einheiten.', steps: [[50, 0.5]] },
+  { id: 'z2', n: 'Grundlage', e: '🛣️', lo: 0.56, hi: 0.75, main: '1,5–4 h gleichmäßig', feel: 'Locker – ganze Sätze sprechen geht problemlos.', d: 'Das Fundament: verbessert Fettstoffwechsel und Ausdauer bei wenig Ermüdung. Darf den größten Teil deiner Zeit ausmachen.', steps: [[10, 0.55], [100, 0.68], [10, 0.5]] },
+  { id: 'z2s', n: 'Grundlage mit Sprints', e: '⚡', lo: 0.56, hi: 0.75, main: 'Grundlage + 6 × 8 s Sprint', rest: '6 min locker zwischen den Sprints', feel: 'Locker, dazwischen kurze Maximal-Antritte.', d: 'Hält die Spritzigkeit, ohne die Erholung zu stören – gut in Grundlagenphasen.', steps: [[20, 0.62]].concat(rpt(6, [[0.15, 2.5], [6, 0.62]]), [[30, 0.65], [10, 0.5]]) },
+  { id: 'tempo', n: 'Tempo 2 × 20', e: '🚄', lo: 0.76, hi: 0.88, main: '2 × 20 min', rest: '5 min locker', feel: 'Zügig – nur noch kurze Sätze möglich.', d: 'Muskuläre Ausdauer für lange Anstiege und Gruppenfahrten. Ermüdet mehr, als es sich anfühlt – nicht zu oft.', steps: [[15, 0.6], [20, 0.83], [5, 0.5], [20, 0.83], [10, 0.5]] },
+  { id: 'ss', n: 'Sweet Spot 3 × 12', e: '🍯', lo: 0.88, hi: 0.94, main: '3 × 12 min', rest: '4 min locker', feel: 'Hart, aber kontrolliert – einzelne Worte.', d: 'Viel Reiz für die Schwelle bei vertretbarer Ermüdung – der effizienteste Weg zu mehr FTP bei wenig Zeit.', steps: [[15, 0.6]].concat(rpt(3, [[12, 0.91], [4, 0.5]]), [[8, 0.5]]) },
+  { id: 'ss2', n: 'Sweet Spot 2 × 20', e: '🍯', lo: 0.88, hi: 0.94, main: '2 × 20 min', rest: '5 min locker', feel: 'Hart, aber kontrolliert – einzelne Worte.', d: 'Die längere Variante, wenn 3 × 12 gut gehen. Baut Stehvermögen an der Schwelle auf.', steps: [[15, 0.6], [20, 0.9], [5, 0.5], [20, 0.9], [10, 0.5]] },
+  { id: 'thr', n: 'Schwelle 4 × 8', e: '🔥', lo: 0.95, hi: 1.05, main: '4 × 8 min', rest: '4 min locker', feel: 'Sehr hart – am Limit dessen, was du lange halten kannst.', d: 'Hebt die Leistung an der Schwelle direkt an. Nur ausgeruht fahren.', steps: [[15, 0.6]].concat(rpt(4, [[8, 1.0], [4, 0.5]]), [[8, 0.5]]) },
+  { id: 'vo2', n: 'VO₂max 5 × 4', e: '🫁', lo: 1.1, hi: 1.2, main: '5 × 4 min', rest: '4 min locker', feel: 'Maximal für 4 Minuten – Atmung am Anschlag.', d: 'Erhöht die maximale Sauerstoffaufnahme – der stärkste Hebel für die „Decke“ deiner Ausdauerleistung.', steps: [[15, 0.6], [2, 0.95], [3, 0.5]].concat(rpt(5, [[4, 1.15], [4, 0.45]]), [[8, 0.5]]) },
+  { id: '3030', n: '30/30-Intervalle', e: '⏱️', lo: 1.2, hi: 1.35, main: '2 × 10 × (30 s hart / 30 s locker)', rest: '5 min zwischen den Blöcken', feel: 'Kurze harte Antritte, die sich summieren.', d: 'VO₂max-Training, das sich leichter anfühlt als lange Intervalle. Guter Einstieg in intensives Training.', steps: [[15, 0.6]].concat(rpt(10, [[0.5, 1.28], [0.5, 0.5]]), [[5, 0.5]], rpt(10, [[0.5, 1.28], [0.5, 0.5]]), [[8, 0.5]]) },
+  { id: 'ana', n: 'Anaerob 6 × 1 min', e: '💥', lo: 1.3, hi: 1.5, main: '6 × 1 min', rest: '4 min locker', feel: 'Alles geben über eine Minute.', d: 'Für Attacken, kurze Rampen und harte Antritte. Sehr fordernd – höchstens einmal pro Woche.', steps: [[15, 0.6], [2, 0.95], [3, 0.5]].concat(rpt(6, [[1, 1.4], [4, 0.45]]), [[8, 0.5]]) },
+  { id: 'spr', n: 'Sprints 8 × 10 s', e: '🚀', lo: 2, hi: 3, main: '8 × 10 s maximal', rest: '5 min locker', feel: 'Absolut maximal, volle Erholung dazwischen.', d: 'Schult Maximalkraft am Pedal und das Nervensystem – kaum ermüdend, wenn die Pausen lang genug sind.', steps: [[20, 0.62]].concat(rpt(8, [[0.17, 2.6], [5, 0.5]]), [[8, 0.5]]) },
+  { id: 'test', n: 'FTP-Test (20 min)', e: '🎯', lo: 1.0, hi: 1.1, main: '20 min so hart wie möglich', feel: 'Gleichmäßig maximal – die letzten 5 Minuten entscheiden.', d: 'Bestimmt deinen FTP neu: 95 % der Durchschnittsleistung. Alle 6–8 Wochen, ausgeruht.', steps: [[15, 0.6], [5, 1.05], [10, 0.5], [20, 1.04], [10, 0.5]] }
+];
+const rwGet = id => RW.find(w => w.id === id);
+const rwMin = w => Math.round(w.steps.reduce((a, s) => a + s[0], 0));
+const rwTss = w => Math.round(w.steps.reduce((a, s) => a + s[0] / 60 * Math.min(s[1], 1.6) * Math.min(s[1], 1.6) * 100, 0));
+const rwZone = f => { let k = 0; while (k < 6 && f > ZLIM[k]) k++; return k; };
+const rwWatt = w => { const f = myFtp(); return w.lo >= 2 ? 'maximal' : f ? `${Math.round(f * w.lo)}–${Math.round(f * w.hi)} W` : `${Math.round(w.lo * 100)}–${Math.round(w.hi * 100)} % FTP`; };
+function rwBlocks(w) {
+  const W = 340, H = 70, tot = w.steps.reduce((a, s) => a + s[0], 0); let x = 6, s = `<svg viewBox="0 0 ${W} ${H}" class="chart">`;
+  w.steps.forEach(st => { const bw = Math.max(1.2, st[0] / tot * (W - 12)), h = Math.min(1, st[1] / 1.5) * (H - 10); s += `<rect x="${x.toFixed(1)}" y="${(H - 4 - h).toFixed(1)}" width="${Math.max(1, bw - 0.6).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" style="fill:${ZC[rwZone(st[1])]}"/>`; x += bw; });
+  return s + '</svg>';
+}
+// Vorschlag für die nächste Einheit: Erholung geht vor; sonst gezielt an der größten Lücke arbeiten
+function nextRide() {
+  const P = pmc(), last = P.days[P.days.length - 1], now = Date.now(), rd = typeof readiness === 'function' ? readiness(today()) : null;
+  const hard = r => { const t = rideTss(r); return (t.if || 0) >= 0.85 || t.v >= 150; };
+  const y0 = fromKey(today()).getTime(), yest = S.rides.filter(r => r.s >= y0 - DAY && r.s < y0), l7 = S.rides.filter(r => r.s >= now - 7 * DAY);
+  const pick = (id, why) => ({ w: rwGet(id), why });
+  if (rd != null && rd < 45) return pick('rec', `Deine Tagesform ist niedrig (${rd}) – heute nur locker oder Pause.`);
+  if (last && last.tsb < -30) return pick('rec', `Form ${Math.round(last.tsb)}: sehr hohe Ermüdung – erst erholen, dann wieder belasten.`);
+  if (yest.some(hard)) return pick('z2', 'Gestern war intensiv – heute Grundlage, damit der Reiz wirken kann.');
+  if (l7.filter(hard).length >= 3) return pick('z2', 'Schon drei harte Einheiten in 7 Tagen – mehr bringt jetzt nichts, Grundlage schon.');
+  if (!myFtp()) return pick('z2', 'Ohne FTP sind Intervall-Vorgaben ungenau – fahr Grundlage und trag deinen FTP ein.');
+  const long = S.rides.some(r => r.s >= now - 10 * DAY && r.min >= 150), wd = new Date().getDay();
+  if (!long && (wd === 6 || wd === 0)) return pick('z2', 'In den letzten 10 Tagen fehlt eine lange Fahrt – das Wochenende ist ideal dafür.');
+  const z = zonesOf(S.rides.filter(r => r.s >= now - 28 * DAY), myFtp()), dt = distType(z);
+  if (dt && dt.c[0] === 'Schwellenlastig') return pick('vo2', 'Du fährst viel im mittleren Bereich. Besser: wenige, dafür richtig harte Intervalle – und den Rest locker.');
+  const c = curve(now - 90 * DAY, Infinity), kg = myKg(), th = PROF[S.settings.sex || 'm'];
+  if (kg && c[5] && c[60] && c[300]) {
+    const lv = [['spr', level(c[5].w / kg, th[5]), 'Sprint (5 s)'], ['ana', level(c[60].w / kg, th[60]), '1 Minute'], ['vo2', level(c[300].w / kg, th[300]), '5 Minuten'], ['ss', level(myFtp() / kg, th.ftp), 'Schwelle']].sort((a, b) => a[1] - b[1]);
+    if (lv[3][1] - lv[0][1] >= 0.8) return pick(lv[0][0] === 'ss' && last && last.tsb > 5 ? 'thr' : lv[0][0], `Dein größtes Potenzial liegt bei „${lv[0][2]}“ – diese Einheit setzt genau dort an.`);
+  }
+  if (dt && dt.f3 < 0.04) return pick('vo2', 'Du fährst fast nur locker. Eine VO₂max-Einheit pro Woche bringt jetzt den größten Fortschritt.');
+  return pick(last && last.tsb > 5 ? 'thr' : 'ss', last && last.tsb > 5 ? 'Du bist frisch – guter Tag für harte Arbeit an der Schwelle.' : 'Sweet Spot: viel Wirkung auf die Schwelle bei vertretbarer Ermüdung.');
+}
+function nextRideCard() {
+  const n = nextRide(); if (!n.w) return '';
+  return `<div class="section-t">Nächste Einheit<button data-act="rwLib">Alle Einheiten ›</button></div>
+    <button class="card pad" data-act="rw" data-id="${n.w.id}" style="display:block;width:100%"><div class="row" style="align-items:flex-start"><span style="font-size:28px">${n.w.e}</span><span style="flex:1;min-width:0"><b style="font-size:17px">${esc(n.w.n)}</b><br><span class="small muted">${esc(n.w.main)} · ${rwWatt(n.w)}</span></span><span class="tag acc">${rwMin(n.w)} min</span></div>
+      <p class="small" style="margin-top:8px;color:var(--t2)">💡 ${esc(n.why)}</p></button>`;
+}
+function rwSheet(id) {
+  const w = rwGet(id); if (!w) return;
+  const f = myFtp(), main = w.steps.filter(s => s[1] >= w.lo - 0.01 && s[1] <= Math.max(w.hi, 3));
+  openSheet({
+    title: w.n, body: `<div class="tags" style="margin:0 0 10px"><span class="tag acc">${rwMin(w)} min</span><span class="tag">Belastung ≈ ${rwTss(w)}</span><span class="tag" style="background:${ZC[rwZone((w.lo + Math.min(w.hi, 1.6)) / 2)]};color:#fff">${ZN[rwZone((w.lo + Math.min(w.hi, 1.6)) / 2)]}</span></div>
+      <div class="card pad" style="margin-bottom:10px">${rwBlocks(w)}</div>
+      <div class="card pad stack" style="margin-bottom:10px">
+        <div><div class="sec">Hauptteil</div><p style="font-size:19px;font-weight:800">${esc(w.main)}</p><p style="font-size:17px;font-weight:700;color:var(--acc-t)">${rwWatt(w)}${f && w.lo < 2 ? ` <span class="muted" style="font-weight:500;font-size:13px">(${Math.round(w.lo * 100)}–${Math.round(w.hi * 100)} % FTP)</span>` : ''}</p>${w.rest ? `<p class="small muted">Pause: ${esc(w.rest)}</p>` : ''}</div>
+        <div><div class="sec">So fühlt es sich an</div><p class="p" style="color:var(--t1)">${esc(w.feel)}</p></div>
+        <div><div class="sec">Wofür</div><p class="p">${esc(w.d)}</p></div></div>
+      <div class="card pad" style="margin-bottom:10px"><div class="sec">Ablauf</div>${(() => { const out = []; let i = 0; const st = w.steps; while (i < st.length) { let n = 1; while (i + 2 * n + 1 < st.length + 1 && st[i + 2 * n] && st[i + 2 * n][0] === st[i][0] && st[i + 2 * n][1] === st[i][1] && st[i + 2 * n + 1] && st[i + 1] && st[i + 2 * n + 1][0] === st[i + 1][0] && st[i + 2 * n + 1][1] === st[i + 1][1]) n++; const t = m => m < 1 ? Math.round(m * 60) + ' s' : m + ' min', pw = x => x >= 2 ? 'maximal' : f ? Math.round(f * x) + ' W' : Math.round(x * 100) + ' %'; if (n > 1) { out.push(`<b>${n} ×</b> ${t(st[i][0])} bei ${pw(st[i][1])} + ${t(st[i + 1][0])} bei ${pw(st[i + 1][1])}`); i += 2 * n; } else { out.push(`${t(st[i][0])} bei ${pw(st[i][1])}`); i++; } } return `<ol class="ol">${out.map(o => `<li>${o}</li>`).join('')}</ol>`; })()}</div>
+      ${!f ? '<button class="btn soft" data-act="perfEdit" style="margin-bottom:8px">FTP eintragen für Watt-Vorgaben</button>' : ''}
+      <div class="stack"><button class="btn plain" data-act="zones">📋 Zonentabelle</button><button class="btn plain" data-act="rt" data-id="r_bike">🧘 Danach: „Nach dem Radfahren“</button></div>`
+  });
+}
+function rwLibSheet() {
+  const n = nextRide();
+  openSheet({
+    title: 'Rad-Einheiten', body: `${n.w ? `<div class="box ins" style="margin-bottom:12px;font-weight:500;font-size:14.5px">💡 Vorschlag: <b>${esc(n.w.n)}</b> – ${esc(n.why)}</div>` : ''}
+      <div class="card list">${RW.map(w => `<button class="li" data-act="rw" data-id="${w.id}"><span class="ic">${w.e}</span><span class="bd"><b>${esc(w.n)}</b><small class="clip">${esc(w.main)} · ${rwWatt(w)}</small></span><span class="rt">${rwMin(w)} min<br>≈ ${rwTss(w)}</span></button>`).join('')}</div>
+      <button class="btn plain" data-act="zones" style="margin-top:12px">📋 Zonentabelle in Watt und Puls</button>
+      <p class="note">Faustregel für die Woche: höchstens 2–3 harte Einheiten, dazwischen mindestens ein lockerer Tag. Der Rest ist Grundlage.</p>`
+  });
+}
+Object.assign(ACT, {
+  zones() { zoneSheet(); },
+  rwLib() { rwLibSheet(); },
+  rw(el) { rwSheet(el.dataset.id); }
 });
