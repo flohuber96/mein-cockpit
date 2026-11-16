@@ -69,7 +69,7 @@ main{padding:4px 14px calc(96px + var(--bot));max-width:1100px;margin:0 auto}
 @media (min-width:860px){.top{max-width:1100px;margin:0 auto}}
 
 /* Tab bar */
-.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);padding:6px 6px calc(6px + var(--bot));background:var(--blur);-webkit-backdrop-filter:saturate(180%) blur(18px);backdrop-filter:saturate(180%) blur(18px);border-top:1px solid var(--line)}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(5,1fr);padding:6px 6px calc(6px + var(--bot));background:var(--blur);-webkit-backdrop-filter:saturate(180%) blur(18px);backdrop-filter:saturate(180%) blur(18px);border-top:1px solid var(--line)}
 .tabbar button{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0;color:var(--t3);font-size:11px;font-weight:600}
 .tabbar svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .tabbar button.on{color:var(--acc)}
@@ -149,7 +149,7 @@ main{padding:4px 14px calc(96px + var(--bot));max-width:1100px;margin:0 auto}
 .chart .chh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:0 4px 6px}
 .chart .chh b{font-size:16px}
 .chart .chh small{font-size:12.5px;color:var(--t2);font-weight:600}
-.chart svg{display:block;width:100%;max-width:560px;margin:0 auto;height:auto;touch-action:pan-y}
+.chart svg{display:block;width:100%;max-width:480px;margin:0 auto;height:auto;touch-action:pan-y}
 .chart svg text{font-family:inherit;font-variant-numeric:tabular-nums}
 .legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 4px 0;font-size:12.5px;color:var(--t2);font-weight:600}
 .legend span{display:inline-flex;align-items:center;gap:6px}
@@ -290,3 +290,89 @@ details.tbl th:first-child,details.tbl td:first-child{text-align:left}
   .step input{font-size:21px}
   .timer .clock{font-size:50px}
 }
+
+/* ── Ergebnis-Check auf der Rezept-Karte ── */
+.checks{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.ck{border-radius:12px;padding:8px 6px;text-align:center;background:var(--card2);min-width:0;border:1.5px solid transparent}
+.ck small{display:block;font-size:10.5px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ck b{display:block;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ck span{display:block;font-size:11.5px;font-weight:700;color:var(--t2);line-height:1.2}
+.ck em{display:block;font-style:normal;font-size:10.5px;color:var(--t3);font-weight:600;line-height:1.2;margin-top:2px}
+.ck.good{background:var(--ok-soft);border-color:transparent}.ck.good span{color:var(--ok)}
+.ck.warn{background:var(--warn-soft)}.ck.warn span{color:var(--warn)}
+@media (max-width:370px){.checks{grid-template-columns:repeat(2,1fr)}}
+
+/* ── Empfehlung: Sicherheit, Geschmack nachtragen, Hinweise ── */
+.confl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.confl small{font-size:12px;color:var(--t3);font-weight:600}
+.conf{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap}
+.conf.hoch{background:var(--ok-soft);color:var(--ok)}
+.conf.mittel{background:var(--warn-soft);color:var(--warn)}
+.conf.gering{background:var(--card2);color:var(--t2)}
+.qt{margin-top:12px;padding:10px;border-radius:12px;background:var(--acc-soft)}
+.qt .tl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:0 2px 8px;font-size:14px;font-weight:800}
+.qt .tl small{font-size:12px;color:var(--t2);font-weight:600}
+.qt .tscale button{background:var(--card)}
+.more-r{margin-top:8px}
+.more-r summary{cursor:pointer;font-size:14px;font-weight:700;color:var(--acc-t);padding:4px 0;list-style:none}
+.more-r summary::-webkit-details-marker{display:none}
+.more-r summary::before{content:"▸ "}.more-r[open] summary::before{content:"▾ "}
+
+/* ── Dein Weg ── */
+.weg p{font-size:14px;line-height:1.5;color:var(--t2);margin:0 4px 10px}
+.weg p b{color:var(--t1)}
+.weg-main{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:2px 4px 8px;padding:10px 12px;border-radius:12px;background:var(--ok-soft)}
+.weg-main small{display:block;font-size:12px;font-weight:700;color:var(--t2)}
+.weg-main b{font-size:28px;font-weight:900;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--t1)}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 2px 8px}
+.facts div{border-radius:12px;padding:8px 10px;background:var(--card2)}
+.facts small{display:block;font-size:11px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.03em}
+.facts b{display:block;font-size:16px;font-weight:800}
+.facts span{display:block;font-size:12px;color:var(--t2);line-height:1.3}
+.facts .good b{color:var(--ok)}.facts .warn b{color:var(--warn)}.facts .bad b{color:var(--bad)}
+.cap{margin:8px 4px 0;line-height:1.45}
+
+/* ── Formular: weitere Angaben ── */
+.morefields{margin-bottom:12px}
+.morefields>summary{cursor:pointer;list-style:none;padding:12px 14px;border-radius:12px;background:var(--card);box-shadow:var(--shadow);font-weight:700;font-size:15px;margin-bottom:12px}
+.morefields>summary::-webkit-details-marker{display:none}
+.morefields>summary small{display:block;font-size:12.5px;color:var(--t2);font-weight:600}
+.morefields>summary::after{content:"▸";float:right;margin-top:-28px;color:var(--t3)}
+.morefields[open]>summary::after{content:"▾"}
+
+/* ── Wissen ── */
+.intro p,.steps li,.honest li{font-size:14.5px;line-height:1.5;color:var(--t2)}
+.intro p{margin:6px 0 10px}.intro b,.steps b,.honest b{color:var(--t1)}
+.intro>b{font-size:17px}
+.steps ol,.honest ul{margin:0 0 0 20px;display:flex;flex-direction:column;gap:6px}
+.dd{display:grid;gap:10px}
+@media (min-width:700px){.dd{grid-template-columns:1fr 1fr}}
+.dd b{font-size:16px}
+.dd ul{list-style:none;margin:8px 0 0;display:flex;flex-direction:column;gap:7px}
+.dd li{font-size:14px;line-height:1.4;color:var(--t2);padding-left:22px;position:relative}
+.do{border-top:4px solid var(--ok)}.do b{color:var(--ok)}.do li::before{content:"✓";position:absolute;left:2px;color:var(--ok);font-weight:900}
+.dont{border-top:4px solid var(--bad)}.dont b{color:var(--bad)}.dont li::before{content:"✗";position:absolute;left:2px;color:var(--bad);font-weight:900}
+.know>summary{display:flex;gap:12px;align-items:center;padding:13px 14px;cursor:pointer;list-style:none}
+.know>summary::-webkit-details-marker{display:none}
+.know>summary::after{content:"▸";margin-left:auto;color:var(--t3);font-size:14px}
+.know[open]>summary::after{content:"▾"}
+.know .ki{flex:none;width:38px;height:38px;border-radius:11px;background:var(--acc-soft);display:grid;place-items:center;font-size:19px}
+.know summary b{display:block;font-size:16px}
+.know summary small{display:block;font-size:13px;color:var(--t2)}
+.kb{padding:0 14px 14px}
+.kb p{font-size:14.5px;line-height:1.5;color:var(--t2);margin:0 0 10px}
+.kb p b{color:var(--t1)}
+.you{font-size:14px;line-height:1.5;background:var(--acc-soft);border-radius:10px;padding:8px 10px;margin-bottom:10px;color:var(--t1)}
+.effect{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.effect div{background:var(--card2);border-radius:10px;padding:8px 10px;font-size:13.5px;line-height:1.4;color:var(--t2)}
+.effect small{display:block;font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px}
+.ktbl{width:100%;border-collapse:collapse;margin-top:6px;font-size:13px;font-variant-numeric:tabular-nums}
+.ktbl th,.ktbl td{text-align:left;padding:4px 4px;border-bottom:1px solid var(--line)}
+.ktbl th{font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.03em}
+.taste-t{overflow:hidden}
+.taste-t .tr{display:flex;gap:12px;align-items:center;padding:11px 14px}
+.taste-t .tr+.tr{border-top:1px solid var(--line)}
+.taste-t i{flex:none;width:14px;height:14px;border-radius:50%}
+.taste-t b{display:block;font-size:15px}
+.taste-t small{display:block;font-size:13px;color:var(--t2)}
+.chart .chh small{white-space:nowrap}

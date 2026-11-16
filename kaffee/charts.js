@@ -100,7 +100,8 @@
     });
     if (opts.next) { // Erwarteter nächster Shot
       const nx = X(Math.min(xMax, Math.max(xMin, opts.next.t))), ny = Y(Math.min(yMax, Math.max(yMin, opts.next.ratio)));
-      h += `<g><path d="M${nx - 6} ${ny}h12M${nx} ${ny - 6}v12" style="stroke:var(--acc);stroke-width:2.5;stroke-linecap:round"/><text x="${nx + 9}" y="${ny + 4}" style="fill:var(--acc-t);font-size:11px;font-weight:800">nächster</text></g>`;
+      const nr = nx > W - R - 60;
+      h += `<g><path d="M${nx - 6} ${ny}h12M${nx} ${ny - 6}v12" style="stroke:var(--acc);stroke-width:2.5;stroke-linecap:round"/><text x="${nr ? nx - 9 : nx + 9}" y="${ny + (nr ? 18 : 4)}" text-anchor="${nr ? 'end' : 'start'}" style="fill:var(--acc-t);font-size:11px;font-weight:800">nächster</text></g>`;
     }
     return h + '</svg>';
   }
@@ -136,5 +137,65 @@
     return h + '</svg>';
   }
 
-  window.Charts = { recipe, compass, line, legendTaste, tasteVar, TASTE };
+
+  /* Dial-in-Kurve: Mahlgrad (x) gegen Zeit bei Ziel-Ausbeute (y).
+     Trendlinie aus dem Modell, Ziel-Zeitband waagerecht, daraus der Ziel-Mahlgrad senkrecht. */
+  function dial(F, T, o = {}) {
+    const pts = F.pts; if (!pts.length) return '';
+    const W = 340, H = 268, L = 38, R = 14, Tp = 42, B = 44, step = o.step || 0.25;
+    const xs = pts.map(p => p.x).concat(F.range && !F.extrap ? F.range : []).concat(o.nextGrind != null ? [o.nextGrind] : []);
+    let x0 = Math.min(...xs) - step * 2, x1 = Math.max(...xs) + step * 2;
+    if (x1 - x0 < 1.5) { const m = (x0 + x1) / 2; x0 = m - 0.75; x1 = m + 0.75; }
+    const YCAP = Math.max(T.tMax + 15, 60);
+    const ysv = pts.map(p => p.y);
+    const y0 = Math.max(0, Math.floor(Math.min(T.tMin - 8, ...ysv) / 5) * 5), y1 = Math.min(YCAP, Math.ceil(Math.max(T.tMax + 8, ...ysv) / 5) * 5);
+    const X = v => L + (W - L - R) * (v - x0) / (x1 - x0);
+    const Y = v => Tp + (H - Tp - B) * (1 - (Math.min(v, y1) - y0) / (y1 - y0));
+    let h = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Mahlgrad gegen Zeit mit Ziel-Mahlgrad">`;
+    // Raster
+    const ys = niceStep(y1 - y0);
+    for (let v = Math.ceil(y0 / ys) * ys; v <= y1 + 1e-9; v += ys) h += `<line x1="${L}" y1="${Y(v)}" x2="${W - R}" y2="${Y(v)}" style="stroke:var(--grid)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end" style="fill:var(--t2);font-size:11px">${f0(v)}</text>`;
+    const xsStep = (x1 - x0) > 4 ? 1 : 0.5;
+    for (let v = Math.ceil(x0 / xsStep) * xsStep; v <= x1 + 1e-9; v += xsStep) h += `<line x1="${X(v)}" y1="${Tp}" x2="${X(v)}" y2="${H - B}" style="stroke:var(--grid)"/><text x="${X(v)}" y="${H - B + 15}" text-anchor="middle" style="fill:var(--t2);font-size:11px">${String(+v.toFixed(2)).replace('.', ',')}</text>`;
+    h += `<line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" style="stroke:var(--axis)"/>`;
+    h += `<text x="4" y="13" style="fill:var(--t2);font-size:11px;font-weight:700">Zeit bei Ziel-Ausbeute (s)</text>`;
+    const left = o.coarserUp ? 'feiner' : 'gröber', right = o.coarserUp ? 'gröber' : 'feiner';
+    h += `<text x="${L}" y="${H - 6}" style="fill:var(--t2);font-size:11px;font-weight:700">◂ ${left}</text><text x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle" style="fill:var(--t2);font-size:11px;font-weight:700">Mahlgrad</text><text x="${W - R}" y="${H - 6}" text-anchor="end" style="fill:var(--t2);font-size:11px;font-weight:700">${right} ▸</text>`;
+    // Ziel-Zeitband
+    h += `<rect x="${L}" y="${Y(T.tMax)}" width="${W - L - R}" height="${Y(T.tMin) - Y(T.tMax)}" style="fill:var(--ok-soft)"/>`;
+    h += `<text x="${L + 4}" y="${Y(T.tMin) - 4}" style="fill:var(--ok);font-size:10.5px;font-weight:700">Ziel ${T.tMin}–${T.tMax} s</text>`;
+    // Ziel-Mahlgrad
+    if (F.range) {
+      const a = Math.max(x0, F.range[0] - step / 2), b = Math.min(x1, F.range[1] + step / 2);
+      if (b > a) {
+        h += `<rect x="${X(a)}" y="${Tp}" width="${X(b) - X(a)}" height="${H - B - Tp}" style="fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5;stroke-dasharray:4 3"/>`;
+        const lbl = (F.range[0] === F.range[1] ? String(F.range[0]) : F.range[0] + '–' + F.range[1]).replace(/\./g, ',');
+        const cx = Math.min(W - R - 50, Math.max(L + 50, (X(a) + X(b)) / 2));
+        h += `<text x="${cx}" y="${Tp - 8}" text-anchor="middle" style="fill:var(--ok);font-size:12px;font-weight:800">${F.method === 'trend' && F.extrap ? 'Hochrechnung ' : F.method === 'between' ? 'Ziel-Mahlgrad ca. ' : 'Ziel-Mahlgrad '}${lbl}</text>`;
+      }
+    }
+    if (F.ok) {
+      // Trendlinie
+      const ty = x => F.a + F.b * x;
+      const xAt = yv => (yv - F.a) / F.b, xa = Math.max(x0, Math.min(xAt(y0), xAt(y1))), xb = Math.min(x1, Math.max(xAt(y0), xAt(y1)));
+      if (xb > xa) h += `<line x1="${X(xa)}" y1="${Y(ty(xa))}" x2="${X(xb)}" y2="${Y(ty(xb))}" style="stroke:var(--acc);stroke-width:2;stroke-dasharray:6 4;stroke-linecap:round"/>`;
+    }
+    if (o.nextGrind != null && o.nextGrind >= x0 && o.nextGrind <= x1) {
+      h += `<line x1="${X(o.nextGrind)}" y1="${Tp}" x2="${X(o.nextGrind)}" y2="${H - B}" style="stroke:var(--acc);stroke-width:2"/>`;
+      const nr = X(o.nextGrind) > W - R - 60;
+      h += `<text x="${X(o.nextGrind) + (nr ? -4 : 4)}" y="${H - B - 6}" text-anchor="${nr ? 'end' : 'start'}" style="fill:var(--acc-t);font-size:11px;font-weight:800">nächster</text>`;
+    }
+    // Punkte (älter zuerst, der neueste oben)
+    pts.forEach((p, i) => {
+      const last = i === pts.length - 1, cx = X(p.x), over = p.y > y1, cy = Y(p.y), col = tasteVar(p.s.taste);
+      if (last) h += `<circle cx="${cx}" cy="${cy}" r="11" style="fill:none;stroke:var(--acc);stroke-width:2"/>`;
+      if (over) h += `<path d="M${cx - 5} ${cy + 4}l5 -9l5 9z" style="fill:${col || 'var(--neutral)'}"/>`;
+      else h += `<circle cx="${cx}" cy="${cy}" r="${last ? 6.5 : 5.5}" style="fill:${col || 'var(--card)'};stroke:${col ? 'var(--card)' : 'var(--neutral)'};stroke-width:2"/>`;
+      h += `<circle cx="${cx}" cy="${cy}" r="14" fill="transparent" data-tip="${esc(o.tip ? o.tip(p.s) + (over ? '<small>(Zeit über dem Diagramm-Rand)</small>' : '') : '')}" tabindex="0"/>`;
+      if (last) h += `<text x="${cx}" y="${cy - 15 < Tp + 4 ? cy + 25 : cy - 15}" text-anchor="middle" style="fill:var(--t1);font-size:11px;font-weight:800">zuletzt</text>`;
+    });
+    return h + '</svg>';
+  }
+
+  window.Charts = { recipe, compass, line, dial, legendTaste, tasteVar, TASTE };
 })();
