@@ -72,8 +72,8 @@ if (navigator.storage && navigator.storage.persist) navigator.storage.persist().
 const ui = {
   home: { sub: 'over' },
   body: { sub: 'map', sel: null, topic: null, view: 'both', deep: false },
-  train: { sub: 'start', grp: 'glutes', home: false },
-  mob: { sub: 'routines', grp: 'm_hipflex' },
+  train: { sub: 'start', grp: 'glutes', home: false, q: '' },
+  mob: { sub: 'routines', grp: 'm_hipflex', q: '' },
   ride: { chart: 'h', all: false },
   cal: null, rep: 0,
   fullMin: false
@@ -147,6 +147,12 @@ function audio() {
     if (actx && actx.state === 'suspended') actx.resume();
   } catch (e) { /* kein Ton */ }
   return actx;
+}
+// Sprachansage (für Routinen: Übung und Seite hören, ohne aufs Handy zu schauen)
+const canSpeak = () => 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function';
+function say(txt) {
+  if (!S.settings.voice || !canSpeak()) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(txt); u.lang = 'de-DE'; u.rate = 1.05; speechSynthesis.speak(u); } catch (e) { /* ignore */ }
 }
 function beep(freq = 880, dur = 0.12, when = 0) {
   if (!S.settings.sound) return;
@@ -369,13 +375,13 @@ function buildPlan() {
 }
 function planRoutine() {
   const P = buildPlan(); if (!P.hasData || !(P.mob.length + P.akt.length)) return null;
-  return { id: 'r_plan', n: 'Mein Plan', e: '🎯', plan: true, d: 'Aus deiner Bestandsaufnahme: erst beweglich machen, dann ansteuern.',
+  return { id: 'r_plan', n: 'Meine Mobility-Routine', e: '🎯', plan: true, d: 'Aus deiner Bestandsaufnahme: erst beweglich machen, dann ansteuern.',
     items: P.mob.concat(P.akt.slice(0, 3)).map(x => [x.id, E[x.id].hold]), why: Object.fromEntries(P.mob.concat(P.akt).map(x => [x.id, x.why])) };
 }
 function planTemplate() {
   const P = buildPlan(); if (!P.hasData || !(P.akt.length + P.kraft.length)) return null;
   const item = x => { const e = E[x.id], s = parseInt(e.dose, 10) || 3; return e.tr === 't' || e.tr === 'wt' ? { x: x.id, s, sec: e.hold, rest: 45 } : { x: x.id, s, r: e.dose.replace(/^\d+×\s*/, ''), rest: e.t === 'akt' ? 30 : 90 }; };
-  return { id: 't_plan', n: 'Mein Plan', sub: 'aus deiner Bestandsaufnahme', e: '🎯', plan: true, d: 'Aktiviert und kräftigt gezielt, was in deinen Tests schwach war.',
+  return { id: 't_plan', n: 'Mein Kraft-Plan', sub: 'aus deiner Bestandsaufnahme', e: '🎯', plan: true, d: 'Aktiviert und kräftigt gezielt, was in deinen Tests schwach war.',
     items: P.akt.slice(0, 3).concat(P.kraft).map(item), why: Object.fromEntries(P.akt.concat(P.kraft).map(x => [x.id, x.why])) };
 }
 
@@ -434,7 +440,7 @@ function setRing(root, pct) {
 // Bestwerte und Verlauf einer Übung aus den gespeicherten Trainings
 function exHistory(id) {
   const out = [];
-  S.sessions.forEach(s => { if (s.k !== 'kraft') return; s.ex.forEach(x => { if (x.x === id && x.sets.length) out.push({ ts: s.s, sets: x.sets }); }); });
+  S.sessions.forEach(s => { if (s.k !== 'kraft') return; s.ex.forEach(x => { if (x.x === id && x.sets.length) out.push({ ts: s.s, sets: x.sets, rpe: s.rpe }); }); });
   return out.sort((a, b) => b.ts - a.ts);
 }
 const e1rm = s => (s.w || 0) * (1 + (s.r || 0) / 30);
@@ -469,6 +475,7 @@ function suggest(e, tg) {
   if (e.tr === 'wr') {
     const w = Math.max.apply(null, sets.map(s => s.w || 0)); if (!w) return null;
     const allTop = sets.filter(s => (s.w || 0) >= w).every(s => (s.r || 0) >= top);
+    if (allTop && last.rpe === 5) return { w, txt: `${num(w)} kg halten – die letzte Einheit war am Limit, erst festigen` };
     if (allTop) { const inc = w < 10 ? 1 : w < 40 ? 2 : 2.5, nw = Math.round((w + inc) * 2) / 2; return { w: nw, txt: `${num(nw)} kg × ${rr[0]}${rr[1] !== rr[0] ? '–' + rr[1] : ''} – letztes Mal hast du alle Sätze mit ${top} Wdh. geschafft` }; }
     return { w, txt: `${num(w)} kg halten und eine Wiederholung mehr schaffen (Ziel ${top})` };
   }

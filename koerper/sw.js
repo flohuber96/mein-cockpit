@@ -1,5 +1,5 @@
 // Offline-Cache für den Körper-Coach. Bei Änderungen VERSION erhöhen.
-const VERSION = 'koerper-v5';
+const VERSION = 'koerper-v6';
 const FILES = ['./', 'index.html', 'app.css', 'data.js', 'moves-data.js', 'moves.js', 'core.js', 'gear.js', 'body.js', 'train.js', 'mob.js', 'fit.js', 'ride.js', 'well.js', 'plan.js', 'home.js',
   '../koerper-data.js', '../shared/cloud.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 

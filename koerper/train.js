@@ -16,7 +16,7 @@ VIEWS.train = {
   render() {
     const t = ui.train;
     return `<div class="seg">${[['start', 'Start'], ['lib', 'Übungen'], ['log', 'Verlauf']].map(([k, n]) => `<button data-act="tSub" data-v="${k}" class="${t.sub === k ? 'on' : ''}">${n}</button>`).join('')}</div>` +
-      (t.sub === 'start' ? tStart() : t.sub === 'lib' ? tLib() : tLog());
+      (t.sub === 'start' ? tStart() : t.sub === 'lib' ? libWrap('train', tLib) : tLog());
   }
 };
 
@@ -28,7 +28,8 @@ function tStart() {
     ${S.active ? `<button class="btn primary" data-act="wOpen" style="margin-bottom:10px">▶ Laufendes Workout fortsetzen</button>` : ''}
     ${plan ? `<div class="section-t" style="margin-top:6px">Für dich</div><div class="card list">${row(plan)}</div>` : `<div class="card pad" style="margin-bottom:4px"><div class="row"><span style="font-size:28px">🎯</span><span style="flex:1"><b>Persönlicher Kraft-Plan</b><br><span class="small muted">Mach den Körper-Check – dann stellt die App dir ein Programm zusammen.</span></span></div><button class="btn soft sm" data-act="goCheck" style="margin-top:10px;width:100%">Zum Check</button></div>`}
     <div class="section-t">Vorlagen</div><div class="card list">${X.TEMPLATES.map(row).join('')}</div>
-    ${S.templates.length ? `<div class="section-t">Eigene Vorlagen</div><div class="card list">${S.templates.map(row).join('')}</div>` : ''}
+    <div class="section-t">Eigene Vorlagen<button data-act="tbNew">＋ Neu</button></div>
+    ${S.templates.length ? `<div class="card list">${S.templates.map(row).join('')}</div>` : '<div class="card empty">Bau dir dein eigenes Programm – oder öffne eine Vorlage und passe sie an.</div>'}
     <div class="stack" style="margin-top:14px">
       <button class="btn soft" data-act="wFree">＋ Freies Workout starten</button>
       <button class="btn plain" data-act="sportNew">🏃 Andere Aktivität eintragen</button>
@@ -43,7 +44,7 @@ function tplSheet(id) {
       ${gearOn() ? `<div class="row" style="margin:0 2px 8px">${gearChip()}${sw ? `<span class="small muted">${plural(sw, 'Übung angepasst', 'Übungen angepasst')}</span>` : '<span class="small muted">alles machbar ✓</span>'}</div>` : ''}
       <div class="card list">${items.map((it, i) => exRow(it.x, { rt: targetTxt(it), wrap: !!(it.orig || it.na), sub: it.orig || it.na ? swapNote(it.orig || it.x, it) : t.why && t.why[it.x] ? t.why[it.x] : `Pause ${it.rest || S.settings.rest} s` })).join('')}</div>
       <div class="stack" style="margin-top:14px"><button class="btn primary" data-act="wStart" data-id="${esc(id)}">▶ Workout starten</button>
-      ${custom ? `<button class="btn danger" data-act="tplDel" data-id="${esc(id)}">Vorlage löschen</button>` : ''}</div>
+      ${custom ? `<button class="btn plain" data-act="tbEdit" data-id="${esc(id)}">✏️ Bearbeiten</button><button class="btn danger" data-act="tplDel" data-id="${esc(id)}">Vorlage löschen</button>` : `<button class="btn plain" data-act="tbCopy" data-id="${esc(id)}">✏️ Kopieren und anpassen</button>`}</div>
       <p class="note">Vorher kurz aufwärmen: 5 Minuten Mobility („Aufwärmen vor dem Krafttraining“) reichen.</p>`
   });
 }
@@ -127,6 +128,7 @@ function finishWorkout() {
     title: 'Geschafft! 💪', body: `<div class="stats k3" style="margin-bottom:12px">
       <div class="card stat"><small>Dauer</small><b>${fmtMin((ses.e - ses.s) / 6e4)}</b></div><div class="card stat"><small>Sätze</small><b>${sets}</b></div><div class="card stat"><small>Volumen</small><b>${vol ? Math.round(vol) + '<i>kg</i>' : '–'}</b></div></div>
       ${prs.length ? `<div class="box ins" style="margin-bottom:12px"><div class="sec">🏆 Neue Bestwerte</div>${ul(prs, 'var(--acc)')}</div>` : ''}
+      ${rpeHTML(ses)}
       <div class="card list" style="margin-bottom:14px">${ex.map(x => exRow(x.x, { tier: false, sub: x.sets.map(s => setTxt(E[x.x], s).replace(' kg', '')).join(' · '), rt: x.sets.length + ' ×' })).join('')}</div>
       <div class="stack">${!a.tpl ? `<button class="btn soft" data-act="tplSave" data-id="${ses.id}">📋 Als Vorlage speichern</button>` : ''}
       <button class="btn plain" data-act="rt" data-id="r_post">🧘 Jetzt 9 min dehnen (Hintere Kette)</button><button class="btn primary" data-act="closeSheet">Fertig</button></div>`
@@ -171,6 +173,47 @@ function tLib() {
     <div class="row" style="margin:0 4px 4px">${gearChip()}<button class="lnk" data-act="rules" data-v="kraft">Wie lese ich das?</button></div>
     ${list}`;
 }
+// Suche über alle Übungen (Name, Muskel, Bereich, Gerät)
+function libSearch(q, mob) {
+  q = q.trim().toLowerCase(); const ord = 'SABCD', G = mob ? X.MGROUPS : X.GROUPS;
+  const xs = Object.values(E).filter(e => (mob ? e.t === 'mob' : e.t !== 'mob') && (e.n.toLowerCase().includes(q) || e.m.some(m => nm(m).toLowerCase().includes(q)) || (e.eq || '').toLowerCase().includes(q) || Object.keys(e.tiers).some(k => G[k] && G[k].n.toLowerCase().includes(q))))
+    .sort((a, b) => (canDo(a.id) ? 0 : 1) - (canDo(b.id) ? 0 : 1) || ord.indexOf(a.tier) - ord.indexOf(b.tier) || a.n.localeCompare(b.n));
+  return xs.length ? `<p class="small muted" style="margin:0 4px 8px">${plural(xs.length, 'Treffer', 'Treffer')}</p><div class="card list">${xs.slice(0, 50).map(e => exRow(e.id, { sub: e.m.slice(0, 3).map(nm).join(', ') })).join('')}</div>` : '<div class="card empty"><div class="big">🔍</div>Nichts gefunden. Versuch es mit einem Muskel (z. B. „Gesäß“) oder einem Gerät (z. B. „Band“).</div>';
+}
+function libWrap(k, inner) {
+  const q = ui[k].q || '';
+  return `<div class="field" style="margin-bottom:10px"><input type="search" data-in="libQ" data-k="${k}" value="${esc(q)}" placeholder="🔍 Übung, Muskel oder Gerät suchen" autocomplete="off"></div><div id="libList">${q.trim() ? libSearch(q, k === 'mob') : inner()}</div>`;
+}
+IN.libQ = el => { const k = el.dataset.k; ui[k].q = el.value; const box = $('#libList'); if (box) box.innerHTML = el.value.trim() ? libSearch(el.value, k === 'mob') : (k === 'mob' ? mLib() : tLib()); };
+
+/* ── Anstrengung einer Einheit ── */
+const RPE = [['😌', 'leicht', 'Da geht mehr – nächstes Mal Gewicht oder Wiederholungen steigern.'], ['🙂', 'mittel', 'Solide. Für Fortschritt darf es beim nächsten Mal etwas fordernder sein.'], ['😤', 'fordernd', 'Genau richtig: fordernd, aber sauber – so entsteht Fortschritt.'], ['🥵', 'hart', 'Starker Reiz. Achte auf guten Schlaf und plane morgen eher locker.'], ['😵', 'maximal', 'Am Limit. Nächstes Mal nicht steigern und morgen locker bleiben – ständig am Limit bremst den Fortschritt.']];
+function rpeHTML(s) {
+  return `<div class="card pad" style="margin-bottom:12px" id="rpeBox"><div class="sec">Wie anstrengend war es?</div><div class="rpe">${RPE.map((r, i) => `<button data-act="sesRpe" data-id="${esc(s.id)}" data-v="${i + 1}" class="${s.rpe === i + 1 ? 'on' : ''}"><span>${r[0]}</span><small>${r[1]}</small></button>`).join('')}</div>${s.rpe ? `<p class="small muted" style="margin-top:8px">${RPE[s.rpe - 1][2]}</p>` : ''}</div>`;
+}
+
+/* ── Eigene Vorlage bauen ── */
+let tb = null;
+const tbTimed = x => E[x] && (E[x].tr === 't' || E[x].tr === 'wt');
+function tbItem(x) {
+  const e = E[x]; if (tbTimed(x)) return { x, s: 3, sec: e.hold || 30, rest: 45 };
+  const m = String(e.dose || '').match(/^(\d+)×\s*(\d+(?:–\d+)?(?: je Seite)?)/);
+  return { x, s: m ? +m[1] : 3, r: m ? m[2] : '8–12', rest: S.settings.rest };
+}
+function tbBody() {
+  const ms = (i, f, v, l) => `<div class="ms"><button data-act="tbStep" data-i="${i}" data-f="${f}" data-d="-1" aria-label="weniger">−</button><span><b>${v}</b><small>${l}</small></span><button data-act="tbStep" data-i="${i}" data-f="${f}" data-d="1" aria-label="mehr">＋</button></div>`;
+  return `<div class="field"><label>Name</label><input type="text" data-in="tbName" value="${esc(tb.n)}" placeholder="z. B. Mein Ganzkörper-Plan"></div>
+    <div class="section-t" style="margin-top:6px">Übungen<span class="muted">ca. ${tplMin({ items: tb.items })} min</span></div>
+    ${tb.items.length ? `<div class="stack s6">${tb.items.map((it, i) => `<div class="card pad tbi"><div class="row" style="gap:4px"><b class="clip" style="flex:1;min-width:0">${esc(E[it.x].n)}</b>
+      <button class="lnk" data-act="tbMv" data-i="${i}" data-d="-1" aria-label="nach oben"${i ? '' : ' disabled'}>↑</button><button class="lnk" data-act="tbMv" data-i="${i}" data-d="1" aria-label="nach unten"${i < tb.items.length - 1 ? '' : ' disabled'}>↓</button><button class="lnk" data-act="tbRm" data-i="${i}" aria-label="Entfernen">✕</button></div>
+      <div class="tbg">${ms(i, 's', it.s, it.s === 1 ? 'Satz' : 'Sätze')}${it.sec ? ms(i, 'sec', it.sec, 'Sek.') : ms(i, 'r', (String(it.r).match(/\d+(?:[–-]\d+)?/) || ['10'])[0], /je Seite/.test(it.r) ? 'je Seite' : 'Wdh.')}${ms(i, 'rest', it.rest || S.settings.rest, 's Pause')}</div></div>`).join('')}</div>` : '<div class="card empty">Noch keine Übung.</div>'}
+    <div class="stack" style="margin-top:12px"><button class="btn soft" data-act="tbPick">＋ Übung hinzufügen</button><button class="btn primary" data-act="tbSave">Vorlage speichern</button></div>`;
+}
+function tbOpen(t, copy) {
+  tb = t ? { id: copy ? null : t.id, n: copy ? t.n + ' (angepasst)' : t.n, items: (copy ? resolveItems(t.items).filter(it => E[it.x] && !it.na) : t.items.filter(it => E[it.x])).map(it => { const o = { x: it.x, s: it.s || 3, rest: it.rest || S.settings.rest }; if (it.sec) o.sec = it.sec; else o.r = String(it.r || '10'); return o; }) } : { id: null, n: '', items: [] };
+  openSheet({ title: t && !copy ? 'Vorlage bearbeiten' : 'Neue Vorlage', left: 'Abbrechen', body: tbBody(), onClose() { if (!pick) tb = null; } });
+}
+IN.tbName = el => { if (tb) tb.n = el.value; };
 function rulesSheet(k) {
   openSheet({
     title: 'Tier-Ranking', body: `<p class="p" style="margin:0 4px 12px">Jede Übung ist für ihren Zielbereich eingestuft – nach <b style="color:var(--t1)">Wirkung</b>, <b style="color:var(--t1)">Sicherheit</b>, <b style="color:var(--t1)">Steigerbarkeit</b> und Nutzen als Ausgleich zum Radfahren. Die Einstufung ist eine Orientierung, kein Gesetz: Die beste Übung ist die, die du regelmäßig und schmerzfrei machst.</p>
@@ -224,7 +267,8 @@ function sessionSheet(id) {
   const d = new Date(s.s);
   let body = `<p class="p" style="margin:0 4px 12px">${DAYS[d.getDay()]}, ${fmtDate(d)} · ${pad(d.getHours())}:${pad(d.getMinutes())} Uhr</p>`;
   if (s.k === 'kraft') body += `<div class="card list">${s.ex.map(x => E[x.x] ? exRow(x.x, { tier: false, sub: x.sets.map(z => setTxt(E[x.x], z).replace(' kg', '')).join(' · '), rt: x.sets.length + ' ×' }) : '').join('')}</div>
-    <div class="stack" style="margin-top:14px"><button class="btn soft" data-act="wRepeat" data-id="${esc(id)}">↻ Nochmal so trainieren</button>`;
+    <div style="margin-top:12px">${rpeHTML(s)}</div>
+    <div class="stack"><button class="btn soft" data-act="wRepeat" data-id="${esc(id)}">↻ Nochmal so trainieren</button>`;
   else body += `<div class="card pad"><div class="row"><span class="muted">Dauer</span><b>${fmtMin(s.k === 'mob' ? (s.sec || 0) / 60 : s.min || 0)}</b></div>${s.cnt ? `<div class="row" style="margin-top:6px"><span class="muted">Übungen</span><b>${s.cnt}</b></div>` : ''}${s.note ? `<p class="p" style="margin-top:8px">${esc(s.note)}</p>` : ''}</div><div class="stack" style="margin-top:14px">`;
   openSheet({ title: s.n || 'Einheit', body: body + `<button class="btn danger" data-act="sesDel" data-id="${esc(id)}">Eintrag löschen</button></div>` });
 }
@@ -288,6 +332,33 @@ Object.assign(ACT, {
   goCheck() { go('body', { sub: 'check' }); },
   tpl(el) { tplSheet(el.dataset.id); },
   tplDel(el) { confirmSheet('Diese Vorlage löschen?', 'Löschen', () => { S.templates = S.templates.filter(t => t.id !== el.dataset.id); save(); closeAllSheets(); render(); }); },
+  tbNew() { tbOpen(null); },
+  tbEdit(el) { const t = S.templates.find(x => x.id === el.dataset.id); closeAllSheets(); if (t) tbOpen(t); },
+  tbCopy(el) { const t = getTemplate(el.dataset.id); closeAllSheets(); if (t) tbOpen(t, true); },
+  tbPick() { openPicker({ title: 'Übung hinzufügen', act: 'tbAdd' }); },
+  tbAdd(el) { const e = E[el.dataset.id]; if (!tb || !e) return; tb.items.push(tbItem(e.id)); closeSheet(); sheetBody(tbBody()); toast(e.n + ' hinzugefügt'); },
+  tbStep(el) {
+    const it = tb.items[+el.dataset.i], f = el.dataset.f, d = +el.dataset.d;
+    if (f === 's') it.s = Math.max(1, Math.min(8, it.s + d));
+    else if (f === 'sec') it.sec = Math.max(5, Math.min(300, it.sec + d * 5));
+    else if (f === 'rest') it.rest = Math.max(15, Math.min(300, (it.rest || S.settings.rest) + d * 15));
+    else { const ns = (String(it.r).match(/\d+/g) || ['10']).map(Number); if (ns[0] + d >= 1 && ns[ns.length - 1] + d <= 50) it.r = String(it.r).replace(/\d+/g, n => +n + d); }
+    sheetBody(tbBody());
+  },
+  tbMv(el) { const i = +el.dataset.i, j = i + +el.dataset.d, a = tb.items; if (j < 0 || j >= a.length) return; const t = a[i]; a[i] = a[j]; a[j] = t; sheetBody(tbBody()); },
+  tbRm(el) { tb.items.splice(+el.dataset.i, 1); sheetBody(tbBody()); },
+  tbSave() {
+    if (!tb.items.length) { toast('Füge mindestens eine Übung hinzu'); return; }
+    const t = { id: tb.id || 'c_' + uid(), n: tb.n.trim() || 'Meine Vorlage', e: '📋', items: tb.items };
+    const i = S.templates.findIndex(x => x.id === t.id);
+    if (i >= 0) S.templates[i] = t; else S.templates.push(t);
+    save(); closeAllSheets(); render(); toast('Vorlage gespeichert');
+  },
+  sesRpe(el) {
+    const s = S.sessions.find(x => x.id === el.dataset.id); if (!s) return;
+    const v = +el.dataset.v; if (s.rpe === v) delete s.rpe; else s.rpe = v;
+    save(); const box = $('#rpeBox'); if (box) box.outerHTML = rpeHTML(s);
+  },
   tplSave(el) {
     const s = S.sessions.find(x => x.id === el.dataset.id); if (!s) return;
     askText('Als Vorlage speichern', 'Name der Vorlage', s.n === 'Freies Workout' ? 'Mein Workout' : s.n, name => {

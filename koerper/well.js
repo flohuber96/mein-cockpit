@@ -104,7 +104,7 @@ function wellSheet(k) {
       <div class="field"><label>Notiz</label><input type="text" data-in="wellNote" value="${esc(we.w.note || '')}" placeholder="z. B. spät gegessen, viel Arbeit"></div></details>
     <div class="stack"><button class="btn primary" data-act="wellSave">Speichern</button>${old ? '<button class="btn danger" data-act="wellDel">Eintrag löschen</button>' : ''}</div>`;
   we.body = body;
-  openSheet({ title: k === today() ? 'Wie geht’s dir heute?' : `${DAYS[d.getDay()]}, ${fmtDate(d)}`, left: 'Abbrechen', right: '<button class="lnk r" data-act="wellSave">Speichern</button>', body: body(), onClose() { we = null; } });
+  openSheet({ title: k === today() ? 'Check-in heute' : `${DAYS[d.getDay()]}, ${fmtDate(d)}`, left: 'Abbrechen', right: '<button class="lnk r" data-act="wellSave">Speichern</button>', body: body(), onClose() { we = null; } });
 }
 IN.wellNum = el => { if (we) { const v = numVal(el.value); if (v) we.w[el.dataset.k] = v; else delete we.w[el.dataset.k]; } };
 IN.wellNote = el => { if (we) we.w.note = el.value; };

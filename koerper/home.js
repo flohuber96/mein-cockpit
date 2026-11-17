@@ -70,9 +70,9 @@ VIEWS.home = {
 function settingsBody() {
   const s = S.settings;
   const st = (k, lbl, v, unit, step) => `<div class="setting"><span class="lbl">${lbl}</span><div class="stepper" style="grid-template-columns:38px 64px 38px;min-height:40px"><button data-act="setStep" data-k="${k}" data-d="-${step}">−</button><b style="font-size:16px">${v}<small>${unit}</small></b><button data-act="setStep" data-k="${k}" data-d="${step}">＋</button></div></div>`;
-  const tg = (k, lbl) => `<div class="setting"><span class="lbl">${lbl}</span><div class="seg sm"><button data-act="setTog" data-k="${k}" data-v="1" class="${s[k] !== false ? 'on' : ''}">An</button><button data-act="setTog" data-k="${k}" data-v="0" class="${s[k] === false ? 'on' : ''}">Aus</button></div></div>`;
+  const tg = (k, lbl, off) => { const on = off ? s[k] === true : s[k] !== false; return `<div class="setting"><span class="lbl">${lbl}</span><div class="seg sm"><button data-act="setTog" data-k="${k}" data-v="1" class="${on ? 'on' : ''}">An</button><button data-act="setTog" data-k="${k}" data-v="0" class="${on ? '' : 'on'}">Aus</button></div></div>`; };
   return `<div class="section-t" style="margin-top:4px">Wochenziele</div><div class="card">${st('goalK', '🏋️ Krafteinheiten', s.goalK, '×', 1)}${st('goalM', '🧘 Mobility-Einheiten', s.goalM, '×', 1)}</div>
-    <div class="section-t">Timer</div><div class="card">${st('rest', 'Satzpause', s.rest, 's', 15)}${st('prep', 'Vorlauf im Player', s.prep, 's', 1)}${tg('sound', 'Signalton')}${tg('vib', 'Vibration')}</div>
+    <div class="section-t">Timer</div><div class="card">${st('rest', 'Satzpause', s.rest, 's', 15)}${st('prep', 'Vorlauf im Player', s.prep, 's', 1)}${tg('sound', 'Signalton')}${canSpeak() ? tg('voice', 'Ansage in Routinen', true) : ''}${tg('vib', 'Vibration')}</div>
     <div class="section-t">Training</div><div class="card menu"><button data-act="gear"><span class="ico">🧰</span>Meine Ausrüstung<span class="muted" style="margin-left:auto;font-size:14px">${esc(GP[gearState().p].n)} ›</span></button></div>
     <div class="section-t">Darstellung</div><div class="card"><div class="setting"><span class="lbl">Design</span><div class="seg sm">${[['auto', 'Auto'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([k, n]) => `<button data-act="setTheme" data-v="${k}" class="${s.theme === k ? 'on' : ''}">${n}</button>`).join('')}</div></div></div>
     ${window.Cloud ? Cloud.section() : ''}
@@ -109,7 +109,7 @@ Object.assign(ACT, {
     const k = el.dataset.k, lim = { goalK: [0, 7], goalM: [0, 14], rest: [15, 600], prep: [0, 15] }[k];
     S.settings[k] = Math.max(lim[0], Math.min(lim[1], S.settings[k] + +el.dataset.d)); save(); sheetBody(settingsBody()); render();
   },
-  setTog(el) { S.settings[el.dataset.k] = el.dataset.v === '1'; save(); sheetBody(settingsBody()); if (el.dataset.k === 'sound' && S.settings.sound) beep(880, 0.1); },
+  setTog(el) { S.settings[el.dataset.k] = el.dataset.v === '1'; save(); sheetBody(settingsBody()); if (el.dataset.k === 'sound' && S.settings.sound) beep(880, 0.1); if (el.dataset.k === 'voice' && S.settings.voice) say('Ansage ist an.'); },
   setTheme(el) { S.settings.theme = el.dataset.v; save(true); applyTheme(); sheetBody(settingsBody()); },
   askOk() { const v = $('#askIn').value.trim(), fn = pending.ask; pending.ask = null; closeSheet(); if (v && fn) fn(v); },
   dataExport() {
