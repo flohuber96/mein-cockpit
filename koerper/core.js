@@ -37,7 +37,7 @@ const KEY = 'koerper.v1';
 const boot = { rebuilt: false };
 function fresh() {
   return {
-    v: 1, sid: uid(), pains: {}, tests: {}, snaps: [], sessions: [], routines: [], templates: [], rides: [], favs: {}, well: {},
+    v: 1, sid: uid(), pains: {}, tests: {}, snaps: [], sessions: [], routines: [], templates: [], rides: [], favs: {}, well: {}, testv: {}, painLog: {},
     settings: { theme: 'auto', rest: 90, sound: true, vib: true, prep: 5, goalK: 2, goalM: 4, ftp: null },
     active: null, ui: { view: 'home' }
   };
@@ -72,9 +72,10 @@ if (navigator.storage && navigator.storage.persist) navigator.storage.persist().
 const ui = {
   home: { sub: 'over' },
   body: { sub: 'map', sel: null, topic: null, view: 'both', deep: false },
-  train: { sub: 'start', grp: 'glutes', home: false },
-  mob: { sub: 'routines', grp: 'm_hipflex' },
+  train: { sub: 'start', grp: 'glutes', home: false, q: '' },
+  mob: { sub: 'routines', grp: 'm_hipflex', q: '' },
   ride: { chart: 'h', all: false },
+  cal: null, rep: 0,
   fullMin: false
 };
 
@@ -147,6 +148,12 @@ function audio() {
   } catch (e) { /* kein Ton */ }
   return actx;
 }
+// Sprachansage (für Routinen: Übung und Seite hören, ohne aufs Handy zu schauen)
+const canSpeak = () => 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function';
+function say(txt) {
+  if (!S.settings.voice || !canSpeak()) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(txt); u.lang = 'de-DE'; u.rate = 1.05; speechSynthesis.speak(u); } catch (e) { /* ignore */ }
+}
 function beep(freq = 880, dur = 0.12, when = 0) {
   if (!S.settings.sound) return;
   const a = audio(); if (!a) return;
@@ -217,13 +224,14 @@ function renderDock() {
 setInterval(() => { $$('[data-live="wtime"]').forEach(n => { if (S.active) n.textContent = fmtClock((Date.now() - S.active.s) / 1000); }); }, 1000);
 
 /* ───────── Aktionen & Ansichten ───────── */
-const ACT = {}, IN = {}, VIEWS = {};
+const ACT = {}, IN = {}, CH = {}, VIEWS = {};
 document.addEventListener('click', e => {
   audio(); // Ton erst nach einer Berührung erlaubt (iOS)
   const el = e.target.closest('[data-act]'); if (!el) return;
   const fn = ACT[el.dataset.act]; if (fn) fn(el, e);
 });
 document.addEventListener('input', e => { const el = e.target.closest('[data-in]'); if (el && IN[el.dataset.in]) IN[el.dataset.in](el, e); });
+document.addEventListener('change', e => { const el = e.target.closest('[data-ch]'); if (el && CH[el.dataset.ch]) CH[el.dataset.ch](el, e); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && sheetStack.length) closeSheet(); });
 
 Object.assign(ACT, {
@@ -367,13 +375,13 @@ function buildPlan() {
 }
 function planRoutine() {
   const P = buildPlan(); if (!P.hasData || !(P.mob.length + P.akt.length)) return null;
-  return { id: 'r_plan', n: 'Mein Plan', e: '🎯', plan: true, d: 'Aus deiner Bestandsaufnahme: erst beweglich machen, dann ansteuern.',
+  return { id: 'r_plan', n: 'Meine Mobility-Routine', e: '🎯', plan: true, d: 'Aus deiner Bestandsaufnahme: erst beweglich machen, dann ansteuern.',
     items: P.mob.concat(P.akt.slice(0, 3)).map(x => [x.id, E[x.id].hold]), why: Object.fromEntries(P.mob.concat(P.akt).map(x => [x.id, x.why])) };
 }
 function planTemplate() {
   const P = buildPlan(); if (!P.hasData || !(P.akt.length + P.kraft.length)) return null;
   const item = x => { const e = E[x.id], s = parseInt(e.dose, 10) || 3; return e.tr === 't' || e.tr === 'wt' ? { x: x.id, s, sec: e.hold, rest: 45 } : { x: x.id, s, r: e.dose.replace(/^\d+×\s*/, ''), rest: e.t === 'akt' ? 30 : 90 }; };
-  return { id: 't_plan', n: 'Mein Plan', sub: 'aus deiner Bestandsaufnahme', e: '🎯', plan: true, d: 'Aktiviert und kräftigt gezielt, was in deinen Tests schwach war.',
+  return { id: 't_plan', n: 'Mein Kraft-Plan', sub: 'aus deiner Bestandsaufnahme', e: '🎯', plan: true, d: 'Aktiviert und kräftigt gezielt, was in deinen Tests schwach war.',
     items: P.akt.slice(0, 3).concat(P.kraft).map(item), why: Object.fromEntries(P.akt.concat(P.kraft).map(x => [x.id, x.why])) };
 }
 
@@ -432,7 +440,7 @@ function setRing(root, pct) {
 // Bestwerte und Verlauf einer Übung aus den gespeicherten Trainings
 function exHistory(id) {
   const out = [];
-  S.sessions.forEach(s => { if (s.k !== 'kraft') return; s.ex.forEach(x => { if (x.x === id && x.sets.length) out.push({ ts: s.s, sets: x.sets }); }); });
+  S.sessions.forEach(s => { if (s.k !== 'kraft') return; s.ex.forEach(x => { if (x.x === id && x.sets.length) out.push({ ts: s.s, sets: x.sets, rpe: s.rpe }); }); });
   return out.sort((a, b) => b.ts - a.ts);
 }
 const e1rm = s => (s.w || 0) * (1 + (s.r || 0) / 30);
@@ -467,6 +475,7 @@ function suggest(e, tg) {
   if (e.tr === 'wr') {
     const w = Math.max.apply(null, sets.map(s => s.w || 0)); if (!w) return null;
     const allTop = sets.filter(s => (s.w || 0) >= w).every(s => (s.r || 0) >= top);
+    if (allTop && last.rpe === 5) return { w, txt: `${num(w)} kg halten – die letzte Einheit war am Limit, erst festigen` };
     if (allTop) { const inc = w < 10 ? 1 : w < 40 ? 2 : 2.5, nw = Math.round((w + inc) * 2) / 2; return { w: nw, txt: `${num(nw)} kg × ${rr[0]}${rr[1] !== rr[0] ? '–' + rr[1] : ''} – letztes Mal hast du alle Sätze mit ${top} Wdh. geschafft` }; }
     return { w, txt: `${num(w)} kg halten und eine Wiederholung mehr schaffen (Ziel ${top})` };
   }

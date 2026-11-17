@@ -219,7 +219,7 @@ function summarize(u8) {
   if (asc == null) { asc = 0; let ref = null; recs.forEach(r => { const a = r.ealt != null ? r.ealt / 5 - 500 : r.alt != null ? r.alt / 5 - 500 : null; if (a == null) return; if (ref == null) ref = a; else if (a - ref >= 3) { asc += a - ref; ref = a; } else if (ref - a >= 3) ref = a; }); }
   const sport = s.sport == null ? (recs.some(r => r.pw != null || r.cad != null) ? 2 : 0) : s.sport;
   const isRide = sport === 2 || sport === 21;
-  const out = { ver: 2, start: (t0 + EPOCH) * 1000, ride: isRide, name: isRide ? (sport === 21 ? 'E-Bike-Fahrt' : SUB[s.sub] || 'Radfahrt') : SPORT[sport] || 'Aktivität', min: r1(sec / 60, 1) };
+  const out = { ver: 3, start: (t0 + EPOCH) * 1000, ride: isRide, name: isRide ? (sport === 21 ? 'E-Bike-Fahrt' : SUB[s.sub] || 'Radfahrt') : SPORT[sport] || 'Aktivität', min: r1(sec / 60, 1) };
   if (dist) out.km = r1(dist / 1000, 2);
   if (asc) out.hm = Math.round(asc);
   const spd = s.espd || s.spd; if (spd) out.kmh = r1(spd / 1000 * 3.6, 1); else if (dist && sec) out.kmh = r1(dist / sec * 3.6, 1);
@@ -229,6 +229,11 @@ function summarize(u8) {
   const cad = s.cad || mean('cad'); if (cad) out.cad = Math.round(cad);
   if (!isRide) return out;
   const hasPw = recs.some(r => r.pw != null), ps = hasPw ? powerSeries(recs) : [];
+  const hs = recs.some(r => r.hr != null) ? series(recs, 'hr') : null;
+  if (hs) { const hh = []; for (let i = 0; i < hs.length; i++) { if (!hs[i]) continue; const k = Math.min(44, Math.floor(hs[i] / 5)); hh[k] = (hh[k] || 0) + 1; } for (let i = 0; i < hh.length; i++) if (!hh[i]) hh[i] = 0; if (hh.length) out.hh = hh; }
+  // Verlaufskurve: 72 Stützpunkte für Leistung und Puls (Pausen ausgelassen)
+  const N = 72, down = a => { const o = []; for (let i = 0; i < N; i++) { const a0 = Math.floor(i * a.length / N), a1 = Math.max(a0 + 1, Math.floor((i + 1) * a.length / N)); let sum = 0; for (let j = a0; j < a1; j++) sum += a[j]; o.push(Math.round(sum / (a1 - a0))); } return o; };
+  if ((ps.length || (hs && hs.length)) >= 600) { out.st = {}; if (ps.length) out.st.p = down(ps); if (hs) out.st.h = down(hs); }
   const w = s.pw || (hasPw ? ps.reduce((a, b) => a + b, 0) / (ps.length || 1) : null);
   if (w) {
     out.w = Math.round(w);
@@ -238,8 +243,13 @@ function summarize(u8) {
     if (ps.length) { const pb = {}; DUR.forEach(n => { const b = bestAvg(ps, n); if (b) pb[n] = b; }); if (Object.keys(pb).length) out.pb = pb; }
     if (ps.length) out.ph = histogram(ps);
     if (ps.length && hr && out.np) out.ef = Math.round(out.np / hr * 100) / 100;
-    const hs = recs.some(r => r.hr != null) ? series(recs, 'hr') : null;
     if (ps.length && hs) { const dc = decoupling(ps, hs); if (dc != null) out.dec = dc; }
+    // Ermüdungsresistenz: beste 5- und 20-min-Leistung, nachdem schon 1000 bzw. 2000 kJ geleistet wurden
+    if (ps.length) {
+      const du = {}; let cum = 0, i = 0;
+      [1000, 2000].forEach(kj => { while (i < ps.length && cum < kj * 1000) cum += ps[i++]; if (i >= ps.length) return; const rest = ps.slice(i), d = {}; [300, 1200].forEach(n => { const b = bestAvg(rest, n); if (b) d[n] = b; }); if (Object.keys(d).length) du[kj] = d; });
+      if (Object.keys(du).length) out.du = du;
+    }
     if (s.tss) out.tssDev = Math.round(s.tss / 10);
     if (s.ftp) out.ftpDev = s.ftp;
   }

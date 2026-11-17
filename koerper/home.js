@@ -38,17 +38,21 @@ VIEWS.home = {
     const list = acts(), rec = recos(), empty = !list.length && sc == null && !pains.length;
     const byDay = {}; list.forEach(a => { const k = dkey(new Date(a.ts)); (byDay[k] = byDay[k] || []).push(a.k); });
     const days = []; for (let i = 0; i < 7; i++) { const d = new Date(w0 + i * DAY + 12 * 36e5), k = dkey(d), ks = [...new Set(byDay[k] || [])]; days.push(`<div class="d${k === today() ? ' today' : ''}">${DAYS_S[d.getDay()]}<div class="dots">${ks.length ? ks.map(x => ACT_ICO[x] || '🏃').join('') : '<i></i>'}</div></div>`); }
-    const goal = (lbl, v, g, extra) => `<div style="flex:1;min-width:0"><div class="row" style="font-size:13.5px"><b>${lbl}</b><span class="muted">${v}${g ? ' / ' + g : ''}${extra || ''}</span></div><div class="meter" style="margin-top:5px"><i style="width:${g ? Math.min(100, Math.round(v / g * 100)) : v ? 100 : 0}%"></i></div></div>`;
+    const goal = (lbl, v, g, extra) => `<div style="flex:1;min-width:0"><b style="display:block;font-size:13.5px;white-space:nowrap">${lbl}</b><div class="meter" style="margin:5px 0 4px"><i style="width:${g ? Math.min(100, Math.round(v / g * 100)) : v ? 100 : 0}%"></i></div><span class="small muted">${v}${g ? ' von ' + g : ''}${extra || ''}</span></div>`;
     const top = Object.entries(P.f).filter(([id]) => info(id)).map(([id, v]) => ({ id, v, tot: v.tight + v.weak })).sort((a, b) => b.tot - a.tot).slice(0, 3);
     const seg = `<div class="seg">${[['over', 'Überblick'], ['well', 'Wohlbefinden']].map(([k, n]) => `<button data-act="hSub" data-v="${k}" class="${ui.home.sub === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
     if (ui.home.sub === 'well') return seg + wellPage();
     return seg + `
       ${empty ? `<div class="card pad" style="margin-bottom:10px"><div class="h1">Willkommen 👋</div><p class="p" style="margin-top:6px">Fünf Bereiche, ein Ziel: verstehen, wie dein Körper zusammenhängt, Baustellen finden und gezielt dagegen trainieren – Kraft, Mobility, Körper, Rad und Wohlbefinden.</p></div>` : ''}
       ${wellCard()}
-      ${rec.length ? `<div class="section-t">Empfehlung für heute</div><div class="card list">${rec.map(r => `<button class="li" data-act="${r.act}" data-id="${esc(r.id)}"><span class="ic">${r.e}</span><span class="bd"><b>${esc(r.t)}</b><small>${esc(r.d)}</small></span><span class="tag acc">${esc(r.btn)}</span></button>`).join('')}</div>` : `<div class="card pad" style="margin:10px 0 0"><b>Für heute alles erledigt ✅</b><p class="small muted">Erholung gehört zum Training.</p></div>`}
+      ${introHTML()}
+      ${planOn() ? todayPlanHTML() : ''}
+      ${(() => { const pl = planOn(), ids = pl ? planDays()[todayIdx()].map(it => itemInfo(it).id) : [], r2 = pl ? rec.filter(r => r.act !== 'tpl' && !ids.includes(r.id)).slice(0, 2) : rec;
+        return r2.length ? `<div class="section-t">${pl ? 'Außerdem sinnvoll' : 'Empfehlung für heute'}${pl ? '' : '<button data-act="plan">🗓️ Woche planen</button>'}</div><div class="card list">${r2.map(r => `<button class="li" data-act="${r.act}" data-id="${esc(r.id)}"><span class="ic">${r.e}</span><span class="bd"><b>${esc(r.t)}</b><small>${esc(r.d)}</small></span><span class="tag acc">${esc(r.btn)}</span></button>`).join('')}</div>` : pl ? '' : `<div class="card pad" style="margin:10px 0 0"><b>Für heute alles erledigt ✅</b><p class="small muted">Erholung gehört zum Training.</p></div>`; })()}
       <div class="section-t">Diese Woche<span class="muted">${streak() ? '🔥 ' + plural(streak(), 'Tag', 'Tage') + ' in Folge' : ''}</span></div>
-      <div class="card pad"><div class="week" style="margin-bottom:12px">${days.join('')}</div>
-        <div class="row" style="gap:14px;align-items:flex-start">${goal('🏋️ Kraft', wk.kraft, S.settings.goalK)}${goal('🧘 Mobility', wk.mob, S.settings.goalM)}${goal('🚴 Rad', wk.rides ? num(wk.rideMin / 60) : 0, 0, wk.rides ? ' h' : '')}</div></div>
+      <div class="card pad"><div class="week" style="margin-bottom:12px">${weekStripHTML()}</div>
+        <div class="row" style="gap:14px;align-items:flex-start">${goal('🏋️ Kraft', wk.kraft, S.settings.goalK)}${goal('🧘 Mobility', wk.mob, S.settings.goalM)}${goal('🚴 Rad', wk.rides ? num(wk.rideMin / 60) : 0, 0, wk.rides ? ' h' : '')}</div>
+        <div class="tri3"><button data-act="plan">🗓️ Wochenplan</button><button data-act="cal">📅 Kalender</button><button data-act="report">📊 Bericht</button></div></div>
       <div class="section-t">Dein Körper<button data-act="goCheck">Zum Check ›</button></div>
       <div class="card pad"><div class="row" style="justify-content:flex-start;gap:14px">
         ${ring(64, 7, sc == null ? 0 : sc / 100, scoreCol(sc), `<span style="font-size:20px;color:${scoreCol(sc)}">${sc == null ? '–' : sc}</span>`)}
@@ -57,14 +61,7 @@ VIEWS.home = {
       ${S.rides.length ? (() => { const P = pmc(), l = P.days[P.days.length - 1]; if (!l) return ''; const z = fzone(l.tsb), wk7 = sumRides(ridesIn(Date.now() - 7 * DAY, Date.now() + DAY)); return `<div class="section-t">Rad<button data-act="tab" data-view="ride">Analyse ›</button></div>
       <button class="card pad" data-act="tab" data-view="ride" style="display:block;width:100%"><div class="stats k3" style="gap:4px"><div class="stat" style="padding:0"><small>Fitness</small><b style="color:var(--acc-t)">${Math.round(l.ctl)}</b></div><div class="stat" style="padding:0"><small>Form</small><b style="color:${z[1]}">${l.tsb > 0 ? '+' : ''}${Math.round(l.tsb)}</b></div><div class="stat" style="padding:0"><small>7 Tage</small><b>${hTxt(wk7.min)}<i>h</i></b></div></div>
         <p class="small muted" style="margin-top:8px;text-align:left"><b style="color:var(--t1)">${z[2]}.</b> ${esc(z[3])}</p></button>`; })() : ''}
-      <div class="section-t">Schnellstart</div>
-      <div class="tiles">
-        <button class="tile" data-act="tab" data-view="mob"><span class="te">🧘</span><b>Dehnen & Mobility</b><small>${X.ROUTINES.length} Routinen mit Timer</small></button>
-        <button class="tile" data-act="tab" data-view="train"><span class="te">🏋️</span><b>Krafttraining</b><small>Vorlagen, Sätze, Pausen</small></button>
-        <button class="tile" data-act="tab" data-view="body"><span class="te">🧍</span><b>Körperkarte</b><small>Muskeln, Gelenke, Themen</small></button>
-        <button class="tile" data-act="timer"><span class="te">⏱</span><b>Timer</b><small>Pause · Intervall · Stoppuhr</small></button>
-      </div>
-      ${list.length ? `<div class="section-t">Zuletzt</div><div class="card list">${list.slice(0, 5).map(actRow).join('')}</div>` : ''}
+      ${list.length ? `<div class="section-t">Zuletzt<button data-act="cal">Kalender ›</button></div><div class="card list">${list.slice(0, 3).map(actRow).join('')}</div>` : ''}
       <p class="note">Allgemeines Trainingswissen, keine medizinische Diagnose.</p>`;
   }
 };
@@ -73,9 +70,9 @@ VIEWS.home = {
 function settingsBody() {
   const s = S.settings;
   const st = (k, lbl, v, unit, step) => `<div class="setting"><span class="lbl">${lbl}</span><div class="stepper" style="grid-template-columns:38px 64px 38px;min-height:40px"><button data-act="setStep" data-k="${k}" data-d="-${step}">−</button><b style="font-size:16px">${v}<small>${unit}</small></b><button data-act="setStep" data-k="${k}" data-d="${step}">＋</button></div></div>`;
-  const tg = (k, lbl) => `<div class="setting"><span class="lbl">${lbl}</span><div class="seg sm"><button data-act="setTog" data-k="${k}" data-v="1" class="${s[k] !== false ? 'on' : ''}">An</button><button data-act="setTog" data-k="${k}" data-v="0" class="${s[k] === false ? 'on' : ''}">Aus</button></div></div>`;
+  const tg = (k, lbl, off) => { const on = off ? s[k] === true : s[k] !== false; return `<div class="setting"><span class="lbl">${lbl}</span><div class="seg sm"><button data-act="setTog" data-k="${k}" data-v="1" class="${on ? 'on' : ''}">An</button><button data-act="setTog" data-k="${k}" data-v="0" class="${on ? '' : 'on'}">Aus</button></div></div>`; };
   return `<div class="section-t" style="margin-top:4px">Wochenziele</div><div class="card">${st('goalK', '🏋️ Krafteinheiten', s.goalK, '×', 1)}${st('goalM', '🧘 Mobility-Einheiten', s.goalM, '×', 1)}</div>
-    <div class="section-t">Timer</div><div class="card">${st('rest', 'Satzpause', s.rest, 's', 15)}${st('prep', 'Vorlauf im Player', s.prep, 's', 1)}${tg('sound', 'Signalton')}${tg('vib', 'Vibration')}</div>
+    <div class="section-t">Timer</div><div class="card">${st('rest', 'Satzpause', s.rest, 's', 15)}${st('prep', 'Vorlauf im Player', s.prep, 's', 1)}${tg('sound', 'Signalton')}${canSpeak() ? tg('voice', 'Ansage in Routinen', true) : ''}${tg('vib', 'Vibration')}</div>
     <div class="section-t">Training</div><div class="card menu"><button data-act="gear"><span class="ico">🧰</span>Meine Ausrüstung<span class="muted" style="margin-left:auto;font-size:14px">${esc(GP[gearState().p].n)} ›</span></button></div>
     <div class="section-t">Darstellung</div><div class="card"><div class="setting"><span class="lbl">Design</span><div class="seg sm">${[['auto', 'Auto'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([k, n]) => `<button data-act="setTheme" data-v="${k}" class="${s.theme === k ? 'on' : ''}">${n}</button>`).join('')}</div></div></div>
     ${window.Cloud ? Cloud.section() : ''}
@@ -91,7 +88,7 @@ function askText(title, label, value, onOk) {
   pending.ask = onOk;
 }
 const bulkOk = () => { if (window.Cloud && Cloud.allowBulkDelete) Cloud.allowBulkDelete(); }; // gewollte Massenlöschung ankündigen
-const exportData = () => { const o = {}; ['v', 'sid', 'pains', 'tests', 'snaps', 'sessions', 'routines', 'templates', 'rides', 'favs', 'well', 'gear', 'settings'].forEach(k => { o[k] = S[k]; }); return o; };
+const exportData = () => { const o = {}; ['v', 'sid', 'pains', 'painLog', 'tests', 'testv', 'snaps', 'sessions', 'routines', 'templates', 'rides', 'favs', 'well', 'gear', 'plan', 'settings'].forEach(k => { o[k] = S[k]; }); return o; };
 document.addEventListener('change', e => {
   if (e.target.id !== 'impFile' || !e.target.files[0]) return;
   const fr = new FileReader();
@@ -112,7 +109,7 @@ Object.assign(ACT, {
     const k = el.dataset.k, lim = { goalK: [0, 7], goalM: [0, 14], rest: [15, 600], prep: [0, 15] }[k];
     S.settings[k] = Math.max(lim[0], Math.min(lim[1], S.settings[k] + +el.dataset.d)); save(); sheetBody(settingsBody()); render();
   },
-  setTog(el) { S.settings[el.dataset.k] = el.dataset.v === '1'; save(); sheetBody(settingsBody()); if (el.dataset.k === 'sound' && S.settings.sound) beep(880, 0.1); },
+  setTog(el) { S.settings[el.dataset.k] = el.dataset.v === '1'; save(); sheetBody(settingsBody()); if (el.dataset.k === 'sound' && S.settings.sound) beep(880, 0.1); if (el.dataset.k === 'voice' && S.settings.voice) say('Ansage ist an.'); },
   setTheme(el) { S.settings.theme = el.dataset.v; save(true); applyTheme(); sheetBody(settingsBody()); },
   askOk() { const v = $('#askIn').value.trim(), fn = pending.ask; pending.ask = null; closeSheet(); if (v && fn) fn(v); },
   dataExport() {
@@ -150,7 +147,10 @@ if (window.Cloud) Cloud.init({
     for (const id of Object.keys(S.pains)) m['p:' + id] = { kind: 'pain', data: S.pains[id] };
     for (const d of Object.keys(S.well)) m['d:' + d] = { kind: 'well', data: S.well[d] };
     m.tests = { kind: 'tests', data: S.tests, soft: !Object.keys(S.tests).length };
+    m.testv = { kind: 'testv', data: S.testv || {}, soft: !Object.keys(S.testv || {}).length };
+    for (const id of Object.keys(S.painLog || {})) m['q:' + id] = { kind: 'plog', data: S.painLog[id] };
     m.favs = { kind: 'favs', data: S.favs, soft: !Object.keys(S.favs).length };
+    m.plan = { kind: 'plan', data: { days: planDays(), since: S.plan.since || null }, soft: !planOn() };
     const g = gearState(); m.gear = { kind: 'gear', data: g, soft: g.p === 'all' && JSON.stringify(g.sets) === JSON.stringify(X.GEAR_PRESETS) };
     const st = {}, def = fresh().settings; SYNC_SET.forEach(k => { st[k] = S.settings[k]; });
     m.settings = { kind: 'settings', data: st, soft: SYNC_SET.every(k => st[k] === def[k]) };
@@ -163,8 +163,11 @@ if (window.Cloud) Cloud.init({
     } else if (r.kind === 'pain') { if (r.deleted) delete S.pains[r.id.slice(2)]; else if (r.data) S.pains[r.id.slice(2)] = r.data; }
     else if (r.kind === 'well') { if (r.deleted) delete S.well[r.id.slice(2)]; else if (r.data) S.well[r.id.slice(2)] = r.data; }
     else if (r.kind === 'tests') S.tests = r.deleted ? {} : (r.data || {});
+    else if (r.kind === 'testv') S.testv = r.deleted ? {} : (r.data || {});
+    else if (r.kind === 'plog') { S.painLog = S.painLog || {}; if (r.deleted) delete S.painLog[r.id.slice(2)]; else if (Array.isArray(r.data)) S.painLog[r.id.slice(2)] = r.data; }
     else if (r.kind === 'favs') S.favs = r.deleted ? {} : (r.data || {});
     else if (r.kind === 'gear' && r.data && !r.deleted && r.data.sets) S.gear = r.data;
+    else if (r.kind === 'plan' && r.data && !r.deleted && Array.isArray(r.data.days)) S.plan = r.data;
     else if (r.kind === 'settings' && r.data && !r.deleted) Object.assign(S.settings, r.data);
   },
   // Wurde der lokale Speicher neu aufgebaut (z. B. vom iPhone geleert), gewinnt die Online-Datenbank

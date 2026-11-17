@@ -207,7 +207,7 @@ function bCheck() {
     <div class="section-t">① Beschwerden<span class="muted">${pains.length}</span></div>
     <div class="card mapcard"><div class="mapbar" style="justify-content:flex-end"><div class="seg sm"><button data-act="bDeep" data-v="0" class="${ui.body.deep ? '' : 'on'}">Oberfläche</button><button data-act="bDeep" data-v="1" class="${ui.body.deep ? 'on' : ''}">Tief</button></div></div>${bodySVG({ hl, tap: 'pain', deep: ui.body.deep })}
       <div class="legend"><span class="cap">👆 Tippe auf die Stelle, die schmerzt oder sich steif anfühlt. Die Seite wird erkannt.</span></div></div>
-    ${pains.length ? `<div class="card list">${pains.map(([id, p]) => `<button class="li" data-act="painEdit" data-id="${id}"><span class="lvl" style="background:${painCol(p.lvl)}">${p.lvl}</span><span class="bd"><b>${esc(nm(id))} <span class="muted" style="font-weight:500">· ${SIDE_LBL[p.side] || ''}</span></b><small class="clip">${esc([p.type].concat(p.when || []).filter(Boolean).join(' · '))}${p.note ? ' — ' + esc(p.note) : ''}</small></span><span class="go">›</span></button>`).join('')}</div>
+    ${pains.length ? `<div class="card list">${pains.map(([id, p]) => `<button class="li" data-act="painEdit" data-id="${id}"><span class="lvl" style="background:${painCol(p.lvl)}">${p.lvl}</span><span class="bd"><b>${esc(nm(id))} <span class="muted" style="font-weight:500">· ${SIDE_LBL[p.side] || ''}</span></b><small class="clip">${esc([p.type].concat(p.when || []).filter(Boolean).join(' · '))}${painTrend(id)}${p.note ? ' — ' + esc(p.note) : ''}</small></span><span class="go">›</span></button>`).join('')}</div>
       <div class="chips" style="margin-top:8px">${[...new Set(pains.reduce((a, [id]) => a.concat(painTopics(id)), []))].map(k => `<button class="chip" data-act="topic" data-id="${k}">${D.TOPICS[k].ico} ${esc(D.TOPICS[k].n)} ›</button>`).join('')}</div>` : ''}
     <div class="section-t">② Selbsttests<span class="muted">${done}/${nT}</span></div>
     <p class="small muted" style="margin:0 4px 8px">Kurz aufwärmen, langsam testen, nichts erzwingen. Bei Schmerz abbrechen und die rote Antwort wählen.</p>
@@ -223,11 +223,65 @@ function testCard(k, t, prev) {
   const pv = prev && prev.tests && prev.tests[k] != null && t.opts[prev.tests[k]] ? t.opts[prev.tests[k]] : null;
   return `<details class="test" id="t-${k}"><summary><span class="amp${s == null ? '' : ' ' + 'gar'[s]}"></span><span style="flex:1;min-width:0"><b>${esc(t.n)}</b><small>${esc(t.what)}</small></span><span class="muted">▾</span></summary>
     <div class="tb">${Moves.has('t:' + k) ? `<div class="mvbox" data-mv="t:${k}" style="margin-top:10px"></div>` : ''}<ol class="ol">${t.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol>
+      ${measHTML(k)}
       <div class="sec">Dein Ergebnis</div><div class="opts">${t.opts.map((o, n) => `<button class="opt s${o.s}${cur === n ? ' on' : ''}" data-act="testOpt" data-t="${k}" data-n="${n}"><i></i><span>${esc(o.l)}</span></button>`).join('')}</div>
+      ${asymHTML(k)}${trendHTML(k)}
       ${cur != null && t.opts[cur] ? testMeaning(t.opts[cur]) : ''}
       ${pv ? `<p class="small muted" style="margin-top:8px">Letztes Mal (${fmtDate(fromKey(prev.d))}): ${esc(pv.l)}</p>` : ''}
       <div class="sec" style="margin-top:12px">Betrifft</div><div class="chips">${t.m.map(m => chip(m)).join('')}</div></div></details>`;
 }
+
+// Messbare Tests: Wert eintragen → automatische Einordnung (bei zwei Seiten zählt die schwächere)
+const TMEAS = {
+  sorensen: { u: 's', th: [90, 45] }, flexor_end: { u: 's', th: [90, 45] }, side_plank_t: { u: 's', th: [60, 30], sides: 1 },
+  hip_ir: { u: '°', th: [35, 20], sides: 1 }, aslr: { u: '°', th: [70, 50], sides: 1 }, knee_to_wall: { u: 'cm', th: [10, 5], sides: 1 },
+  sl_stance: { u: 's', th: [20, 10], sides: 1 }, thor_rot: { u: '°', th: [45, 30], sides: 1 }, dnf_test: { u: 's', th: [30, 15] }
+};
+const measVals = v => v ? [v.L, v.R, v.v].filter(x => x != null) : [];
+const measWorst = v => { const a = measVals(v); return a.length ? Math.min.apply(null, a) : null; };
+const asymOf = v => v && v.L != null && v.R != null && Math.max(v.L, v.R) > 0 ? Math.abs(v.L - v.R) / Math.max(v.L, v.R) : 0;
+function measHTML(k) {
+  const m = TMEAS[k]; if (!m) return '';
+  const v = (S.testv || {})[k] || {}, inp = (s, l) => `<label class="mfield"><span>${l}</span><input inputmode="decimal" data-ch="testV" data-t="${k}" data-s="${s}" value="${v[s] == null ? '' : String(v[s]).replace('.', ',')}" placeholder="–"><em>${m.u}</em></label>`;
+  return `<div class="sec">Messen</div><div class="meas">${m.sides ? inp('L', 'Links') + inp('R', 'Rechts') : inp('v', 'Wert')}</div>
+    <p class="small muted" style="margin:6px 2px 12px">Trag deinen Messwert ein – die App ordnet ihn automatisch ein${m.sides ? ' (die schwächere Seite zählt)' : ''}. So siehst du später den Fortschritt in Zahlen.</p>`;
+}
+function asymHTML(k) {
+  const m = TMEAS[k], v = (S.testv || {})[k]; if (!m || !m.sides || asymOf(v) < 0.15) return '';
+  const weak = v.L < v.R ? 'links' : 'rechts';
+  return `<div class="box warn" style="margin-top:10px">↔️ <b>Seitenunterschied ${Math.round(asymOf(v) * 100)} %</b> – ${weak} schwächer (${num(v.L)} / ${num(v.R)} ${m.u}). Beginne Übungen mit der schwächeren Seite und gib ihr einen Satz mehr.</div>`;
+}
+function trendHTML(k) {
+  const m = TMEAS[k]; if (!m) return '';
+  const pts = S.snaps.slice().sort((a, b) => a.ts - b.ts).filter(s => s.d !== today() && s.testv && measWorst(s.testv[k]) != null).map(s => [s.d, measWorst(s.testv[k])]);
+  const cur = measWorst((S.testv || {})[k]); if (cur != null) pts.push([today(), cur]);
+  if (pts.length < 2) return '';
+  const d = pts[pts.length - 1][1] - pts[0][1];
+  return `<p class="small" style="margin-top:8px;color:${d > 0 ? 'var(--ok)' : d < 0 ? 'var(--c-pain)' : 'var(--t2)'}"><b>Verlauf:</b> ${pts.slice(-5).map(p => num(p[1])).join(' → ')} ${m.u} ${d > 0 ? `(▲ +${num(d)} seit ${fmtDate(fromKey(pts[0][0]))})` : d < 0 ? `(▼ ${num(d)})` : ''}</p>`;
+}
+CH.testV = el => {
+  const k = el.dataset.t, m = TMEAS[k]; if (!m) return;
+  S.testv = S.testv || {}; const v = S.testv[k] = S.testv[k] || {}, n = parseFloat(String(el.value).replace(',', '.'));
+  if (isFinite(n) && n >= 0) v[el.dataset.s] = n; else delete v[el.dataset.s];
+  const w = measWorst(v);
+  if (w == null) { delete S.testv[k]; delete S.tests[k]; }
+  else { let i = w >= m.th[0] ? 0 : w >= m.th[1] ? 1 : 2; if (i === 0 && asymOf(v) >= 0.2) i = 1; S.tests[k] = i; }
+  save(); rerenderCheck();
+};
+// Schmerzverlauf: ein Eintrag pro Tag
+function painLogAdd(id, lvl) {
+  S.painLog = S.painLog || {}; const a = S.painLog[id] = S.painLog[id] || [], k = today(), i = a.findIndex(x => x[0] === k);
+  if (i >= 0) a[i][1] = lvl; else a.push([k, lvl]);
+  if (a.length > 400) a.splice(0, a.length - 400);
+}
+function painSpark(id) {
+  const a = ((S.painLog || {})[id] || []).slice(-30); if (a.length < 2) return '';
+  const W = 280, H = 56, t0 = fromKey(a[0][0]).getTime(), t1 = fromKey(a[a.length - 1][0]).getTime(), x = k => 8 + (t1 > t0 ? (fromKey(k).getTime() - t0) / (t1 - t0) : 1) * (W - 16), y = v => 6 + (1 - v / 10) * (H - 14);
+  const d = a[a.length - 1][1] - a[0][1];
+  return `<div class="card pad" style="margin-bottom:12px"><div class="sec">Verlauf seit ${fmtDate(fromKey(a[0][0]))}</div><svg viewBox="0 0 ${W} ${H}" class="spark" style="height:56px"><polyline style="stroke:var(--c-pain)" points="${a.map(p => x(p[0]).toFixed(1) + ',' + y(p[1]).toFixed(1)).join(' ')}"/>${a.map((p, i) => `<circle style="fill:var(--c-pain)" cx="${x(p[0]).toFixed(1)}" cy="${y(p[1]).toFixed(1)}" r="${i === a.length - 1 ? 4 : 2.5}"/>`).join('')}</svg>
+    <p class="small" style="color:${d < 0 ? 'var(--ok)' : d > 0 ? 'var(--c-pain)' : 'var(--t2)'}">${d < 0 ? `Besser geworden: ${a[0][1]} → ${a[a.length - 1][1]}` : d > 0 ? `Stärker geworden: ${a[0][1]} → ${a[a.length - 1][1]}. Belastung prüfen; hält es an, abklären lassen.` : 'Unverändert.'}</p></div>`;
+}
+const painTrend = id => { const a = (S.painLog || {})[id] || []; if (a.length < 2) return ''; const d = a[a.length - 1][1] - a[a.length - 2][1]; return d < 0 ? ' · <span style="color:var(--ok)">▼ besser</span>' : d > 0 ? ' · <span style="color:var(--c-pain)">▲ stärker</span>' : ''; };
 
 // Einordnung eines Testergebnisses: was es bedeutet und womit du anfängst
 function testMeaning(o) {
@@ -254,7 +308,7 @@ function openPain(id, side) {
   const pick = (k, list, lbl) => `<div class="chips" data-pk="${k}">${list.map(v => `<button class="chip${(k === 'when' ? p.when.includes(v) : p[k] === v) ? ' on' : ''}" data-act="painPick" data-v="${esc(v)}">${esc(lbl ? lbl[v] : v)}</button>`).join('')}</div>`;
   openSheet({
     title: i.n, left: 'Abbrechen', right: '<button class="lnk r" data-act="painSave">Speichern</button>', onClose() { pe = null; },
-    body: `<div class="field"><label>Wie stark? (0 = nichts, 10 = sehr stark)</label><div class="card pad"><div class="range"><input type="range" min="0" max="10" step="1" value="${p.lvl}" data-in="painLvl"><b id="painLvl" style="color:${painCol(p.lvl)}">${p.lvl}</b></div></div></div>
+    body: `${painSpark(id)}<div class="field"><label>Wie stark? (0 = nichts, 10 = sehr stark)</label><div class="card pad"><div class="range"><input type="range" min="0" max="10" step="1" value="${p.lvl}" data-in="painLvl"><b id="painLvl" style="color:${painCol(p.lvl)}">${p.lvl}</b></div></div></div>
       <div class="field"><label>Art</label>${pick('type', D.PAIN_TYPES)}</div>
       <div class="field"><label>Seite</label>${pick('side', ['L', 'R', 'B'], SIDE_LBL)}</div>
       <div class="field"><label>Wann? (mehrere möglich)</label>${pick('when', D.PAIN_WHEN)}</div>
@@ -301,18 +355,19 @@ Object.assign(ACT, {
     if (!pe) return;
     const { id, p } = pe; p.note = $('#painNote').value.trim();
     if (p.lvl > 0) { S.pains[id] = Object.assign({}, p, { d: today() }); toast('Beschwerde gespeichert'); } else { delete S.pains[id]; toast('Ohne Intensität – entfernt'); }
+    painLogAdd(id, p.lvl);
     save(); closeSheet(); rerenderCheck();
   },
-  painDel() { if (!pe) return; delete S.pains[pe.id]; save(); closeSheet(); rerenderCheck(); toast('Beschwerde entfernt'); },
+  painDel() { if (!pe) return; delete S.pains[pe.id]; painLogAdd(pe.id, 0); save(); closeSheet(); rerenderCheck(); toast('Beschwerde entfernt'); },
   testOpt(el) {
     const k = el.dataset.t, n = +el.dataset.n;
     if (S.tests[k] === n) delete S.tests[k]; else S.tests[k] = n;
     save(); rerenderCheck();
   },
-  testsReset() { confirmSheet('Alle aktuellen Testergebnisse zurücksetzen? Gespeicherte Stände bleiben erhalten.', 'Zurücksetzen', () => { S.tests = {}; save(); render(); }); },
+  testsReset() { confirmSheet('Alle aktuellen Testergebnisse zurücksetzen? Gespeicherte Stände bleiben erhalten.', 'Zurücksetzen', () => { S.tests = {}; S.testv = {}; save(); render(); }); },
   snap() {
     if (!Object.keys(S.tests).length && !activePains().length) { toast('Erst Tests machen oder Beschwerden markieren'); return; }
-    const snap = { id: uid(), d: today(), ts: Date.now(), tests: Object.assign({}, S.tests), pains: JSON.parse(JSON.stringify(S.pains)), score: scoreOf(S.tests) };
+    const snap = { id: uid(), d: today(), ts: Date.now(), tests: Object.assign({}, S.tests), testv: JSON.parse(JSON.stringify(S.testv || {})), pains: JSON.parse(JSON.stringify(S.pains)), score: scoreOf(S.tests) };
     const i = S.snaps.findIndex(x => x.d === snap.d);
     if (i >= 0) { snap.id = S.snaps[i].id; S.snaps[i] = snap; } else S.snaps.push(snap);
     save(); rerenderCheck(); toast('Stand gespeichert');

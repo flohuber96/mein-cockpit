@@ -91,18 +91,20 @@ let we = null;
 function wellSheet(k) {
   k = k || today();
   const old = wellOf(k);
-  we = { k, w: Object.assign({ sh: 7.5 }, old || {}), isNew: !old };
+  we = { k, w: Object.assign({ sh: 7.5 }, old || {}), isNew: !old, pains: {} };
+  if (k === today()) activePains().slice(0, 4).forEach(([id, p]) => { we.pains[id] = p.lvl; });
   const d = fromKey(k);
   const body = () => `<div class="chiprow" style="margin-bottom:6px">${[0, 1, 2].map(i => { const kk = dkey(addDays(new Date(), -i)); return `<button class="chip${kk === we.k ? ' on' : ''}" data-act="wellDay" data-v="${kk}">${['Heute', 'Gestern', 'Vorgestern'][i]}</button>`; }).join('')}</div>
     ${WELL.map(m => `<div class="field"><label>${m.e} ${m.n}</label><div class="card pad" style="padding:8px"><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">${FACES.map((f, i) => `<button class="tgl${we.w[m.k] === i + 1 ? ' on' : ''}" data-act="wellSet" data-k="${m.k}" data-v="${i + 1}">${f}</button>`).join('')}</div>
       <div class="row" style="font-size:11.5px;color:var(--t3);margin-top:4px;padding:0 4px"><span>${m.lo}</span><span>${m.hi}</span></div></div></div>`).join('')}
     <div class="field"><label>🛏️ Schlafdauer</label><div class="stepper"><button data-act="wellSh" data-d="-0.5">−</button><b>${num(we.w.sh)}<small>Stunden</small></b><button data-act="wellSh" data-d="0.5">＋</button></div></div>
+    ${Object.keys(we.pains).length ? `<div class="field"><label>📍 Beschwerden heute (0 = weg, 10 = sehr stark)</label><div class="card">${Object.keys(we.pains).map(id => `<div class="setting"><span class="lbl" style="flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm(id))}</span><div class="stepper" style="grid-template-columns:38px 46px 38px;min-height:40px"><button data-act="wellPain" data-id="${id}" data-d="-1">−</button><b style="font-size:17px;color:${painCol(we.pains[id])}">${we.pains[id]}</b><button data-act="wellPain" data-id="${id}" data-d="1">＋</button></div></div>`).join('')}</div></div>` : ''}
     <details${we.w.rhr || we.w.hrv || we.w.kg || we.w.note ? ' open' : ''} style="margin-bottom:12px"><summary class="lnk" style="padding:4px">Mehr eintragen: Ruhepuls, HRV, Gewicht, Notiz ▾</summary>
       <div class="btns" style="grid-template-columns:1fr 1fr 1fr;margin-top:8px"><div class="field"><label>Ruhepuls</label><input inputmode="numeric" data-in="wellNum" data-k="rhr" value="${we.w.rhr || ''}" placeholder="bpm"></div><div class="field"><label>HRV</label><input inputmode="numeric" data-in="wellNum" data-k="hrv" value="${we.w.hrv || ''}" placeholder="ms"></div><div class="field"><label>Gewicht</label><input inputmode="decimal" data-in="wellNum" data-k="kg" value="${we.w.kg ? String(we.w.kg).replace('.', ',') : ''}" placeholder="kg"></div></div>
       <div class="field"><label>Notiz</label><input type="text" data-in="wellNote" value="${esc(we.w.note || '')}" placeholder="z. B. spät gegessen, viel Arbeit"></div></details>
     <div class="stack"><button class="btn primary" data-act="wellSave">Speichern</button>${old ? '<button class="btn danger" data-act="wellDel">Eintrag löschen</button>' : ''}</div>`;
   we.body = body;
-  openSheet({ title: k === today() ? 'Wie geht’s dir heute?' : `${DAYS[d.getDay()]}, ${fmtDate(d)}`, left: 'Abbrechen', right: '<button class="lnk r" data-act="wellSave">Speichern</button>', body: body(), onClose() { we = null; } });
+  openSheet({ title: k === today() ? 'Check-in heute' : `${DAYS[d.getDay()]}, ${fmtDate(d)}`, left: 'Abbrechen', right: '<button class="lnk r" data-act="wellSave">Speichern</button>', body: body(), onClose() { we = null; } });
 }
 IN.wellNum = el => { if (we) { const v = numVal(el.value); if (v) we.w[el.dataset.k] = v; else delete we.w[el.dataset.k]; } };
 IN.wellNote = el => { if (we) we.w.note = el.value; };
@@ -116,8 +118,10 @@ Object.assign(ACT, {
     if (!we) return;
     const w = we.w; if (!WELL.some(m => w[m.k])) { toast('Bitte mindestens einen Wert antippen'); return; }
     if (w.note != null) { w.note = w.note.trim(); if (!w.note) delete w.note; }
+    Object.keys(we.pains).forEach(id => { const v = we.pains[id]; if (v > 0 && S.pains[id]) S.pains[id].lvl = v; else delete S.pains[id]; painLogAdd(id, v); });
     S.well[we.k] = w; const k = we.k; save(); closeSheet(); keepScroll(render);
     const v = readiness(k); toast(`Tagesform ${v} · ${readyTxt(v)[1]}`);
   },
+  wellPain(el) { if (!we) return; const id = el.dataset.id; we.pains[id] = Math.max(0, Math.min(10, we.pains[id] + +el.dataset.d)); const y = $('.sheet-body', topSheet()).scrollTop; sheetBody(we.body()); $('.sheet-body', topSheet()).scrollTop = y; },
   wellDel() { if (!we) return; delete S.well[we.k]; save(); closeSheet(); keepScroll(render); toast('Eintrag gelöscht'); }
 });
