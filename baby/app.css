@@ -295,3 +295,4 @@ main{padding:4px 14px calc(96px + var(--bot));max-width:1100px;margin:0 auto}
 .setting .mini b{min-width:30px;text-align:center}
 .setting .mini small{margin-right:4px}
 @media (max-width:380px){.bottle .mini span{display:none}.bottle .mini{justify-content:space-between;padding-left:2px}}
+@media (max-width:360px){.running{gap:6px;padding-left:12px}.running .re{display:none}.running .rs .tg{width:34px}.running .stop{padding:0 9px}}

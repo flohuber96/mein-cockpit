@@ -51,7 +51,7 @@ const KINDS = [
   { k: 'schlaf', name: 'Schlaf', e: '😴' },
 ];
 const kind = k => KINDS.find(x => x.k === k);
-const ENTRY_KINDS = KINDS.filter(k => k.k !== 'brust'); // abgestillt: Brust nur noch bei alten Einträgen
+const ENTRY_KINDS = KINDS.filter(k => k.k === 'flasche' || k.k === 'zusatz'); // Brust (abgestillt) und Schlaf nur noch bei alten Einträgen
 const FEED = ['brust', 'flasche', 'zusatz'];
 const isFeed = x => x.kinds.some(k => FEED.includes(k));
 const isSleep = x => x.kinds.includes('schlaf');
@@ -190,8 +190,8 @@ function draftFromEntry(x) {
   };
 }
 
-// Beim Eintragen: Flasche, Zusatz, Schlaf – Brust nur, wenn ein alter Eintrag sie schon hat
-const shownKinds = f => f.kinds.includes('brust') ? KINDS : ENTRY_KINDS;
+// Beim Eintragen: Flasche und Zusatz – Brust/Schlaf nur, wenn ein alter Eintrag sie schon hat
+const shownKinds = f => KINDS.filter(k => ENTRY_KINDS.includes(k) || f.kinds.includes(k.k));
 function formHTML(f, fid) {
   const main = fid === 'main';
   const von = main && !f.vonSet ? hm(Date.now()) : f.von;
@@ -355,7 +355,7 @@ function statusHTML() {
     const k = isSleep(x) ? kind('schlaf') : kind(x.kinds.find(k => FEED.includes(k)) || 'brust');
     return `<div class="running">
       <span class="re">${k.e}</span>
-      <div class="ri"><small>${isSleep(x) ? 'Schläft' : k.name} · ab ${hm(x.s)}</small><b data-clock="${x.s}">${fmtClock(now - x.s)}</b></div>
+      <div class="ri"><small>${isSleep(x) ? 'Schläft' : k.name} ${hm(x.s)}</small><b data-clock="${x.s}">${fmtClock(now - x.s)}</b></div>
       ${!isSleep(x) ? `<div class="rs">${['L', 'R'].map(s => `<button class="tg side ${x.side.includes(s) ? 'on' : ''}" data-act="runSide" data-id="${x.id}" data-s="${s}">${s}</button>`).join('')}</div>` : ''}
       <button class="btn stop" data-act="stop" data-id="${x.id}">■ Stopp</button>
     </div>`;
@@ -391,7 +391,7 @@ function logHTML() {
     <span>🍼 <b>${st.feeds}×</b></span>
     ${st.ml ? `<span><b>${st.ml}</b> ml</span>` : ''}
     ${st.breastMin ? `<span>🤱 <b>${fmtDur(st.breastMin * MIN)}</b></span>` : ''}
-    <span>😴 <b>${st.sleepMs ? fmtDur(st.sleepMs) : '0'}</b></span>
+    ${st.sleepMs ? `<span>😴 <b>${fmtDur(st.sleepMs)}</b></span>` : ''}
     <span>💧 <b>${st.pee}</b></span><span>💩 <b>${st.poo}</b></span>
     ${S.vitd[ui.day] ? '<span>☀️ <b>Vit. D</b></span>' : ''}
   </div>`;
@@ -439,19 +439,18 @@ function chartHTML(id, title, keys, vals, fmt, unit, avgFmt = fmt) {
 function viewStats() {
   const keys = lastDays(7), st = keys.map(dayStats);
   const int = v => String(Math.round(v));
-  const hrs = v => num(v / HOUR);
   // Durchschnittlicher Abstand zwischen Mahlzeiten (7 Tage, Lücken > 8 h ignoriert)
   const since = fromKey(keys[0]).getTime();
   const feeds = S.log.filter(x => isFeed(x) && x.s >= since).sort((a, b) => a.s - b.s);
   const gaps = []; for (let i = 1; i < feeds.length; i++) { const g = feeds[i].s - feeds[i - 1].s; if (g > 10 * MIN && g < 8 * HOUR) gaps.push(g); }
   const avgGap = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
   const L = st.reduce((a, s) => a + s.L, 0), R = st.reduce((a, s) => a + s.R, 0);
-  const sleeps = S.log.filter(x => isSleep(x) && x.e && x.s >= since);
-  const longest = sleeps.reduce((m, x) => Math.max(m, x.e - x.s), 0);
+  const bottles = S.log.filter(x => isFeed(x) && x.ml && x.s >= since);
+  const avgMl = bottles.length ? bottles.reduce((a, x) => a + x.ml, 0) / bottles.length : 0;
 
   let h = `<div class="status" style="margin-top:4px">
     <div class="card st"><small>⏱ Ø Abstand</small><b>${avgGap ? fmtDur(avgGap) : '–'}</b><span>zwischen Mahlzeiten</span></div>
-    <div class="card st"><small>🌙 Längster Schlaf</small><b>${longest ? fmtDur(longest) : '–'}</b><span>letzte 7 Tage</span></div>
+    <div class="card st"><small>🍼 Ø getrunken</small><b>${avgMl ? Math.round(avgMl) + ' ml' : '–'}</b><span>pro Mahlzeit, 7 Tage</span></div>
   </div>`;
   if (L + R) {
     h += `<div class="card chart" style="margin-bottom:10px"><div class="ch-h"><b>Seitenverteilung beim Füttern</b><span>letzte 7 Tage</span></div>
@@ -461,13 +460,12 @@ function viewStats() {
   h += `<div class="charts">
     ${chartHTML('feeds', 'Mahlzeiten', keys, st.map(s => s.feeds), int, '', num)}
     ${chartHTML('ml', 'Flasche & Zusatz', keys, st.map(s => s.ml), int, 'ml')}
-    ${chartHTML('sleep', 'Schlaf', keys, st.map(s => s.sleepMs), hrs, 'h')}
     ${chartHTML('pee', 'Nasse Windeln 💧', keys, st.map(s => s.pee), int, '', num)}
     ${chartHTML('poo', 'Stuhlgang 💩', keys, st.map(s => s.poo), int, '', num)}
   </div>`;
   h += `<div class="section-t">Tabelle</div><div class="card" style="padding:2px 6px;overflow-x:auto"><table class="tbl">
-    <tr><th>Tag</th><th>🍼</th><th>ml</th><th>😴 h</th><th>💧</th><th>💩</th></tr>
-    ${keys.map((k, i) => { const s = st[i], d = fromKey(k); return `<tr><td>${DAYS_S[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.</td><td>${s.feeds}</td><td>${s.ml}</td><td>${hrs(s.sleepMs)}</td><td>${s.pee}</td><td>${s.poo}</td></tr>`; }).reverse().join('')}
+    <tr><th>Tag</th><th>🍼</th><th>ml</th><th>💧</th><th>💩</th></tr>
+    ${keys.map((k, i) => { const s = st[i], d = fromKey(k); return `<tr><td>${DAYS_S[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.</td><td>${s.feeds}</td><td>${s.ml}</td><td>${s.pee}</td><td>${s.poo}</td></tr>`; }).reverse().join('')}
   </table></div>`;
   h += growthHTML();
   return h;
@@ -532,7 +530,7 @@ function viewMore() {
     • Eintrag antippen zum Bearbeiten oder Löschen.<br>
     • Uhrzeit nach Mitternacht? Eine spätere Uhrzeit als jetzt wird automatisch auf gestern gelegt.
   </div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.4</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.5</p>`;
 }
 
 /* ───────── Aktionen ───────── */
@@ -565,7 +563,7 @@ function dayText(key) {
   const d0 = fromKey(key).getTime(), d1 = d0 + DAY, st = dayStats(key), d = fromKey(key);
   const items = S.log.filter(x => x.s >= d0 && x.s < d1).sort((a, b) => a.s - b.s);
   let t = `${S.settings.name ? S.settings.name + ' – ' : ''}${DAYS[d.getDay()]}, ${fmtDate(d)}\n`;
-  t += `🍼 ${st.feeds} Mahlzeiten${st.ml ? `, ${st.ml} ml` : ''}${st.breastMin ? `, ${fmtDur(st.breastMin * MIN)} gestillt` : ''}\n😴 ${fmtDur(st.sleepMs)} Schlaf · 💧 ${st.pee} · 💩 ${st.poo}\n\n`;
+  t += `🍼 ${st.feeds} Mahlzeiten${st.ml ? `, ${st.ml} ml` : ''}${st.breastMin ? `, ${fmtDur(st.breastMin * MIN)} gestillt` : ''}\n💧 ${st.pee} · 💩 ${st.poo}\n\n`;
   t += items.map(x => `${hm(x.s)}${x.e ? '–' + hm(x.e) : ''}  ${[kindNames(x), x.side.join('+'), x.ml ? x.ml + ' ml' : '', x.pu ? `${num(x.pu)} Lö./${x.wa} ml Wasser` : '', x.poo ? '💩' : '', x.pee ? '💧' : '', x.note].filter(Boolean).join(' · ')}`).join('\n');
   return t;
 }
@@ -617,7 +615,7 @@ const ACT = {
     undoable(`Eingetragen um ${hm(r.x.s)}`, r.before);
   },
   timerStart() {
-    if (!F.kinds.length) { toast('Erst Flasche, Zusatz oder Schlaf wählen'); return; }
+    if (!F.kinds.length) { toast('Erst Flasche oder Zusatz wählen'); return; }
     const x = draftToEntry({ ...F, bis: '' }, true);
     x.run = true;
     const before = S.log.map(e => ({ ...e }));
