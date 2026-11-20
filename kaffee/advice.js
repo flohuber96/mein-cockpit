@@ -1,53 +1,62 @@
 'use strict';
 /* ───────── Auswertung & Vorschlag für den nächsten Shot (bewusst einfach) ─────────
    Hauptindikator ist der FLUSS: Out ÷ (Zeit − erster Tropfen) in g/s.
-   Er bleibt gleich, egal ob du etwas mehr oder weniger in die Tasse laufen lässt –
-   und hängt fast nur vom Mahlgrad (und der Dosis) ab. Deshalb:
-     1. Dosis stark daneben → zuerst die Dosis zurück.
-     2. Fluss zu hoch → feiner, zu niedrig → gröber.
-     3. Fluss passt, Menge nicht → nur früher/später stoppen.
-   Wie stark eine Mahlgrad-Einheit den Fluss verändert, lernt die App pro Sorte. */
+   Er bleibt gleich, egal ob du etwas mehr oder weniger in die Tasse laufen lässt,
+   und zeigt deshalb direkt, ob der Mahlgrad passt.
+
+   Mehr Kaffee (z. B. 20 g statt 18 g): Bei gleicher Ratio soll auch mehr in die Tasse –
+   in ungefähr derselben Zeit. Der Fluss ist dann entsprechend höher. Deshalb wird jeder
+   Fluss auf die Bezugsdosis umgerechnet („bezogen auf 18 g“): Fluss × 18 ÷ Dosis.
+   So gilt für jede Dosis dasselbe Ziel, und nichts wird rot, nur weil du mehr nimmst.
+   Ändert sich die Dosis, ändert sich aber der passende Mahlgrad (mehr Kaffee bremst
+   stärker) – der Sweet Spot wird deshalb aus Shots mit ähnlicher Dosis berechnet.
+
+   Vorschlag: Fluss zu hoch → feiner, zu niedrig → gröber (höchstens zwei Schritte,
+   Schrittweite pro Sorte gelernt) · Fluss passt, Menge nicht → nur früher/später stoppen. */
 (function () {
   const fmt = (x, d = 1) => (x == null || isNaN(x)) ? '–' : (Math.round(x * 10 ** d) / 10 ** d).toFixed(d).replace('.', ',');
   const fmtG = x => (x == null || x === '' || isNaN(x)) ? '–' : String(Math.round(x * 100) / 100).replace('.', ',');
   const snap = (x, step) => Math.round(x / step) * step;
   const r05 = x => Math.round(x * 2) / 2;
   const valid = s => !!s && s.din > 0 && s.dout > 0 && s.t > 0;
+  const fdDef = T => T.fdDef || 10;
+  const k = (din, T) => (din > 0 ? din : T.dose) / T.dose; // Faktor gegenüber der Bezugsdosis
 
-  // Fluss ab erstem Tropfen. Ohne gemessenen Tropfen: Mitte deines üblichen Bereichs (als Schätzung markiert).
+  // Fluss ab erstem Tropfen. Ohne eingetragenen Tropfen werden 10 s angenommen (einstellbar).
+  // v = gemessener Fluss, n = auf die Bezugsdosis umgerechnet (für Vergleich und Ziel)
   function flow(s, T) {
     if (!valid(s)) return null;
     const est = !(s.fd > 0 && s.fd < s.t);
-    const c = s.t - (est ? (T.fdMin + T.fdMax) / 2 : s.fd);
-    return c > 2 ? { v: s.dout / c, est } : null;
+    const c = s.t - (est ? fdDef(T) : s.fd);
+    if (c <= 2) return null;
+    const v = s.dout / c;
+    return { v, n: v / k(s.din, T), est };
   }
-  // Ziel-Out passt sich an, wenn die Dosis abweicht (gleiche Ratio)
-  const outRange = (din, T) => { const k = (din || T.dose) / T.dose; return [T.outMin * k, T.outMax * k]; };
+  // Ziel-Out und Ziel-Fluss wachsen mit der Dosis (gleiche Ratio, ähnliche Zeit)
+  const outRange = (din, T) => [T.outMin * k(din, T), T.outMax * k(din, T)];
+  const flowRange = (din, T) => [T.fMin * k(din, T), T.fMax * k(din, T)];
   const cmp = (v, lo, hi) => (v == null || isNaN(v)) ? null : v < lo - 1e-9 ? 'lo' : v > hi + 1e-9 ? 'hi' : 'ok';
 
-  // Pfeile: liegt jeder Wert im Ziel, darüber (hi) oder darunter (lo)?
+  // Pfeile: liegt jeder Wert im Ziel, darüber (hi) oder darunter (lo)? Die Dosis ist frei wählbar.
   function check(s, T) {
-    const f = flow(s, T), o = outRange(s.din, T);
+    const f = flow(s, T), o = outRange(s.din, T), fr = flowRange(s.din, T);
     return {
-      din: s.din > 0 ? cmp(s.din, T.dose - 0.3, T.dose + 0.3) : null,
       dout: s.dout > 0 ? cmp(s.dout, o[0], o[1]) : null,
       t: s.t > 0 ? cmp(s.t, T.tMin, T.tMax) : null,
       fd: s.fd > 0 ? cmp(s.fd, T.fdMin, T.fdMax) : null,
-      flow: f ? cmp(f.v, T.fMin, T.fMax) : null,
-      f, o,
+      flow: f ? cmp(f.n, T.fMin, T.fMax) : null,
+      f, o, fr,
     };
   }
 
-  /* Sweet Spot je Sorte: Mahlgrad → Fluss.
-     Zuerst echte Treffer (Fluss im Ziel), sonst zwischen zwei Mahlgraden eingrenzen,
-     erst zuletzt aus der Trendlinie (dann als Hochrechnung markiert). */
-  function sweet(shots, T, st) {
-    const step = st.step || 0.25;
-    const pts = shots.filter(s => valid(s) && s.grind != null && s.grind !== '' && !isNaN(s.grind) && Math.abs(s.din - T.dose) <= 1)
-      .slice(-20).map(s => ({ x: +s.grind, y: (flow(s, T) || {}).v, s })).filter(p => p.y != null);
-    const res = { pts, n: pts.length, per: null, range: null, method: null };
+  /* Sweet Spot je Sorte und Dosis: Mahlgrad → Fluss (bezogen auf die Bezugsdosis).
+     Zuerst echte Treffer, sonst zwischen zwei Mahlgraden eingrenzen, erst zuletzt Trendlinie. */
+  function sweet(shots, T, st, dose) {
+    const step = st.step || 0.25, d0 = dose > 0 ? dose : T.dose;
+    const pts = shots.filter(s => valid(s) && s.grind != null && s.grind !== '' && !isNaN(s.grind) && Math.abs(s.din - d0) <= 1)
+      .slice(-20).map(s => ({ x: +s.grind, y: (flow(s, T) || {}).n, s })).filter(p => p.y != null);
+    const res = { pts, n: pts.length, per: null, range: null, method: null, dose: d0 };
     if (!pts.length) return res;
-    // Trend (lineare Regression): Fluss je Mahlgrad-Einheit
     const xs = [...new Set(pts.map(p => p.x))];
     if (pts.length >= 3 && xs.length >= 2) {
       const mx = pts.reduce((a, p) => a + p.x, 0) / pts.length, my = pts.reduce((a, p) => a + p.y, 0) / pts.length;
@@ -56,14 +65,13 @@
       const b = sxy / sxx, per = st.coarserUp ? b : -b; // gröber → mehr Fluss
       if (sxx > 1e-6 && per >= 0.05 && per <= 5) Object.assign(res, { a: my - b * mx, b, per });
     }
-    // Mittelwert je Mahlgrad
     const g = {};
     for (const p of pts) { (g[p.x] = g[p.x] || { x: p.x, ys: [], ts: 0 }).ys.push(p.y); g[p.x].ts = Math.max(g[p.x].ts, p.s.ts || 0); }
     const gm = Object.values(g).map(o => ({ ...o, m: o.ys.reduce((a, b) => a + b, 0) / o.ys.length })).sort((a, b) => a.x - b.x);
     gm.forEach(o => { o.ok = o.m >= T.fMin && o.m <= T.fMax; });
     let sd = 0, df = 0;
     for (const o of gm) if (o.ys.length > 1) { sd += o.ys.reduce((a, y) => a + (y - o.m) ** 2, 0); df += o.ys.length - 1; }
-    res.spread = df ? Math.sqrt(sd / df) : null; // Streuung bei gleichem Mahlgrad (g/s)
+    res.spread = df ? Math.sqrt(sd / df) : null;
     if (gm.some(o => o.ok)) {
       const newest = gm.filter(o => o.ok).reduce((a, o) => o.ts > a.ts ? o : a);
       let i = gm.indexOf(newest), j = i;
@@ -90,20 +98,17 @@
     return res;
   }
 
-  // Ein Satz für den nächsten Shot
+  // Ein Satz für den nächsten Shot (mit derselben Dosis wie zuletzt)
   function next(s, shots, T, st) {
     const c = check(s, T), step = st.step || 0.25, dir = st.coarserUp ? 1 : -1;
-    const out = r05((T.outMin + T.outMax) / 2);
-    const r = { status: 'good', title: '', sub: '', din: T.dose, dout: out, grind: s && s.grind != null && s.grind !== '' ? +s.grind : null, c };
+    const din = s && s.din > 0 ? s.din : T.dose, o = outRange(din, T);
+    const out = r05((o[0] + o[1]) / 2);
+    const r = { status: 'good', title: '', sub: '', din, dout: out, grind: s && s.grind != null && s.grind !== '' ? +s.grind : null, c };
     if (!valid(s)) { r.status = 'none'; r.title = 'Werte unvollständig'; r.sub = 'Für einen Vorschlag brauche ich In, Out und Zeit.'; return r; }
-    if (Math.abs(s.din - T.dose) >= 1) {
-      r.status = 'warn'; r.title = `Dosis zurück auf ${fmt(T.dose)} g`;
-      r.sub = `Mit ${fmt(s.din)} g ist das Sieb ${s.din > T.dose ? 'zu voll' : 'zu leer'} – das verfälscht Fluss und Zeit. Erst die Dosis, dann den Mahlgrad beurteilen.`;
-      return r;
-    }
-    const est = c.f && c.f.est ? ' Erster Tropfen nicht gemessen – Fluss geschätzt.' : '';
+    const est = c.f && c.f.est ? ` Erster Tropfen nicht eingetragen – ${fdDef(T)} s angenommen.` : '';
+    const other = Math.abs(din - T.dose) >= 0.5 ? ` (bei ${fmt(din)} g: ${fmt(c.fr[0])}–${fmt(c.fr[1])} g/s)` : '';
     if (c.flow === 'hi' || c.flow === 'lo') {
-      const sw = sweet(shots, T, st), mid = (T.fMin + T.fMax) / 2, dev = c.f.v - mid, finer = dev > 0;
+      const sw = sweet(shots, T, st, din), mid = (T.fMin + T.fMax) / 2, dev = c.f.n - mid, finer = dev > 0;
       let units = sw.per ? Math.abs(dev) / sw.per : (Math.abs(dev) > (T.fMax - T.fMin) ? 2 * step : step);
       units = Math.max(snap(units, step), step);
       // höchstens zwei Schritte auf einmal – Trends aus wenigen Shots übertreiben oft
@@ -112,14 +117,14 @@
       if (r.grind != null) r.grind = +(r.grind + (finer ? -1 : 1) * dir * units).toFixed(2);
       r.status = Math.abs(dev) > (T.fMax - T.fMin) ? 'bad' : 'warn';
       r.title = `${finer ? 'Feiner' : 'Gröber'} mahlen${s.grind != null && s.grind !== '' ? `: ${fmtG(s.grind)} → ${fmtG(r.grind)}` : ''}`;
-      r.sub = `Fluss ${fmt(c.f.v)} g/s ist zu ${finer ? 'hoch' : 'niedrig'} (Ziel ${fmt(T.fMin)}–${fmt(T.fMax)} g/s).` +
+      r.sub = `Fluss ${fmt(c.f.v)} g/s ist zu ${finer ? 'hoch' : 'niedrig'}${other || ` (Ziel ${fmt(T.fMin)}–${fmt(T.fMax)} g/s)`}.` +
         (sw.per ? ` Bei dieser Sorte bringt eine Mahlgrad-Einheit ca. ${fmt(sw.per)} g/s.` : ' Schrittweite geschätzt – wird mit jedem Shot genauer.') +
         (capped && trendG != null ? ` Laut Trend wäre es eher ${fmtG(trendG)} – lieber in kleinen Schritten annähern.` : '') + est;
       return r;
     }
     if (c.dout && c.dout !== 'ok') {
       r.status = 'warn'; r.title = `Bei ${fmt(out)} g stoppen`;
-      r.sub = `Der Fluss passt – nur die Menge: ${fmt(s.dout)} g ist zu ${c.dout === 'hi' ? 'viel' : 'wenig'} (Ziel ${fmt(T.outMin)}–${fmt(T.outMax)} g). Mahlgrad so lassen.` + est;
+      r.sub = `Der Fluss passt – nur die Menge: ${fmt(s.dout)} g ist zu ${c.dout === 'hi' ? 'viel' : 'wenig'} (Ziel bei ${fmt(din)} g: ${fmt(o[0], 0)}–${fmt(o[1], 0)} g). Mahlgrad so lassen.` + est;
       return r;
     }
     if (c.fd && c.fd !== 'ok') {
@@ -133,5 +138,5 @@
     return r;
   }
 
-  window.Advice = { flow, check, sweet, next, outRange, fmt, fmtG, snap, valid, r05 };
+  window.Advice = { flow, check, sweet, next, outRange, flowRange, fmt, fmtG, snap, valid, r05 };
 })();

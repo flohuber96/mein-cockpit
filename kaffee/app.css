@@ -119,8 +119,26 @@ main{padding:4px 14px calc(96px + var(--bot));max-width:720px;margin:0 auto}
 .step .hint{display:block;text-align:center;font-size:11.5px;color:var(--t3);font-weight:700;min-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hint.good{color:var(--ok)}
 .hint.warn{color:var(--warn)}
-.flowbox .fv{text-align:center;font-size:23px;font-weight:800;line-height:42px;height:48px;font-variant-numeric:tabular-nums}
+/* Fluss = Ergebnis, kein Eingabefeld: eigene Farbe, gestrichelter Rand */
+.flowbox{background:transparent;border:2px dashed var(--line);padding:5px 4px 3px}
+.flowbox .fv{text-align:center;font-size:24px;font-weight:900;line-height:42px;height:46px;font-variant-numeric:tabular-nums}
 .flowbox .fv small{font-size:13px;font-weight:700;color:var(--t2)}
+.flowbox.good{background:var(--ok-soft);border:2px solid var(--ok)}
+.flowbox.good .fv,.flowbox.good label{color:var(--ok)}
+.flowbox.warn{background:var(--warn-soft);border:2px solid var(--warn)}
+.flowbox.warn .fv,.flowbox.warn label{color:var(--warn)}
+.flowbox.good .hint,.flowbox.warn .hint{color:inherit}
+/* Kommentar (2/3) + Stoppuhr (1/3) */
+.noterow{display:grid;grid-template-columns:1fr;gap:8px}
+.noterow.with-timer{grid-template-columns:2fr 1fr}
+.noterow textarea{min-height:64px;height:64px;resize:none}
+.timer{width:100%;height:64px;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-weight:800}
+.timer b{font-size:20px;line-height:1.1;font-variant-numeric:tabular-nums}
+.timer span{font-size:12.5px}
+.timer.idle{background:var(--acc-soft);color:var(--acc-t)}
+.timer.run{background:var(--acc);color:var(--on-acc)}
+.timer:active{transform:scale(.97)}
+.advice .btn{margin-top:8px}
 
 /* Diagramm */
 .chart{padding:10px 12px 12px}
@@ -147,6 +165,8 @@ main{padding:4px 14px calc(96px + var(--bot));max-width:720px;margin:0 auto}
 .hrow .note::before{content:"💬 "}
 .ar{font-style:normal;font-size:9.5px;margin-left:2px;vertical-align:1px}
 .ar.hi,.ar.lo{color:var(--warn)}
+.hrow .mg{justify-self:end;padding:1px 5px;margin-right:-5px;border-radius:6px}
+.mg.ok{background:var(--ok-soft);color:var(--ok);font-weight:800;padding:1px 5px;border-radius:6px}
 .legend-line{margin:6px 6px 0;line-height:1.5}
 @media (max-width:360px){.hrow{font-size:12.5px;padding:8px 6px;grid-template-columns:42px repeat(6,1fr)}}
 

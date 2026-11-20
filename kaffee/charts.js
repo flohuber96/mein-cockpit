@@ -12,7 +12,7 @@
     const n = rows.length; if (!n) return '';
     const W = 340, L = 40, R = 12, rowH = 74, gap = 22, top = 8;
     const panels = [
-      { key: 'flow', label: 'Fluss (g/s)', band: o.flowBand, dec: 1 },
+      { key: 'flow', label: o.flowLabel || 'Fluss (g/s)', band: o.flowBand, dec: 1, fixed: o.flowAxis },
       { key: 't', label: 'Zeit (s)', band: o.timeBand, dec: 0 },
       { key: 'grind', label: 'Mahlgrad', band: o.grindBand, dec: 2, step: true },
     ];
@@ -24,12 +24,16 @@
       const vals = rows.map(r => r[p.key]).filter(v => v != null && !isNaN(v));
       h += `<text x="4" y="${y0 - 4}" style="fill:var(--t1);font-size:11.5px;font-weight:800">${p.label}</text>`;
       if (!vals.length) { h += `<text x="${(L + W) / 2}" y="${(y0 + y1) / 2}" text-anchor="middle" style="fill:var(--t3);font-size:11px">keine Werte</text>`; return; }
-      let lo = Math.min(...vals, ...(p.band || [])), hi = Math.max(...vals, ...(p.band || []));
-      const minSpan = p.key === 'flow' ? 0.6 : p.key === 't' ? 8 : 0.5;
-      if (hi - lo < minSpan) { const m = (hi + lo) / 2; lo = m - minSpan / 2; hi = m + minSpan / 2; }
-      const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
-      const Y = v => y1 - (y1 - y0) * (v - lo) / (hi - lo);
-      const st = niceStep(hi - lo, 3);
+      let lo, hi;
+      if (p.fixed) [lo, hi] = p.fixed;
+      else {
+        lo = Math.min(...vals, ...(p.band || [])); hi = Math.max(...vals, ...(p.band || []));
+        const minSpan = p.key === 't' ? 8 : 0.5;
+        if (hi - lo < minSpan) { const m = (hi + lo) / 2; lo = m - minSpan / 2; hi = m + minSpan / 2; }
+        const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+      }
+      const Y = v => y1 - (y1 - y0) * (Math.min(Math.max(v, lo), hi) - lo) / (hi - lo);
+      const st = p.fixed ? 0.5 : niceStep(hi - lo, 3);
       for (let v = Math.ceil(lo / st) * st; v <= hi + 1e-9; v += st) h += `<line x1="${L}" y1="${Y(v)}" x2="${W - R}" y2="${Y(v)}" style="stroke:var(--grid)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end" style="fill:var(--t2);font-size:10.5px">${f(v, st < 1 ? (st < 0.1 ? 2 : 1) : 0)}</text>`;
       if (p.band) h += `<rect x="${L}" y="${Y(p.band[1])}" width="${W - L - R}" height="${Math.max(2, Y(p.band[0]) - Y(p.band[1]))}" style="fill:var(--ok-soft)"/>`;
       // Linie (Mahlgrad als Treppe)
@@ -45,7 +49,8 @@
         const off = p.band && (v < p.band[0] - 1e-9 || v > p.band[1] + 1e-9), last = i === n - 1;
         const col = p.band ? (off ? C.off : 'var(--ok)') : C.ok;
         if (last) h += `<circle cx="${X(i)}" cy="${Y(v)}" r="8" style="fill:none;stroke:var(--acc);stroke-width:1.5"/>`;
-        h += `<circle cx="${X(i)}" cy="${Y(v)}" r="${n > 30 ? 2.8 : 4}" style="fill:${col};stroke:var(--card);stroke-width:1.5"/>`;
+        if (p.fixed && (v > hi || v < lo)) h += `<path d="M${X(i) - 4.5} ${Y(v) + (v > hi ? 4 : -4)}l4.5 ${v > hi ? -8 : 8}l4.5 ${v > hi ? 8 : -8}z" style="fill:${col}"/>`;
+        else h += `<circle cx="${X(i)}" cy="${Y(v)}" r="${n > 30 ? 2.8 : 4}" style="fill:${col};stroke:var(--card);stroke-width:1.5"/>`;
       });
       if (k === panels.length - 1) {
         // höchstens ca. 5 Datums-Beschriftungen, ohne Überlappung (der letzte Shot hat Vorrang)
@@ -64,21 +69,18 @@
   function sweet(sw, T, o) {
     const pts = sw.pts; if (!pts.length) return '';
     const W = 340, H = 250, L = 38, R = 12, Tp = 34, B = 42, step = o.step || 0.25;
-    const xs = pts.map(p => p.x).concat(sw.range && !sw.extrap ? sw.range : []).concat(o.nextGrind != null ? [o.nextGrind] : []);
-    let x0 = Math.min(...xs) - step * 2, x1 = Math.max(...xs) + step * 2;
-    if (x1 - x0 < 1.5) { const m = (x0 + x1) / 2; x0 = m - 0.75; x1 = m + 0.75; }
-    const ys = pts.map(p => p.y);
-    let y0 = Math.max(0, Math.min(T.fMin - 0.4, ...ys)), y1 = Math.min(6, Math.max(T.fMax + 0.4, ...ys));
-    y0 = Math.floor(y0 * 2) / 2; y1 = Math.ceil(y1 * 2) / 2;
+    // Feste Achsen für alle Sorten: Fluss 1–2,5 g/s, Mahlgrad 3 Stufen breit, Sweet Spot in der Mitte
+    const center = o.center != null ? o.center : pts[pts.length - 1].x;
+    const x0 = center - 1.5, x1 = center + 1.5, y0 = o.yAxis ? o.yAxis[0] : 1, y1 = o.yAxis ? o.yAxis[1] : 2.5;
     const X = v => L + (W - L - R) * (v - x0) / (x1 - x0);
     const Y = v => Tp + (H - Tp - B) * (1 - (Math.min(Math.max(v, y0), y1) - y0) / (y1 - y0));
     let h = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Mahlgrad gegen Fluss mit Ziel-Mahlgrad">`;
-    const yst = niceStep(y1 - y0);
-    for (let v = Math.ceil(y0 / yst) * yst; v <= y1 + 1e-9; v += yst) h += `<line x1="${L}" y1="${Y(v)}" x2="${W - R}" y2="${Y(v)}" style="stroke:var(--grid)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end" style="fill:var(--t2);font-size:11px">${f(v, 1)}</text>`;
-    const xst = (x1 - x0) > 4 ? 1 : 0.5;
-    for (let v = Math.ceil(x0 / xst) * xst; v <= x1 + 1e-9; v += xst) h += `<line x1="${X(v)}" y1="${Tp}" x2="${X(v)}" y2="${H - B}" style="stroke:var(--grid)"/><text x="${X(v)}" y="${H - B + 15}" text-anchor="middle" style="fill:var(--t2);font-size:11px">${fg(v)}</text>`;
+    for (let v = y0; v <= y1 + 1e-9; v += 0.25) h += `<line x1="${L}" y1="${Y(v)}" x2="${W - R}" y2="${Y(v)}" style="stroke:var(--grid);stroke-dasharray:${Math.abs(v * 2 - Math.round(v * 2)) < 1e-9 ? '0' : '2 3'}"/>`;
+    for (let v = y0; v <= y1 + 1e-9; v += 0.5) h += `<line x1="${L}" y1="${Y(v)}" x2="${W - R}" y2="${Y(v)}" style="stroke:var(--grid)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end" style="fill:var(--t2);font-size:11px">${f(v, 1)}</text>`;
+    for (let v = Math.ceil(x0 / step) * step; v <= x1 + 1e-9; v += step) h += `<line x1="${X(v)}" y1="${Tp}" x2="${X(v)}" y2="${H - B}" style="stroke:var(--grid);stroke-dasharray:2 3"/>`;
+    for (let v = Math.ceil(x0 / 0.5) * 0.5; v <= x1 + 1e-9; v += 0.5) h += `<line x1="${X(v)}" y1="${Tp}" x2="${X(v)}" y2="${H - B}" style="stroke:var(--grid)"/><text x="${X(v)}" y="${H - B + 15}" text-anchor="middle" style="fill:var(--t2);font-size:11px">${fg(v)}</text>`;
     h += `<line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" style="stroke:var(--axis)"/>`;
-    h += `<text x="4" y="13" style="fill:var(--t2);font-size:11px;font-weight:700">Fluss (g/s)</text>`;
+    h += `<text x="4" y="13" style="fill:var(--t2);font-size:11px;font-weight:700">${esc(o.yLabel || 'Fluss (g/s)')}</text>`;
     const left = o.coarserUp ? 'feiner' : 'gröber', right = o.coarserUp ? 'gröber' : 'feiner';
     h += `<text x="${L}" y="${H - 6}" style="fill:var(--t2);font-size:11px;font-weight:700">◂ ${left}</text><text x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle" style="fill:var(--t2);font-size:11px;font-weight:700">Mahlgrad</text><text x="${W - R}" y="${H - 6}" text-anchor="end" style="fill:var(--t2);font-size:11px;font-weight:700">${right} ▸</text>`;
     h += `<rect x="${L}" y="${Y(T.fMax)}" width="${W - L - R}" height="${Y(T.fMin) - Y(T.fMax)}" style="fill:var(--ok-soft)"/>`;
@@ -99,15 +101,21 @@
     if (o.nextGrind != null && o.nextGrind >= x0 && o.nextGrind <= x1) {
       const nr = X(o.nextGrind) > W - R - 60;
       h += `<line x1="${X(o.nextGrind)}" y1="${Tp}" x2="${X(o.nextGrind)}" y2="${H - B}" style="stroke:var(--acc);stroke-width:2"/>`;
-      h += `<text x="${X(o.nextGrind) + (nr ? -4 : 4)}" y="${H - B - 6}" text-anchor="${nr ? 'end' : 'start'}" style="fill:var(--acc-t);font-size:11px;font-weight:800">nächster</text>`;
+      h += `<text x="${X(o.nextGrind) + (nr ? -4 : 4)}" y="${Tp + 12}" text-anchor="${nr ? 'end' : 'start'}" style="fill:var(--acc-t);font-size:11px;font-weight:800">nächster</text>`;
     }
+    let outL = 0, outR = 0;
     pts.forEach((p, i) => {
-      const last = i === pts.length - 1, cx = X(p.x), cy = Y(p.y), off = p.y < T.fMin || p.y > T.fMax;
+      if (p.x < x0 - 1e-9) { outL++; return; }
+      if (p.x > x1 + 1e-9) { outR++; return; }
+      const last = i === pts.length - 1, cx = X(p.x), cy = Y(p.y), off = p.y < T.fMin || p.y > T.fMax, col = off ? C.off : 'var(--ok)';
       if (last) h += `<circle cx="${cx}" cy="${cy}" r="10" style="fill:none;stroke:var(--acc);stroke-width:2"/>`;
-      h += `<circle cx="${cx}" cy="${cy}" r="${last ? 6 : 5}" style="fill:${off ? C.off : 'var(--ok)'};stroke:var(--card);stroke-width:2"/>`;
+      if (p.y > y1 || p.y < y0) h += `<path d="M${cx - 5} ${cy + (p.y > y1 ? 5 : -5)}l5 ${p.y > y1 ? -9 : 9}l5 ${p.y > y1 ? 9 : -9}z" style="fill:${col}"/>`;
+      else h += `<circle cx="${cx}" cy="${cy}" r="${last ? 6 : 5}" style="fill:${col};stroke:var(--card);stroke-width:2"/>`;
       h += `<circle cx="${cx}" cy="${cy}" r="14" fill="transparent" data-tip="${esc(o.tip ? o.tip(p.s) : '')}" tabindex="0"/>`;
       if (last) h += `<text x="${cx}" y="${cy - 14 < Tp + 4 ? cy + 24 : cy - 14}" text-anchor="middle" style="fill:var(--t1);font-size:11px;font-weight:800">zuletzt</text>`;
     });
+    if (outL) h += `<text x="${L + 3}" y="${H - B - 6}" style="fill:var(--t3);font-size:10.5px;font-weight:700">◂ ${outL} weitere</text>`;
+    if (outR) h += `<text x="${W - R - 3}" y="${H - B - 6}" text-anchor="end" style="fill:var(--t3);font-size:10.5px;font-weight:700">${outR} weitere ▸</text>`;
     return h + '</svg>';
   }
 
