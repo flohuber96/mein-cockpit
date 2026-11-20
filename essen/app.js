@@ -27,8 +27,8 @@ const MEALS = [
 ];
 const meal = k => MEALS.find(m => m.k === k) || MEALS[2];
 const VIEWS = ['plan', 'recipes', 'swipe', 'shop', 'more'];
-const SORTS = ['name', 'time', 'kcal', 'protein', 'pp'];
-const APP_VERSION = '4.0';
+const SORTS = ['name', 'time', 'kcal', 'protein', 'pp', 'ns', 'veg'];
+const APP_VERSION = '5.0';
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 const isStr = x => typeof x === 'string' && x !== '';
 const isNum = x => typeof x === 'number' && isFinite(x);
@@ -63,6 +63,10 @@ const ICON = {
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   share: '<svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>',
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  filter: '<svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>',
+  chart: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  timer: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>',
+  camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
 };
 
 /* ───────── Ingredient parsing & units ───────── */
@@ -238,13 +242,15 @@ function cleanRecipe(r) {
     && (r.tags === undefined || (Array.isArray(r.tags) && r.tags.every(isStr)))
     && isNum(r.servings) && r.servings >= 1
     && (r.time === '' || r.time == null || (isNum(r.time) && r.time >= 0))
-    && (r.emoji == null || typeof r.emoji === 'string') && (r.notes == null || typeof r.notes === 'string');
+    && (r.emoji == null || typeof r.emoji === 'string') && (r.notes == null || typeof r.notes === 'string')
+    && (r.photo == null || (typeof r.photo === 'string' && r.photo.startsWith('data:image/')));
   if (ok) return r;
   const time = r.time === '' || r.time == null ? NaN : +r.time, serv = +r.servings;
   return {
     ...r, ingredients: cleanIngs(r.ingredients), steps: Array.isArray(r.steps) ? r.steps.filter(isStr) : [],
     tags: Array.isArray(r.tags) ? r.tags.filter(isStr) : [], servings: isNum(serv) && serv >= 1 ? serv : 1,
     time: isNum(time) && time >= 0 ? time : '', emoji: typeof r.emoji === 'string' ? r.emoji : '🍽️', notes: typeof r.notes === 'string' ? r.notes : '',
+    photo: typeof r.photo === 'string' && r.photo.startsWith('data:image/') ? r.photo : undefined,
   };
 }
 function cleanItem(i) {
@@ -301,6 +307,12 @@ function sanitize(s) {
   const meals = Array.isArray(st.meals) ? MEALS.map(m => m.k).filter(k => st.meals.includes(k)) : [];
   const stOk = isObj(s.settings) && Array.isArray(st.meals) && meals.length > 0 && meals.length === st.meals.length && isNum(st.servings) && st.servings >= 1 && st.servings <= 20 && typeof st.pantry === 'string';
   if (!stOk) s.settings = { ...f.settings, ...st, meals: meals.length ? meals : f.settings.meals, servings: isNum(+st.servings) && st.servings != null ? Math.min(20, Math.max(1, Math.round(+st.servings))) : f.settings.servings, pantry: typeof st.pantry === 'string' ? st.pantry : f.settings.pantry };
+  // Ziele & Ernährung sind optional – nur Ungültiges entfernen, Gültiges unangetastet lassen
+  const ss = s.settings, drop = [], g = ss.goals;
+  if ('goals' in ss && !(isObj(g) && Object.keys(g).every(k => (k === 'kcal' && isNum(g.kcal) && g.kcal >= 800 && g.kcal <= 6000) || (k === 'protein' && isNum(g.protein) && g.protein >= 10 && g.protein <= 400)))) drop.push('goals');
+  if ('avoid' in ss && !(Array.isArray(ss.avoid) && ss.avoid.every(a => isStr(a) && ALLERGENS[a]))) drop.push('avoid');
+  if ('diet' in ss && !['all', 'veggie', 'vegan'].includes(ss.diet)) drop.push('diet');
+  if (drop.length) { s.settings = { ...ss }; drop.forEach(k => delete s.settings[k]); }
   const u = { ...f.ui, ...(isObj(s.ui) ? s.ui : {}) };
   if (!VIEWS.includes(u.view)) u.view = 'plan';
   if (!SORTS.includes(u.sort)) u.sort = 'name';
@@ -390,7 +402,7 @@ function replaceState(data, msg) {
 if (lsGet(KEY) !== JSON.stringify(S)) persist(); // reparierten/ergänzten Stand gleich festhalten
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
-const ui = { weekStart: monday(new Date()), q: '', tag: '', sq: '', showPast: false, chipsAll: false };
+const ui = { weekStart: monday(new Date()), q: '', tag: '', sq: '', showPast: false, chipsAll: false, f: {}, strict: false };
 
 /* ───────── Rezepte & Nährwerte ───────── */
 let _all = null;
@@ -410,21 +422,46 @@ function recipeById(id) {
   return b ? withOverride(b) : null;
 }
 const isFav = id => S.favs.includes(id);
+// Analyse eines Rezepts (Nährwerte, Nutri-Score, Gemüse, Allergene …) – siehe nutri.js
 function nutr(r) {
   let n = nutCache.get(r.id);
-  if (!n) {
-    const t = calcNutrition(r.ingredients), s = r.servings || 1;
-    n = { pp: t.kcal ? t.p * 4 / t.kcal * 100 : 0, kcal: t.kcal / s, p: t.p / s, c: t.c / s, f: t.f / s, fib: t.fib / s, vegan: t.vegan, fish: t.fish, coverage: t.coverage };
-    nutCache.set(r.id, n);
-  }
+  if (!n) { n = analyzeRecipe(r); nutCache.set(r.id, n); }
   return n;
 }
+
+/* ───────── Persönliche Ziele & Ernährung ───────── */
+const DEFAULT_GOALS = { kcal: 2000, protein: 70 };
+const DIETS = { all: 'Alles', veggie: 'Vegetarisch (ohne Fisch)', vegan: 'Vegan' };
+const goals = () => ({ ...DEFAULT_GOALS, ...(isObj(S.settings.goals) ? S.settings.goals : {}) });
+const avoidList = () => (Array.isArray(S.settings.avoid) ? S.settings.avoid.filter(a => ALLERGENS[a]) : []);
+const dietOf = () => (DIETS[S.settings.diet] ? S.settings.diet : 'all');
+const fitsDiet = r => { const d = dietOf(), n = nutr(r); return d === 'all' || (d === 'veggie' ? !n.fish : n.vegan); };
+const badAllergens = r => { const av = avoidList(); return av.length ? nutr(r).allergens.filter(a => av.includes(a)) : []; };
+const suits = r => fitsDiet(r) && !badAllergens(r).length; // für Vorschläge und „Auffüllen“
+
+/* ───────── Fotos ───────── */
+// Eigene Fotos stecken im Rezept (data:-URL), eingebaute liegen als Datei in img/ (Nachweis in photos.js)
+function photoOf(r) {
+  if (!r) return null;
+  if (typeof r.photo === 'string' && r.photo.startsWith('data:image/')) return { src: r.photo, own: true };
+  const c = typeof PHOTOS !== 'undefined' && r.builtin ? PHOTOS[r.id] : null;
+  return c ? { src: 'img/' + r.id.slice(2) + '.webp', credit: c } : null;
+}
+const hueOf = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+// Vorschaubild mit Emoji als Ersatz (fehlendes Foto, kein Netz)
+function thumbHTML(r, cls = 'thumb') {
+  const p = photoOf(r), e = `<i>${esc((r && r.emoji) || '🍽️')}</i>`;
+  return `<span class="${cls}${p ? '' : ' noimg'}" style="--h:${hueOf(r ? r.id : '')}">${p ? `<img src="${esc(p.src)}" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('noimg');this.remove()">` : ''}${e}</span>`;
+}
+const nsBadge = n => (n && n.ns ? `<span class="nsb ns-${n.ns.grade}" title="Nutri-Score ${n.ns.grade} (geschätzt)">${n.ns.grade}</span>` : '');
 const SMART = {
   fav: { label: '♥ Favoriten', test: r => isFav(r.id) },
   veggie: { label: '🥕 Vegetarisch', test: r => !nutr(r).fish },
   vegan: { label: '🌱 Vegan', test: r => nutr(r).vegan },
   fish: { label: '🐟 Fisch', test: r => nutr(r).fish },
   fast: { label: '⏱ Bis 30 Min.', test: r => r.time && r.time <= 30 },
+  healthy: { label: '🟢 Nutri-Score A/B', test: r => { const g = nutr(r).ns; return !!g && (g.grade === 'A' || g.grade === 'B'); } },
+  greens: { label: '🥦 Viel Gemüse', test: r => nutr(r).vegPortions >= 2 },
   light: { label: '🔥 Unter 500 kcal', test: r => nutr(r).kcal < 500 },
   protein: { label: '💪 Proteinreich (ab 25 %)', test: r => nutr(r).pp >= 25 },
   lowcarb: { label: '🥑 Low Carb', test: r => nutr(r).c <= 30 },
@@ -534,10 +571,10 @@ function updateBadge() {
 function entryInfo(e) {
   if (e.r) {
     const r = recipeById(e.r);
-    if (!r) return { emoji: '❓', name: 'Gelöschtes Rezept', meta: '', kcal: 0, p: 0 };
-    return { emoji: r.emoji || '🍽️', name: r.name, meta: `${e.s || r.servings} P.`, kcal: nutr(r).kcal, p: nutr(r).p };
+    if (!r) return { emoji: '❓', name: 'Gelöschtes Rezept', meta: '', kcal: 0, p: 0, r: null };
+    return { emoji: r.emoji || '🍽️', name: r.name, meta: `${e.s || r.servings} P.`, kcal: nutr(r).kcal, p: nutr(r).p, r };
   }
-  return { emoji: '📝', name: e.t, meta: '', kcal: 0, p: 0 };
+  return { emoji: '📝', name: e.t, meta: '', kcal: 0, p: 0, r: null };
 }
 const fmtInt = n => Math.round(n).toLocaleString('de-DE');
 function viewPlan() {
@@ -565,13 +602,15 @@ function viewPlan() {
       const e = day[m.k];
       if (e) {
         const x = entryInfo(e); kcal += x.kcal; prot += x.p; planned++;
-        slots += `<button class="slot filled" draggable="true" data-act="slotMenu" data-d="${k}" data-m="${m.k}"><span class="slot-l">${m.short}</span><span class="slot-emoji">${esc(x.emoji)}</span><span class="slot-name">${esc(x.name)}</span><span class="slot-meta">${esc(x.meta)}</span></button>`;
+        const warn = x.r && badAllergens(x.r).length ? '<i class="slot-warn" title="Enthält gemiedene Allergene">⚠</i>' : '';
+        slots += `<button class="slot filled" draggable="true" data-act="slotMenu" data-d="${k}" data-m="${m.k}"><span class="slot-l">${m.short}</span>${x.r ? thumbHTML(x.r, 'sthumb') : `<span class="sthumb noimg note"><i>${esc(x.emoji)}</i></span>`}<span class="slot-name">${esc(x.name)}</span><span class="slot-meta">${warn}${esc(x.meta)}</span></button>`;
       } else {
         slots += `<button class="slot empty" data-act="slotPick" data-d="${k}" data-m="${m.k}" aria-label="${DAYS[i]} ${m.name}: Gericht wählen"><span class="slot-l">${m.short}</span><span class="slot-add">+ Gericht wählen</span></button>`;
       }
     }
     if (k < today) pastN++;
-    days += `<section class="card day${k === today ? ' today' : ''}${k < today ? ' past' : ''}"><div class="day-h"><span class="dn">${DAYS[i]}</span><small>${fmtDay(d)}</small>${k === today ? '<i class="tchip">Heute</i>' : ''}${kcal ? `<em>≈ ${fmtInt(kcal)} kcal · ${Math.round(prot * 400 / kcal)} % P</em>` : ''}</div>${slots}</section>`;
+    const gk = goals().kcal, kp = Math.min(100, kcal / gk * 100);
+    days += `<section class="card day${k === today ? ' today' : ''}${k < today ? ' past' : ''}"><div class="day-h"><span class="dn">${DAYS[i]}</span><small>${fmtDay(d)}</small>${k === today ? '<i class="tchip">Heute</i>' : ''}${kcal ? `<em title="Geplante Mahlzeiten pro Person">${fmtInt(kcal)} kcal · ${fmtInt(prot)} g Eiweiß</em>` : ''}</div>${kcal ? `<div class="daybar" title="${fmtInt(kcal / gk * 100)} % von ${fmtInt(gk)} kcal"><i style="width:${kp}%"></i></div>` : ''}${slots}</section>`;
   }
   const total = meals.length * 7, hidePast = isCur && pastN > 0 && !ui.showPast;
   if (hidePast) h += `<button class="pastbtn" data-act="showPast">▸ ${pastN === 1 ? 'Gestern' : pastN + ' vergangene Tage'} anzeigen</button>`;
@@ -581,21 +620,45 @@ function viewPlan() {
       <div class="progress"><i style="width:${total ? Math.round(planned / total * 100) : 0}%"></i></div>
       <div class="ws-acts">
         <button class="btn primary" data-act="weekToShop">🛒 Zutaten auf die Einkaufsliste</button>
+        <button class="btn" data-act="weekAnalysis" ${planned ? '' : 'disabled'}>${ICON.chart}<span>Wochen-Analyse</span></button>
         <button class="btn" data-act="weekRandom">🎲 Auffüllen</button>
         <button class="btn" data-act="weekClear">🧹 Leeren</button>
       </div>
-      <p class="small muted">kcal-Angaben pro Person · Gerichte lassen sich durch Ziehen verschieben</p>
+      <p class="small muted">Angaben pro Person · Balken = Anteil am Tagesziel (${fmtInt(goals().kcal)} kcal) · Gerichte lassen sich durch Ziehen verschieben</p>
     </section></div>`;
   return h;
 }
 
 /* ── Rezepte ── */
+const SORT_LABELS = [['name', 'Name'], ['ns', 'Nutri-Score'], ['veg', 'Gemüse-Anteil'], ['time', 'Zubereitungszeit'], ['kcal', 'Kalorien'], ['protein', 'Eiweiß (g)'], ['pp', 'Protein-Anteil']];
+// Zusatzfilter (nur für diese Sitzung); gemiedene Allergene und Ernährungsweise stehen in den Einstellungen
+const FILTER_DEF = {
+  meal: { label: 'Mahlzeit', opts: [['', 'Alle'], ['main', 'Hauptgericht'], ['breakfast', 'Frühstück'], ['sweet', 'Süßes & Snacks']] },
+  time: { label: 'Zubereitungszeit', opts: [['', 'Egal'], ['15', 'bis 15 Min.'], ['30', 'bis 30 Min.'], ['45', 'bis 45 Min.']] },
+  ns: { label: 'Nutri-Score (geschätzt)', opts: [['', 'Egal'], ['A', 'nur A'], ['B', 'A oder B'], ['C', 'A bis C']] },
+  veg: { label: 'Gemüse & Obst pro Portion', opts: [['', 'Egal'], ['1', 'ab 1 Portion'], ['2', 'ab 2 Portionen'], ['3', 'ab 3 Portionen']] },
+  kcal: { label: 'Kalorien pro Portion', opts: [['', 'Egal'], ['400', 'bis 400 kcal'], ['600', 'bis 600 kcal'], ['800', 'bis 800 kcal']] },
+};
+const isSweet = r => (r.tags || []).some(t => /süß|dessert|snack|backen/i.test(t));
+function filterTests() {
+  const f = ui.f || {}, t = [];
+  if (f.meal === 'main') t.push(isMainDish); else if (f.meal === 'breakfast') t.push(isBreakfast); else if (f.meal === 'sweet') t.push(isSweet);
+  if (f.time) t.push(r => r.time && r.time <= +f.time);
+  if (f.ns) t.push(r => { const n = nutr(r).ns; return !!n && n.grade <= f.ns; });
+  if (f.veg) t.push(r => nutr(r).vegPortions >= +f.veg);
+  if (f.kcal) t.push(r => nutr(r).kcal > 0 && nutr(r).kcal <= +f.kcal);
+  if (ui.strict) t.push(suits);
+  return t;
+}
+const activeFilters = () => Object.values(ui.f || {}).filter(Boolean).length + (ui.strict ? 1 : 0);
 function viewRecipes() {
-  return `<div class="search">${ICON.search}<input id="rq" type="search" placeholder="Rezepte oder Zutaten suchen" value="${esc(ui.q)}" autocomplete="off" aria-label="Rezepte oder Zutaten suchen"></div>
+  const nf = activeFilters();
+  return `<div class="rtools"><div class="search">${ICON.search}<input id="rq" type="search" placeholder="Rezepte oder Zutaten suchen" value="${esc(ui.q)}" autocomplete="off" aria-label="Rezepte oder Zutaten suchen"></div>
+    <button class="btn filterbtn${nf ? ' on' : ''}" data-act="filterOpen" aria-label="Filter">${ICON.filter}<span>Filter</span>${nf ? `<i>${nf}</i>` : ''}</button></div>
     <div class="chips${ui.chipsAll ? ' all' : ''}" id="rtags"></div>
     <div class="listbar"><span class="small muted"><span id="rcount"></span><button class="tlink chipmore" data-act="chipsToggle">${ui.chipsAll ? 'Weniger Kategorien' : 'Alle Kategorien'}</button></span>
       <label class="sortsel"><span>Sortieren:</span><select data-change="sort">
-        ${[['name', 'Name'], ['time', 'Zeit'], ['kcal', 'Kalorien'], ['protein', 'Eiweiß (g)'], ['pp', 'Protein-Anteil']].map(([k, l]) => `<option value="${k}" ${S.ui.sort === k ? 'selected' : ''}>${l}</option>`).join('')}
+        ${SORT_LABELS.map(([k, l]) => `<option value="${k}" ${S.ui.sort === k ? 'selected' : ''}>${l}</option>`).join('')}
       </select></label></div>
     <div class="list rgrid" id="rlist"></div>`;
 }
@@ -615,28 +678,41 @@ function matcher(q) {
   const terms = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
   return terms.length ? r => { const h = searchText(r); return terms.every(t => h.includes(t)); } : () => true;
 }
+const NS_RANK = { A: 1, B: 2, C: 3, D: 4, E: 5 };
+const RECIPE_SORTS = {
+  name: (a, b) => a.name.localeCompare(b.name, 'de'),
+  time: (a, b) => (a.time || 999) - (b.time || 999),
+  kcal: (a, b) => nutr(a).kcal - nutr(b).kcal,
+  protein: (a, b) => nutr(b).p - nutr(a).p,
+  pp: (a, b) => nutr(b).pp - nutr(a).pp,
+  ns: (a, b) => ((nutr(a).ns ? nutr(a).ns.score : 99) - (nutr(b).ns ? nutr(b).ns.score : 99)) || nutr(b).vegPortions - nutr(a).vegPortions,
+  veg: (a, b) => nutr(b).vegPortions - nutr(a).vegPortions,
+};
 function filteredRecipes() {
-  const match = matcher(ui.q), tag = ui.tag;
+  const match = matcher(ui.q), tag = ui.tag, tests = filterTests();
   const list = allRecipes().filter(r => {
     if (tag) {
       if (SMART[tag]) { if (!SMART[tag].test(r)) return false; }
       else if (!(r.tags || []).includes(tag)) return false;
     }
-    return match(r);
+    return tests.every(t => t(r)) && match(r);
   });
-  const sorters = {
-    name: (a, b) => a.name.localeCompare(b.name, 'de'),
-    time: (a, b) => (a.time || 999) - (b.time || 999),
-    kcal: (a, b) => nutr(a).kcal - nutr(b).kcal,
-    protein: (a, b) => nutr(b).p - nutr(a).p,
-    pp: (a, b) => nutr(b).pp - nutr(a).pp,
-  };
-  const sorter = sorters[S.ui.sort] || sorters.name;
+  const sorter = RECIPE_SORTS[S.ui.sort] || RECIPE_SORTS.name;
   return list.sort((a, b) => (isFav(b.id) - isFav(a.id)) || sorter(a, b));
 }
+const fmtDec = (n, d = 1) => (Math.round(n * 10 ** d) / 10 ** d).toLocaleString('de-DE');
 function recipeMeta(r) {
   const n = nutr(r);
-  return [r.time ? `⏱ ${esc(r.time)} Min.` : '', n.kcal ? `${fmtInt(n.kcal)} kcal` : '', n.kcal ? `💪 ${Math.round(n.pp)} % Protein` : '', n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : ''].filter(Boolean).join(' · ');
+  return [r.time ? `⏱ ${esc(r.time)} Min.` : '', n.kcal ? `${fmtInt(n.kcal)} kcal` : '', n.kcal ? `${fmtInt(n.p)} g Eiweiß` : ''].filter(Boolean).join(' · ');
+}
+// Kleine Merkmale unter dem Namen: Nutri-Score, Ernährung, Gemüse, Warnung bei gemiedenen Allergenen
+function recipeBadges(r) {
+  const n = nutr(r), bad = badAllergens(r), out = [];
+  if (n.ns) out.push(nsBadge(n));
+  out.push(n.fish ? '<span class="tag">🐟 Fisch</span>' : n.vegan ? '<span class="tag ok">🌱 Vegan</span>' : '<span class="tag">🥕 Veggie</span>');
+  if (n.vegPortions >= 1.5) out.push(`<span class="tag ok">🥦 ${fmtDec(n.vegPortions)} Port.</span>`);
+  if (bad.length) out.push(`<span class="tag warn" title="Enthält gemiedene Allergene">⚠ ${bad.map(a => ALLERGENS[a].short).join(', ')}</span>`);
+  return out.join('');
 }
 // Lange Listen stückweise aufbauen: sofort sichtbar, der Rest kommt beim Scrollen nach
 function chunked(el, list, html, size = 48) {
@@ -655,25 +731,51 @@ function chunked(el, list, html, size = 48) {
   more();
 }
 const recipeCard = r => `<button class="card rcard" data-act="recipeOpen" data-id="${esc(r.id)}">
-    <span class="remoji">${esc(r.emoji || '🍽️')}</span>
-    <span class="rbody"><b>${esc(r.name)}</b><small>${recipeMeta(r)}</small>${(r.tags || []).length ? `<small class="tl">${(r.tags || []).slice(0, 3).map(esc).join(' · ')}</small>` : ''}</span>
-    ${isFav(r.id) ? '<span class="fav">♥</span>' : ''}</button>`;
+    ${thumbHTML(r, 'rthumb')}
+    <span class="rbody"><b>${esc(r.name)}</b><small>${recipeMeta(r)}</small><span class="rtags">${recipeBadges(r)}</span></span>
+    ${isFav(r.id) ? '<span class="fav" aria-label="Favorit">♥</span>' : ''}</button>`;
+function filterSummary() {
+  const out = [];
+  for (const [k, d] of Object.entries(FILTER_DEF)) { const v = (ui.f || {})[k]; if (v) out.push([k, d.opts.find(o => o[0] === v)[1]]); }
+  if (ui.strict) out.push(['strict', 'Passend zu meiner Ernährung']);
+  return out;
+}
 function renderRecipeList() {
   const tags = tagCounts();
   if (ui.tag && !SMART[ui.tag] && !tags.includes(ui.tag)) ui.tag = '';
   const chips = [['', 'Alle'], ...Object.entries(SMART).map(([k, v]) => [k, v.label]), ...tags.map(t => [t, t])];
   if (ui.tag && !SMART[ui.tag]) { const i = chips.findIndex(c => c[0] === ui.tag); if (i > 0) chips.splice(1, 0, chips.splice(i, 1)[0]); } // gewählte Kategorie bleibt sichtbar
-  $('#rtags').innerHTML = chips.map(([k, l]) => `<button class="chip${ui.tag === k ? ' on' : ''}" data-act="tagFilter" data-tag="${esc(k)}">${esc(l)}</button>`).join('');
+  const fs = filterSummary().map(([k, l]) => `<button class="chip fchip" data-act="filterClear" data-k="${k}" aria-label="Filter ${esc(l)} entfernen">${esc(l)} ✕</button>`).join('');
+  $('#rtags').innerHTML = fs + chips.map(([k, l]) => `<button class="chip${ui.tag === k ? ' on' : ''}" data-act="tagFilter" data-tag="${esc(k)}">${esc(l)}</button>`).join('');
+  const fb = $('.filterbtn'); if (fb) { const nf = activeFilters(); fb.classList.toggle('on', !!nf); fb.innerHTML = `${ICON.filter}<span>Filter</span>${nf ? `<i>${nf}</i>` : ''}`; }
   const list = filteredRecipes();
   $('#rcount').textContent = `${list.length} ${list.length === 1 ? 'Rezept' : 'Rezepte'}`;
   const el = $('#rlist');
   if (!list.length) {
     if (el._io) { el._io.disconnect(); el._io = null; }
-    el.innerHTML = `<div class="empty"><div class="big">🔍</div><b>Nichts gefunden</b>Versuch einen anderen Suchbegriff oder Filter.${ui.q || ui.tag ? '<br><button class="btn soft" data-act="recipeResetFilter" style="margin:14px auto 0">Suche zurücksetzen</button>' : ''}</div>`;
+    el.innerHTML = `<div class="empty"><div class="big">🔍</div><b>Nichts gefunden</b>Versuch einen anderen Suchbegriff oder Filter.${ui.q || ui.tag || activeFilters() ? '<br><button class="btn soft" data-act="recipeResetFilter" style="margin:14px auto 0">Suche & Filter zurücksetzen</button>' : ''}</div>`;
     return;
   }
   chunked(el, list, recipeCard);
 }
+function openFilters() {
+  const f = ui.f || {}, av = avoidList();
+  const sh = openSheet({
+    title: 'Rezepte filtern', left: '<button class="lnk" data-act="filterReset">Zurücksetzen</button>',
+    right: '<button class="lnk r" data-act="closeSheet">Fertig</button>',
+    body: `${Object.entries(FILTER_DEF).map(([k, d]) => `<div class="field"><label>${d.label}</label><div class="seg wrap" data-filter="${k}">${d.opts.map(([v, l]) => `<button type="button" data-act="filterSet" data-k="${k}" data-v="${v}" class="${(f[k] || '') === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>`).join('')}
+      <div class="section-t" style="margin-top:6px">Meine Ernährung</div>
+      <div class="card">
+        <label class="setting"><span><span class="lbl">Nur passende Rezepte</span><br><span class="sub">${esc(DIETS[dietOf()])}${av.length ? ' · ohne ' + av.map(a => ALLERGENS[a].short).join(', ') : ''}</span></span><span class="switch"><input type="checkbox" data-change="strict" ${ui.strict ? 'checked' : ''}><i></i></span></label>
+      </div>
+      <p class="small muted" style="margin:8px 4px 0">Ernährungsweise und gemiedene Allergene stellst du unter „Mehr → Ziele & Ernährung“ ein. Sie gelten auch für Vorschläge und „Auffüllen“.</p>
+      <button class="btn soft" data-act="goalsOpen" style="width:100%;margin-top:12px">Ziele & Ernährung bearbeiten</button>
+      <p class="small muted filter-count" style="text-align:center;margin-top:14px"></p>`,
+    onClose: () => { if (S.ui.view === 'recipes') renderRecipeList(); },
+  });
+  drawFilterCount(sh);
+}
+function drawFilterCount(sh) { const el = sh && $('.filter-count', sh); if (el) { const n = filteredRecipes().length; el.textContent = `${n} ${n === 1 ? 'Rezept passt' : 'Rezepte passen'}`; } }
 
 /* ── Einkaufsliste (Bring!-Stil) ── */
 const stem = n => { const k = nameKey(n); return k === 'ei' ? 'eier' : k.replace(/(en|n|e|s)$/, ''); };
@@ -775,11 +877,13 @@ function renderShop() {
   // Links: was zu kaufen ist · Rechts (auf großen Bildschirmen daneben): zuletzt verwendet und Katalog
   let left = '', right = '';
   if (S.shop.length) {
-    const order = CATS.map(c => c.k);
-    const items = [...S.shop].sort((a, b) => order.indexOf(a.cat) - order.indexOf(b.cat));
-    left += `<div class="shead"><b>Zu kaufen</b><span>${S.shop.length} Artikel · <button class="tlink" data-act="shopClear">Liste leeren</button></span></div><div class="tiles">`;
-    left += items.map(i => tileHTML({ emoji: i.emoji || catOf(i.cat).e, name: i.name, spec: qtyText(i), on: true, data: { i: i.id } })).join('');
-    left += `</div><p class="small muted" style="margin:8px 4px 0">Tippen = gekauft · Gedrückt halten (oder Rechtsklick) = Menge & Details</p>`;
+    // Nach Kategorien gruppiert – in der Reihenfolge, in der man durch den Supermarkt geht
+    left += `<div class="shead"><b>Zu kaufen</b><span>${S.shop.length} Artikel · <button class="tlink" data-act="shopClear">Liste leeren</button></span></div>`;
+    for (const c of CATS) {
+      const items = S.shop.filter(i => catOf(i.cat).k === c.k); if (!items.length) continue;
+      left += `<div class="catlbl"><span>${c.e}</span>${c.name}<i>${items.length}</i></div><div class="tiles">${items.map(i => tileHTML({ emoji: i.emoji || c.e, name: i.name, spec: qtyText(i), on: true, data: { i: i.id } })).join('')}</div>`;
+    }
+    left += `<p class="small muted" style="margin:8px 4px 0">Tippen = gekauft · Gedrückt halten (oder Rechtsklick) = Menge & Details</p>`;
   } else {
     left += `<div class="sempty"><div class="big">🎉</div><b>Alles erledigt!</b><span>Tippe auf Artikel im Katalog oder suche oben, um sie hinzuzufügen.</span></div>`;
   }
@@ -871,6 +975,17 @@ function viewMore() {
   </div>
   <p class="small muted" style="margin:0 4px">Die App sichert automatisch einmal am Tag und vor jedem großen Eingriff (Import, Löschen). Antippen stellt den Stand wieder her.</p>
   </div><div>
+  <div class="section-t" id="goals">Ziele & Ernährung</div>
+  <div class="card">
+    <div class="setting"><span><span class="lbl">Kalorien pro Tag</span><br><span class="sub">für Analyse & Tagesbalken im Plan</span></span>
+      <span class="stepper"><button data-act="goalStep" data-k="kcal" data-n="-100" aria-label="Weniger">−</button><output>${fmtInt(goals().kcal)}</output><button data-act="goalStep" data-k="kcal" data-n="100" aria-label="Mehr">+</button></span></div>
+    <div class="setting"><span><span class="lbl">Eiweiß pro Tag</span><br><span class="sub">Faustregel: 0,8–1,6 g je kg Körpergewicht</span></span>
+      <span class="stepper"><button data-act="goalStep" data-k="protein" data-n="-5" aria-label="Weniger">−</button><output>${goals().protein} g</output><button data-act="goalStep" data-k="protein" data-n="5" aria-label="Mehr">+</button></span></div>
+    <div class="setting col"><span class="lbl">Ernährungsweise</span>
+      <div class="seg wrap">${Object.entries(DIETS).map(([k, l]) => `<button type="button" data-act="dietSet" data-v="${k}" class="${dietOf() === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+    <div class="setting col"><span><span class="lbl">Allergene & Unverträglichkeiten meiden</span><br><span class="sub">Rezepte damit werden markiert und nicht mehr vorgeschlagen</span></span>
+      <div class="algpick">${ALLERGEN_KEYS.map(a => `<button type="button" class="chip${avoidList().includes(a) ? ' on' : ''}" data-act="avoidToggle" data-a="${a}">${ALLERGENS[a].e} ${ALLERGENS[a].short}</button>`).join('')}</div></div>
+  </div>
   <div class="section-t">Wochenplan</div>
   <div class="card">
     ${MEALS.map(m => `<label class="setting"><span class="lbl">${m.name}</span><span class="switch"><input type="checkbox" data-change="mealToggle" data-m="${m.k}" ${st.meals.includes(m.k) ? 'checked' : ''}><i></i></span></label>`).join('')}
@@ -889,7 +1004,7 @@ function viewMore() {
     <span class="muted small">Die App startet dann im Vollbild und funktioniert auch ohne Netz. Mit der Online-Datenbank ${online ? 'sind' : 'wären'} alle Geräte automatisch auf demselben Stand.</span>
   </div>
   </div></div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Essensplaner v${APP_VERSION} · <button class="tlink" data-act="diag">Diagnose</button><br>Nährwerte sind automatisch berechnete Ca.-Werte.</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Essensplaner v${APP_VERSION} · <button class="tlink" data-act="diag">Diagnose</button> · <button class="tlink" data-act="credits">Bildnachweise</button><br>Nährwerte, Nutri-Score und Allergene sind automatisch aus den Zutaten geschätzt und ersetzen keine Packungsangaben.</p>`;
 }
 
 /* ───────── Plan-Aktionen ───────── */
@@ -924,10 +1039,10 @@ function openRecipePicker(title, onPick, mealKey) {
   const draw = () => {
     const match = matcher($('#pq', sh).value);
     const list = allRecipes().filter(match)
-      .sort((a, b) => (isFav(b.id) - isFav(a.id)) || (pref(b) - pref(a)) || a.name.localeCompare(b.name, 'de'));
+      .sort((a, b) => (suits(b) - suits(a)) || (isFav(b.id) - isFav(a.id)) || (pref(b) - pref(a)) || a.name.localeCompare(b.name, 'de'));
     const el = $('#plist', sh);
     if (!list.length) { el.innerHTML = `<p class="muted" style="padding:16px 4px">Keine Rezepte gefunden.</p>`; return; }
-    chunked(el, list, r => `<button class="pick" data-act="pickRecipe" data-id="${esc(r.id)}"><span class="remoji">${esc(r.emoji || '🍽️')}</span><span class="rbody"><b>${esc(r.name)}</b><small>${recipeMeta(r)}</small></span>${isFav(r.id) ? '<span class="fav">♥</span>' : ''}</button>`, 40);
+    chunked(el, list, r => `<button class="pick${suits(r) ? '' : ' unsuit'}" data-act="pickRecipe" data-id="${esc(r.id)}">${thumbHTML(r, 'pthumb')}<span class="rbody"><b>${esc(r.name)}</b><small>${recipeMeta(r)}</small><span class="rtags">${recipeBadges(r)}</span></span>${isFav(r.id) ? '<span class="fav">♥</span>' : ''}</button>`, 40);
   };
   $('#pq', sh).addEventListener('input', draw);
   draw();
@@ -936,55 +1051,150 @@ function stepperVal(sh, id) { const o = sh && $(`[data-stepper="${id}"] output`,
 function weekKeys() { return Array.from({ length: 7 }, (_, i) => dkey(addDays(ui.weekStart, i))); }
 
 /* ───────── Rezept-Detail & Editor ───────── */
+// Referenzmengen pro Tag (EU-Lebensmittelinformationsverordnung; Ballaststoffe nach DGE). Energie & Eiweiß aus den eigenen Zielen.
+const RI = { f: 70, sfa: 20, c: 260, sug: 90, fib: 30, salt: 6 };
+const NUT_ROWS = [
+  ['kcal', 'Energie', 'kcal'], ['f', 'Fett', 'g'], ['sfa', 'davon gesättigte Fettsäuren', 'g', true], ['c', 'Kohlenhydrate', 'g'],
+  ['sug', 'davon Zucker', 'g', true], ['fib', 'Ballaststoffe', 'g'], ['p', 'Eiweiß', 'g'], ['salt', 'Salz', 'g'],
+];
+const riOf = k => (k === 'kcal' ? goals().kcal : k === 'p' ? goals().protein : RI[k]);
+const LVL_TXT = { good: 'niedrig', mid: 'mittel', bad: 'hoch' };
+function nutTableHTML(n, basis) {
+  const per = basis === '100' ? n.per100 : n;
+  return `<table class="nutt"><thead><tr><th></th><th>${basis === '100' ? 'je 100 g' : 'pro Portion'}</th>${basis === '100' ? '<th>Ampel</th>' : '<th>% Tagesbedarf*</th>'}</tr></thead><tbody>
+    ${NUT_ROWS.map(([k, l, u, sub]) => {
+      const v = per[k] || 0;
+      const val = k === 'kcal' ? `${fmtInt(v)} kcal <small>${fmtInt(v * 4.184)} kJ</small>` : `${k === 'salt' || v < 10 ? fmtDec(v) : fmtInt(v)} ${u}`;
+      let extra = '';
+      if (basis === '100') { const tk = { f: 'f', sfa: 'sfa', sug: 'sug', salt: 'salt' }[k]; extra = tk ? `<span class="amp ${trafficLevel(tk, v)}">${LVL_TXT[trafficLevel(tk, v)]}</span>` : ''; }
+      else { const pct = v / riOf(k) * 100; extra = `<span class="ri"><i style="width:${Math.min(100, pct)}%" class="${(k === 'salt' || k === 'sfa' || k === 'sug') && pct > 40 ? 'hi' : ''}"></i></span><b>${fmtInt(pct)} %</b>`; }
+      return `<tr class="${sub ? 'sub' : ''}"><td>${l}</td><td>${val}</td><td>${extra}</td></tr>`;
+    }).join('')}</tbody></table>
+    <p class="small muted" style="margin:8px 2px 0">${basis === '100' ? 'Ampel nach den Grenzwerten der Lebensmittel-Ampel (je 100 g).' : `*Referenzmenge für Erwachsene; Energie (${fmtInt(goals().kcal)} kcal) und Eiweiß (${goals().protein} g) nach deinen Zielen.`} Gewicht einer Portion ca. ${fmtInt(n.weight)} g (gegart).</p>`;
+}
+// Welche Zutaten tragen am meisten bei? (für Kalorien, Salz, gesättigte Fette, Zucker)
+function contributors(r, key) {
+  const rows = [];
+  for (const ing of r.ingredients) {
+    const fd = matchFood(ing.name); if (!fd) continue;
+    if (ing.amount == null) { if (key === 'salt' && /^salz\b/i.test(ing.name)) rows.push({ name: 'Salz zum Abschmecken', v: SALT_PINCH * (r.servings || 1) }); continue; }
+    const v = (fd[key] || 0) * ingGrams(ing, fd) / 100;
+    if (v > 0) rows.push({ name: shortName(ing.name), v });
+  }
+  const total = rows.reduce((a, x) => a + x.v, 0) || 1;
+  return rows.sort((a, b) => b.v - a.v).slice(0, 3).map(x => ({ ...x, share: x.v / total * 100 })).filter(x => x.share >= 8);
+}
+// Verständliche Hinweise aus den Zahlen
+function insights(r, n) {
+  const out = [], main = isMainDish(r), mealKcal = goals().kcal / Math.max(2, S.settings.meals.length), top = k => (contributors(r, k)[0] || {}).name;
+  if (n.coverage < 0.9) out.push(['info', 'Einige Zutaten wurden nicht erkannt – die Werte sind daher eher zu niedrig.']);
+  if (n.salt > 2.5) out.push(['warn', `Recht salzig: ${fmtDec(n.salt)} g pro Portion (${fmtInt(n.salt / 6 * 100)} % der Tagesmenge).${top('salt') ? ` Größte Quelle: ${top('salt')} – sparsam dosieren.` : ''}`]);
+  if (n.sfa > 10) out.push(['warn', `Viel gesättigtes Fett (${fmtDec(n.sfa)} g).${top('sfa') ? ` Hauptquelle: ${top('sfa')} – z. B. teilweise durch Joghurt, Skyr oder Öl ersetzen.` : ''}`]);
+  if (n.sug > 25) out.push(['warn', `Viel Zucker: ${fmtInt(n.sug)} g pro Portion.${top('sug') ? ` Hauptquelle: ${top('sug')}.` : ''}`]);
+  if (main && n.vegPortions < 1) out.push(['info', 'Wenig Gemüse – ein Salat oder Rohkost dazu macht das Essen ausgewogener.']);
+  if (n.vegPortions >= 2.5) out.push(['good', `Viel Gemüse & Obst: ${fmtDec(n.vegPortions)} von 5 Portionen für den Tag.`]);
+  if (main && n.p < 15 && n.kcal > 250) out.push(['info', 'Eher wenig Eiweiß – mit Hülsenfrüchten, Tofu, Ei oder Skyr ergänzen.']);
+  if (n.pp >= 25) out.push(['good', `Proteinreich: ${Math.round(n.pp)} % der Kalorien aus Eiweiß (${fmtInt(n.p)} g).`]);
+  if (n.fib >= 8) out.push(['good', `Reich an Ballaststoffen (${fmtInt(n.fib)} g ≈ ${fmtInt(n.fib / 30 * 100)} % des Tagesbedarfs).`]);
+  if (main && n.kcal) {
+    const d = n.kcal / mealKcal;
+    out.push([d > 1.35 ? 'warn' : 'info', `${fmtInt(n.kcal)} kcal ≈ ${fmtInt(n.kcal / goals().kcal * 100)} % deines Tagesziels${d > 1.35 ? ' – eher üppig für eine Mahlzeit' : d < 0.55 ? ' – eher leicht, ggf. Beilage ergänzen' : ''}.`]);
+  }
+  return out;
+}
+const NS_TXT = { A: 'sehr günstig', B: 'günstig', C: 'mittel', D: 'eher ungünstig', E: 'ungünstig' };
+function nsScaleHTML(n) {
+  return `<div class="nsscale" role="img" aria-label="Nutri-Score ${n.ns.grade}">${'ABCDE'.split('').map(g => `<span class="ns-${g}${g === n.ns.grade ? ' on' : ''}">${g}</span>`).join('')}</div>`;
+}
+function vegDotsHTML(v) {
+  return `<span class="vdots">${[0, 1, 2, 3, 4].map(i => `<i style="--f:${Math.max(0, Math.min(1, v - i)) * 100}%"></i>`).join('')}</span>`;
+}
+function analysisHTML(r, n) {
+  if (!n.kcal) return '';
+  const dens = densityInfo(n.density), bad = badAllergens(r);
+  const tips = insights(r, n);
+  return `<div class="dhead"><h3>Analyse</h3><span class="small muted">pro Portion</span></div>
+    <div class="card ana">
+      ${n.ns ? `<div class="ana-row"><div class="ana-l"><b>Nutri-Score</b><span>${NS_TXT[n.ns.grade]} · geschätzt aus den Zutaten</span></div>${nsScaleHTML(n)}</div>` : ''}
+      <div class="ana-row"><div class="ana-l"><b>Gemüse & Obst</b><span>${fmtDec(n.vegPortions)} von 5 Portionen am Tag</span></div>${vegDotsHTML(n.vegPortions)}</div>
+      <div class="ana-row"><div class="ana-l"><b>Eiweiß</b><span>${fmtInt(n.p)} g · ${Math.round(n.pp)} % der Kalorien</span></div><span class="pbar"><i style="width:${Math.min(100, n.pp / 40 * 100)}%" class="${n.pp >= 20 ? 'good' : n.pp >= 12 ? 'mid' : 'bad'}"></i></span></div>
+      ${dens ? `<div class="ana-row"><div class="ana-l"><b>Sättigung</b><span>${esc(dens.tip)}</span></div><span class="amp ${dens.lvl}">${dens.lbl}</span></div>` : ''}
+      <div class="ana-row al"><div class="ana-l"><b>Allergene</b><span>${n.allergens.length ? 'erkannt aus den Zutaten – bitte Packungsangaben prüfen' : 'keine der Hauptallergene erkannt'}</span></div>
+        <span class="alg">${n.allergens.map(a => `<span class="tag${bad.includes(a) ? ' warn' : ''}">${ALLERGENS[a].e} ${ALLERGENS[a].short}</span>`).join('') || '<span class="tag ok">✓</span>'}</span></div>
+    </div>
+    ${tips.length ? `<ul class="tips">${tips.map(([l, t]) => `<li class="${l}">${esc(t)}</li>`).join('')}</ul>` : ''}`;
+}
+function nutritionHTML(r, n) {
+  if (!n.kcal) return '';
+  const eP = n.p * 4, eC = n.c * 4, eF = n.f * 9, eT = (eP + eC + eF) || 1;
+  const src = ['kcal', 'salt', 'sfa'].map(k => [k, contributors(r, k)]).filter(([, l]) => l.length);
+  return `<div class="dhead"><h3>Nährwerte</h3><div class="seg mini" id="nutBasis"><button type="button" data-act="nutBasis" data-v="p" class="on">Portion</button><button type="button" data-act="nutBasis" data-v="100">100 g</button></div></div>
+    <div class="card nutcard">
+      <div class="macro"><i class="mp" style="width:${eP / eT * 100}%"></i><i class="mc" style="width:${eC / eT * 100}%"></i><i class="mf" style="width:${eF / eT * 100}%"></i></div>
+      <div class="legend"><span><i class="mp"></i>Eiweiß ${Math.round(eP / eT * 100)} %</span><span><i class="mc"></i>Kohlenhydrate ${Math.round(eC / eT * 100)} %</span><span><i class="mf"></i>Fett ${Math.round(eF / eT * 100)} %</span></div>
+      <div id="nutTable">${nutTableHTML(n, 'p')}</div>
+      ${src.length ? `<details class="srcs"><summary>Woher kommen die Werte?</summary>${src.map(([k, l]) => `<div class="src"><b>${{ kcal: 'Kalorien', salt: 'Salz', sfa: 'Gesättigte Fette' }[k]}</b>${l.map(x => `<span>${esc(x.name)} <em>${fmtInt(x.share)} %</em></span>`).join('')}</div>`).join('')}</details>` : ''}
+    </div>`;
+}
+// Ähnliche Rezepte: gemeinsame Hauptzutaten und Kategorien
+const _feat = new WeakMap();
+const COMMON_IDS = new Set(FOODS.filter(f => /^(Zwiebeln|Knoblauch|Salz|Pfeffer|Öl|Olivenöl|Wasser|Butter|Zucker|Gemüsebrühe|Zitronen|Zitronensaft|Petersilie|Mehl)$/.test(f.name) || f.cat === 'gewuerz').map(f => f.id));
+function featOf(r) {
+  let f = _feat.get(r);
+  if (!f) { f = new Set(r.ingredients.map(i => matchFood(i.name)).filter(x => x && !COMMON_IDS.has(x.id)).map(x => x.id)); _feat.set(r, f); }
+  return f;
+}
+function similarRecipes(r, k = 8) {
+  const a = featOf(r), tags = new Set(r.tags || []), main = isMainDish(r);
+  if (!a.size) return [];
+  return allRecipes().filter(x => x.id !== r.id && isMainDish(x) === main).map(x => {
+    const b = featOf(x); let inter = 0; for (const id of b) if (a.has(id)) inter++;
+    const jac = inter / (a.size + b.size - inter || 1), tg = (x.tags || []).filter(t => tags.has(t)).length;
+    return { x, s: jac + tg * 0.08 };
+  }).filter(o => o.s > 0.18).sort((p, q) => q.s - p.s).slice(0, k).map(o => o.x);
+}
+function creditHTML(p) {
+  if (!p || !p.credit) return '';
+  const [artist, lic, file] = p.credit;
+  return `<p class="credit">Symbolfoto: ${esc(artist || 'unbekannt')} · ${esc(lic)} · <a href="https://commons.wikimedia.org/wiki/File:${encodeURIComponent(file)}" target="_blank" rel="noopener">Wikimedia Commons</a> (zugeschnitten)</p>`;
+}
 // servings: optional (z. B. die im Wochenplan eingetragenen Portionen)
 function openRecipe(id, servings) {
   const r = recipeById(id); if (!r) { toast('Dieses Rezept gibt es nicht mehr'); return; }
-  const n = nutr(r);
-  const eP = n.p * 4, eC = n.c * 4, eF = n.f * 9, eT = (eP + eC + eF) || 1;
+  const n = nutr(r), p = photoOf(r);
   const rid = esc(r.id), serv = isNum(servings) && servings >= 1 ? servings : r.servings;
   const voted = typeof USERS !== 'undefined' && USERS.some(u => voteOf(u, r.id) !== undefined);
+  const sim = similarRecipes(r);
   const sh = openSheet({
     title: '', cls: 'wide',
     left: `<button class="lnk" data-act="closeSheet">Schließen</button>`,
     right: `<button class="lnk r" data-act="recipeEdit" data-id="${rid}">Bearbeiten</button>`,
     body: `<div class="rd"><div class="rd-a">
-      <div class="hero"><div class="e">${esc(r.emoji || '🍽️')}</div><h2>${esc(r.name)}</h2>
-      <div class="meta">${r.time ? `<span class="pill">⏱ ${esc(r.time)} Min.</span>` : ''}${LEVELS[r.level] ? `<span class="pill">📊 ${LEVELS[r.level]}</span>` : ''}<span class="pill">${n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : '🥕 Vegetarisch'}</span>${(r.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>${voted ? `<div class="meta">${USERS.map(u => `<span class="pill">${u} ${voteBadge(voteOf(u, r.id))}</span>`).join('')}</div>` : ''}</div>
+      ${p ? `<div class="rphoto">${thumbHTML(r, 'rphoto-i')}</div>${creditHTML(p)}` : ''}
+      <div class="hero${p ? ' withphoto' : ''}">${p ? '' : `<div class="e">${esc(r.emoji || '🍽️')}</div>`}<h2>${esc(r.name)}</h2>
+      <div class="meta">${r.time ? `<span class="pill">⏱ ${esc(r.time)} Min.</span>` : ''}${LEVELS[r.level] ? `<span class="pill">📊 ${LEVELS[r.level]}</span>` : ''}<span class="pill">${n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : '🥕 Vegetarisch'}</span>${n.ns ? `<span class="pill nspill">Nutri-Score ${nsBadge(n)}</span>` : ''}${(r.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>${voted ? `<div class="meta">${USERS.map(u => `<span class="pill">${u} ${voteBadge(voteOf(u, r.id))}</span>`).join('')}</div>` : ''}</div>
       <div class="row">
         <button class="btn soft" data-act="recipeFav" data-id="${rid}">${isFav(r.id) ? '♥ Favorit' : '♡ Merken'}</button>
         <button class="btn soft" data-act="recipeToPlan" data-id="${rid}">📅 Planen</button>
         <button class="btn soft" data-act="recipeShare" data-id="${rid}" aria-label="Rezept teilen" style="flex:0 0 52px;padding:0">${ICON.share}</button>
       </div>
-      ${n.kcal ? `<div class="dhead"><h3>Nährwerte</h3><span class="small muted">pro Portion</span></div>
-      <div class="card nutcard">
-        <div class="nut"><div class="kc"><b>${fmtInt(n.kcal)}</b><span>kcal</span></div>
-        <div><b>${fmtInt(n.p)} g</b><span>Eiweiß</span></div><div><b>${fmtInt(n.c)} g</b><span>Kohlenh.</span></div><div><b>${fmtInt(n.f)} g</b><span>Fett</span></div><div><b>${fmtInt(n.fib)} g</b><span>Ballastst.</span></div></div>
-        <div class="macro"><i class="mp" style="width:${eP / eT * 100}%"></i><i class="mc" style="width:${eC / eT * 100}%"></i><i class="mf" style="width:${eF / eT * 100}%"></i></div>
-        <div class="legend"><span><i class="mp"></i>Eiweiß ${Math.round(eP / eT * 100)} %</span><span><i class="mc"></i>KH ${Math.round(eC / eT * 100)} %</span><span><i class="mf"></i>Fett ${Math.round(eF / eT * 100)} %</span></div>
-        ${fitnessHTML(n)}
-        <p class="small muted">Ca.-Werte, automatisch aus den Zutaten berechnet${n.coverage < 0.9 ? ' – einige Zutaten wurden nicht erkannt' : ''}.</p>
-      </div>` : ''}
+      ${n.kcal ? `<div class="kpis"><div><b>${fmtInt(n.kcal)}</b><span>kcal</span></div><div><b>${fmtInt(n.p)} g</b><span>Eiweiß</span></div><div><b>${fmtInt(n.c)} g</b><span>Kohlenh.</span></div><div><b>${fmtInt(n.f)} g</b><span>Fett</span></div><div><b>${fmtInt(n.fib)} g</b><span>Ballastst.</span></div></div>` : ''}
+      ${analysisHTML(r, n)}
+      ${nutritionHTML(r, n)}
       </div><div class="rd-b">
       <div class="dhead"><h3>Zutaten</h3><span class="stepper" data-stepper="detServ"><button data-act="step" data-n="-1" aria-label="Weniger Portionen">−</button><output>${serv}</output><button data-act="step" data-n="1" aria-label="Mehr Portionen">+</button></span></div>
       <ul class="card ing" id="ingList"></ul>
       <button class="btn" style="margin-top:10px;width:100%" data-act="recipeToShop" data-id="${rid}">🛒 Zutaten auf die Einkaufsliste</button>
-      ${r.steps.length ? `<div class="dhead"><h3>Zubereitung</h3></div><ol class="steps">${r.steps.map(s => `<li class="card" data-act="stepDone">${stepHTML(s)}</li>`).join('')}</ol><button class="btn primary" style="width:100%;margin-top:10px" data-act="cookStart" data-id="${rid}">👩‍🍳 Kochmodus: Schritt für Schritt</button>` : ''}
+      ${r.steps.length ? `<div class="dhead"><h3>Zubereitung</h3><span class="small muted">Antippen = erledigt</span></div><ol class="steps">${r.steps.map((s, i) => `<li class="card" data-act="stepDone">${stepHTML(s)}${timerChips(s, r.name + ' · Schritt ' + (i + 1))}</li>`).join('')}</ol><button class="btn primary" style="width:100%;margin-top:10px" data-act="cookStart" data-id="${rid}">👩‍🍳 Kochmodus: Schritt für Schritt</button>` : ''}
       ${r.notes ? `<div class="dhead"><h3>Notizen</h3></div><div class="card notes">${esc(r.notes)}</div>` : ''}
       ${'wakeLock' in navigator ? `<div class="card" style="margin-top:18px"><label class="setting"><span><span class="lbl">Bildschirm anlassen</span><br><span class="sub">praktisch beim Kochen</span></span><span class="switch"><input type="checkbox" data-change="wake"><i></i></span></label></div>` : ''}
+      ${sim.length ? `<div class="dhead"><h3>Ähnliche Rezepte</h3></div><div class="hscroll">${sim.map(x => `<button class="mini" data-act="recipeSwap" data-id="${esc(x.id)}">${thumbHTML(x, 'mthumb')}<b>${esc(x.name)}</b><small>${nutr(x).kcal ? fmtInt(nutr(x).kcal) + ' kcal' : ''}${nutr(x).ns ? ' · ' + nsBadge(nutr(x)) : ''}</small></button>`).join('')}</div>` : ''}
       <button class="btn danger" style="width:100%;margin-top:14px" data-act="recipeDelete" data-id="${rid}">${r.builtin ? 'Rezept ausblenden' : 'Rezept löschen'}</button>
       </div></div>`,
     onClose: releaseWake,
   });
   sh.dataset.recipe = r.id;
   drawIngredients(sh);
-}
-function fitnessHTML(n) {
-  const pp = Math.round(n.pp);
-  const [lbl, col] = pp >= 30 ? ['Sehr proteinreich – top für Muskelaufbau', 'var(--ok)'] : pp >= 20 ? ['Proteinreich – gut für Fitness & Sättigung', 'var(--ok)'] : pp >= 12 ? ['Ausgewogen – normaler Proteinanteil', '#f2b33d'] : ['Wenig Protein – z. B. mit Skyr, Tofu oder Linsen ergänzen', 'var(--red-t)'];
-  return `<div class="fit"><div class="fit-top"><b style="color:${col}">💪 ${pp} %</b><span>der Kalorien aus Protein</span></div>
-    <div class="fit-bar"><i style="width:${Math.min(100, pp / 40 * 100)}%;background:${col}"></i><s style="left:30%"></s><s style="left:62.5%"></s></div>
-    <div class="fit-scale"><span>0 %</span><span>12</span><span>25</span><span>40 %+</span></div>
-    <p class="fit-lbl">${lbl}</p></div>`;
 }
 // Zeiten & Temperaturen in Schritten fett hervorheben
 const stepHTML = s => esc(s).replace(/(\d+(?:[,.]\d+)?(?:\s*[–-]\s*\d+(?:[,.]\d+)?)?\s*(?:Min\.|Minuten|Minute|Std\.|Stunden?|Sek\.|Sekunden|°C|Watt))/g, '<b>$1</b>');
@@ -1002,7 +1212,7 @@ function openCook(id, servings) {
   const serv = isNum(servings) && servings >= 1 ? servings : r.servings;
   const sh = openSheet({
     title: r.name, cls: 'full', left: '<button class="lnk" data-act="closeSheet">Beenden</button>',
-    body: `<div class="cook"><div class="cook-main"><div class="cook-prog"><i></i></div><p class="cook-n"></p><p class="cook-t"></p>
+    body: `<div class="cook"><div class="cook-main"><div class="cook-prog"><i></i></div><p class="cook-n"></p><p class="cook-t"></p><div class="cook-timers"></div>
       <div class="row"><button class="btn plain" data-act="cookMove" data-n="-1">← Zurück</button><button class="btn primary" data-act="cookMove" data-n="1">Weiter →</button></div></div>
       <details class="card cook-ing"${isWide() ? ' open' : ''}><summary>Zutaten für ${serv} ${serv === 1 ? 'Portion' : 'Portionen'}</summary><ul>${scaledIngs(r, serv).map(([a, n]) => `<li><b>${esc(a)}</b> ${esc(n)}</li>`).join('')}</ul></details></div>`,
     onClose: releaseWake,
@@ -1030,6 +1240,7 @@ function drawCook(sh) {
   $('.cook-prog i', sh).style.width = `${(i + 1) / n * 100}%`;
   $('.cook-n', sh).textContent = `Schritt ${i + 1} von ${n}`;
   $('.cook-t', sh).innerHTML = stepHTML(r.steps[i]);
+  $('.cook-timers', sh).innerHTML = timerChips(r.steps[i], r.name + ' · Schritt ' + (i + 1), true);
   const [b, f] = $$('[data-act="cookMove"]', sh);
   b.disabled = i === 0; f.textContent = i === n - 1 ? '✓ Fertig' : 'Weiter →';
 }
@@ -1039,7 +1250,7 @@ function drawIngredients(sh) {
 }
 function recipeText(r, servings) {
   const n = nutr(r);
-  return [`${r.emoji || '🍽️'} ${r.name}`, [r.time ? `${r.time} Min.` : '', `${servings} ${servings === 1 ? 'Portion' : 'Portionen'}`, n.kcal ? `${fmtInt(n.kcal)} kcal pro Portion` : ''].filter(Boolean).join(' · '), '',
+  return [`${r.emoji || '🍽️'} ${r.name}`, [r.time ? `${r.time} Min.` : '', `${servings} ${servings === 1 ? 'Portion' : 'Portionen'}`, n.kcal ? `${fmtInt(n.kcal)} kcal pro Portion` : '', n.ns ? `Nutri-Score ${n.ns.grade} (geschätzt)` : ''].filter(Boolean).join(' · '), '',
     'Zutaten', ...scaledIngs(r, servings).map(([a, name]) => `• ${[a, name].filter(Boolean).join(' ')}`), '',
     ...(r.steps.length ? ['Zubereitung', ...r.steps.map((s, i) => `${i + 1}. ${s}`)] : []), ...(r.notes ? ['', r.notes] : [])].join('\n');
 }
@@ -1063,6 +1274,11 @@ function openEditor(id) {
     right: `<button class="lnk r" data-act="recipeSave">Sichern</button>`,
     body: `<form data-form="recipeSave" autocomplete="off">
       <div class="field"><label for="f-name">Name</label><input id="f-name" required value="${esc(v.name)}" placeholder="z. B. Omas Gemüsesuppe"></div>
+      <div class="field"><label>Foto</label>
+        <div class="photo-edit"><div class="pe-prev">${thumbHTML(v, 'pe-img')}</div>
+          <div class="pe-acts"><label class="btn soft pe-pick">${ICON.camera}<span>Foto wählen</span><input type="file" accept="image/*" data-change="photoPick" hidden></label>
+          <button type="button" class="btn plain" data-act="photoRemove" ${typeof v.photo === 'string' ? '' : 'hidden'}>Eigenes Foto entfernen</button>
+          <p class="help">${r && r.builtin && !v.photo && photoOf(r) ? 'Aktuell: Symbolfoto. Ein eigenes Foto ersetzt es.' : 'Wird verkleinert gespeichert und mit deinen Geräten abgeglichen.'}</p></div></div></div>
       <div class="field"><label for="f-emoji">Symbol</label>
         <div class="row" style="align-items:center"><input id="f-emoji" value="${esc(v.emoji)}" maxlength="8" style="max-width:72px;text-align:center;font-size:24px;padding:6px"><span class="small muted" style="flex:3">Eigenes Emoji eintippen oder unten wählen</span></div>
         <div class="emoji-row">${EMOJIS.map(e => `<button type="button" data-act="pickEmoji" data-e="${e}" class="${e === v.emoji ? 'on' : ''}">${e}</button>`).join('')}</div></div>
@@ -1080,6 +1296,7 @@ function openEditor(id) {
       </form>`,
   });
   sh.dataset.edit = r ? r.id : '';
+  sh._photo = typeof v.photo === 'string' ? v.photo : null; // eigenes Foto (data:-URL) oder keins
   if (!r) setTimeout(() => { const f = $('#f-name', sh); if (f) f.focus(); }, 350);
 }
 function saveEditor(sh) {
@@ -1097,11 +1314,12 @@ function saveEditor(sh) {
     steps: $('#f-steps', sh).value.split('\n').map(s => s.trim()).filter(Boolean),
     notes: $('#f-notes', sh).value.trim(),
   };
+  if (sh._photo) data.photo = sh._photo;
   const id = sh.dataset.edit;
   if (id && BUILTIN_BY_ID.has(id)) S.over[id] = data;
   else if (id) {
     const own = S.recipes.find(x => x.id === id);
-    if (own) Object.assign(own, data); else S.recipes.push({ id, created: Date.now(), ...data }); // inzwischen woanders gelöscht → wieder anlegen
+    if (own) { Object.assign(own, data); if (!data.photo) delete own.photo; } else S.recipes.push({ id, created: Date.now(), ...data }); // inzwischen woanders gelöscht → wieder anlegen
   } else S.recipes.push({ id: uid(), created: Date.now(), ...data });
   invalidate(id); save();
   closeSheet(true);
@@ -1254,7 +1472,7 @@ const ACT = {
 
   tagFilter(el) { ui.tag = ui.tag === el.dataset.tag ? '' : el.dataset.tag; renderRecipeList(); },
   chipsToggle(el) { ui.chipsAll = !ui.chipsAll; $('#rtags').classList.toggle('all', ui.chipsAll); el.textContent = ui.chipsAll ? 'Weniger Kategorien' : 'Alle Kategorien'; },
-  recipeResetFilter() { ui.q = ''; ui.tag = ''; render(); },
+  recipeResetFilter() { ui.q = ''; ui.tag = ''; ui.f = {}; ui.strict = false; render(); },
   recipeOpen(el) { openRecipe(el.dataset.id); },
   recipeNew() { openEditor(null); },
   recipeEdit(el) { openEditor(el.dataset.id); },

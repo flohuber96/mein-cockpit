@@ -67,9 +67,9 @@ function renderSwipe() {
   h += `<div class="deck">
     <div class="tcard" id="tcard">
       <div class="stamp s-like">JA ♥</div><div class="stamp s-dis">NEIN ✕</div><div class="stamp s-super">SUPER ⭐</div><div class="stamp s-never">NIE ⛔</div>
-      <div class="tc-e">${esc(r.emoji || '🍽️')}</div>
+      ${photoOf(r) ? thumbHTML(r, 'tc-photo') : `<div class="tc-e">${esc(r.emoji || '🍽️')}</div>`}
       <h2>${esc(r.name)}</h2>
-      <div class="meta">${r.time ? `<span class="pill">⏱ ${r.time} Min.</span>` : ''}${n.kcal ? `<span class="pill">${fmtInt(n.kcal)} kcal</span><span class="pill">💪 ${Math.round(n.pp)} %</span>` : ''}<span class="pill">${n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : '🥕 Vegetarisch'}</span></div>
+      <div class="meta">${r.time ? `<span class="pill">⏱ ${r.time} Min.</span>` : ''}${n.kcal ? `<span class="pill">${fmtInt(n.kcal)} kcal</span><span class="pill">💪 ${Math.round(n.pp)} %</span>` : ''}<span class="pill">${n.fish ? '🐟 Fisch' : n.vegan ? '🌱 Vegan' : '🥕 Vegetarisch'}</span>${n.ns ? `<span class="pill nspill">${nsBadge(n)}</span>` : ''}</div>
       <p class="tc-ing">${esc(ings)}</p>
       ${ov !== undefined && ov > 0 ? `<p class="tc-hint">${esc(other)} mag das schon ${VOTES[ov].icon}</p>` : ''}
       <p class="tc-tap">Antippen für das ganze Rezept</p>
@@ -146,7 +146,7 @@ function rankHTML() {
   const nogo = rows.filter(x => x.veto);
   const ranked = rows.filter(x => !x.veto);
   const row = (x, i) => `<button class="card rrow" data-act="recipeOpen" data-id="${esc(x.r.id)}">
-      <span class="rk">${i != null ? i + 1 : ''}</span><span class="remoji">${esc(x.r.emoji || '🍽️')}</span>
+      <span class="rk">${i != null ? i + 1 : ''}</span>${thumbHTML(x.r, 'pthumb')}
       <span class="rbody"><b>${esc(x.r.name)}</b><small>${USERS.map((u, j) => `${u} ${voteBadge(x.vs[j])}`).join(' &nbsp; ')}</small></span>
       <span class="rs ${x.s > 0 ? 'pos' : x.s < 0 ? 'neg' : ''}">${x.s > 0 ? '+' : ''}${x.s}</span></button>`;
   let h = `<div class="small muted" style="margin:4px 4px 12px">Bewertet: ${USERS.map((u, i) => `${u} ${both[i]}`).join(' · ')} · Punkte: ⭐ +3 · ♥ +1 · ✕ −1 · ⛔ −3</div>`;
@@ -177,8 +177,8 @@ function suggestions(opts = {}) {
   const pool = allRecipes().filter(meal === 'breakfast' ? isBreakfast : meal === 'all' ? () => true : isMainDish);
   const seed = String(opts.seed != null ? opts.seed : sw.seed);
   return pool.map(r => {
-    // Ein „Nie“ von irgendwem schließt das Gericht immer aus
-    if (USERS.some(u => voteOf(u, r.id) === -2)) return null;
+    // Ein „Nie“ von irgendwem schließt das Gericht immer aus – ebenso unpassende Ernährung oder gemiedene Allergene
+    if (USERS.some(u => voteOf(u, r.id) === -2) || !suits(r)) return null;
     const { s, n } = scoreOf(r.id, users);
     const vs = users.map(u => voteOf(u, r.id));
     if (n && vs.every(v => v === undefined || v < 0)) return null;
@@ -202,7 +202,7 @@ function soonHTML() {
     <div class="row" style="margin-bottom:14px"><button class="btn" data-act="swReshuffle">🎲 Neue Vorschläge</button><button class="btn primary" data-act="swFillWeek">📅 Woche füllen</button></div></div>`;
   if (!list.length) return h + `<div class="empty"><div class="big">🤷</div><b>Keine Vorschläge</b>Bewertet ein paar Rezepte positiv, dann klappt's.</div>`;
   h += `<div class="list rgrid">${list.map(x => `<div class="card sug">
-      <button class="sug-main" data-act="recipeOpen" data-id="${esc(x.r.id)}"><span class="remoji">${esc(x.r.emoji || '🍽️')}</span>
+      <button class="sug-main" data-act="recipeOpen" data-id="${esc(x.r.id)}">${thumbHTML(x.r, 'pthumb')}
         <span class="rbody"><b>${esc(x.r.name)}</b><small>${recipeMeta(x.r)}</small><small class="why">${x.why.map(esc).join(' · ')}</small></span></button>
       <button class="hbtn" data-act="recipeToPlan" data-id="${esc(x.r.id)}" aria-label="Planen">📅</button></div>`).join('')}</div>
     <p class="small muted" style="text-align:center;margin-top:10px">Basierend auf euren Bewertungen. „Nie“ wird nie vorgeschlagen, kürzlich Geplantes rutscht nach hinten.</p>`;
