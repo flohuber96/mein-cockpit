@@ -1,6 +1,7 @@
 // Offline-Cache für den Essensplaner. Bei Änderungen VERSION erhöhen.
-const VERSION = 'essen-v10';
-const FILES = ['./', 'index.html', 'app.css', 'app.js', 'tinder.js', '../shared/cloud.js', 'foods.js', 'recipes.js', 'recipes2.js', 'recipes3.js', 'recipes4.js', 'recipes5.js', 'recipes6.js', 'recipes7.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+const VERSION = 'essen-v12';
+const IMG_CACHE = 'essenimg-v1'; // Rezeptfotos: eigener Cache, bleibt bei App-Updates erhalten
+const FILES = ['./', 'index.html', 'app.css', 'app.js', 'tinder.js', 'extras.js', 'photos.js', '../shared/cloud.js', 'foods.js', 'nutri.js', 'depts.js', 'curation.js', 'recipes.js', 'recipes2.js', 'recipes3.js', 'recipes4.js', 'recipes5.js', 'recipes6.js', 'recipes7.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 const TIMEOUT = 3000; // so lange aufs Netz warten, dann den gespeicherten Stand zeigen
 let slowUntil = 0;    // war das Netz gerade zäh, kommen die nächsten Dateien sofort aus dem Cache
 
@@ -21,7 +22,16 @@ self.addEventListener('activate', e => {
 // Wartezeit der gespeicherte Stand – die App startet also auch im Funkloch zügig.
 self.addEventListener('fetch', e => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
+  // Fotos ändern sich nie: erst Cache, sonst laden und merken (so sind gesehene Fotos auch offline da)
+  if (/\/essen\/img\//.test(url.pathname)) {
+    e.respondWith(caches.open(IMG_CACHE).then(c => c.match(req).then(hit => hit || fetch(req).then(res => {
+      if (res.ok) c.put(req, res.clone()).catch(() => {});
+      return res;
+    }))).catch(() => new Response('', { status: 404 })));
+    return;
+  }
   e.respondWith((async () => {
     const cache = await caches.open(VERSION);
     const cached = await cache.match(req, { ignoreSearch: true }) || (req.mode === 'navigate' ? await cache.match('index.html') : undefined);
