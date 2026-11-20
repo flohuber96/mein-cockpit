@@ -641,3 +641,73 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 @media (min-width:1000px){
   .timerbar{bottom:24px;left:calc(50% + (var(--side) + var(--sl)) / 2)}
 }
+
+/* ══════════ v5.1: fortlaufender Plan, neue Einkaufsliste ══════════ */
+/* Plan */
+.plansum{padding:14px;margin-bottom:12px}
+.ps-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 10px}
+.ps-top b{display:block;font-size:17px}
+.ps-top span{font-size:13px;color:var(--t2)}
+.ps-shop{min-height:38px;padding:0 12px;font-size:14px;flex:none}
+.plansum .progress{margin:0 2px 12px}
+.ps-miss{width:100%;margin-bottom:10px;min-height:44px;font-size:14.5px}
+.ps-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ps-acts .btn{min-height:42px;padding:0 6px;font-size:14px;background:var(--card2);box-shadow:none}
+.ps-acts .btn svg{width:18px;height:18px}
+.ps-acts .btn:disabled{opacity:.45}
+.pastbtn{display:block}
+.day.past{opacity:1;background:var(--card2);box-shadow:none}
+.day.past .day-h .dn,.day.past .day-h small{color:var(--t3)}
+.day.past .slot{filter:grayscale(1);opacity:.55}
+.day.past .slot.empty{display:none}
+.pastnone{font-size:13px;color:var(--t3);padding:2px 4px 8px}
+.day{position:relative}
+.day.past .day-h em{display:none}
+.kwchip{font-style:normal;font-size:11px;font-weight:700;color:var(--t3);background:var(--card2);padding:1px 7px;border-radius:7px;align-self:center}
+.slot-nobuy{display:inline-grid;place-items:center;font-style:normal;color:var(--t3)}
+.slot-nobuy svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.moredays{width:100%;margin-top:12px}
+.slothero{display:flex;justify-content:center;margin-bottom:4px}
+.slothero .pthumb{width:84px;height:84px;border-radius:18px}.slothero .pthumb i{font-size:44px}
+.mvday{width:auto!important;min-width:64px;font-size:13px!important;font-weight:700;color:var(--acc-t);text-align:left!important}
+.pickopts{display:grid;grid-template-columns:1fr;gap:0}
+.pickopts .card{margin-bottom:10px!important}
+@media (min-width:600px){.pickopts{grid-template-columns:1fr 1fr;gap:10px}}
+.kindseg{margin-bottom:10px;overflow-x:auto;scrollbar-width:none}
+.kindseg::-webkit-scrollbar{display:none}
+.kindseg button{flex:1 0 auto;padding:9px 10px;white-space:nowrap}
+
+/* Einkaufsliste: ruhig, kompakt, gut lesbar */
+:root{--tile:var(--card);--tile-on:#2f9e44;--dish:#5f8a6a}
+@media (prefers-color-scheme:dark){:root{--dish:#93c3a0}}
+.tiles{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:5px}
+.tile{aspect-ratio:auto;min-height:0;justify-content:flex-start;gap:0;padding:7px 5px 6px;border-radius:11px;background:var(--card);box-shadow:none;border:1px solid var(--line)}
+.tile .te{font-size:20px;line-height:1.15;margin-bottom:1px}
+.tile .tn{font-size:13.5px;font-weight:650;line-height:1.2;color:var(--t1)}
+.tile .ts{font-size:12px;color:var(--t2);font-weight:500}
+.tile .td{font-size:10.5px;line-height:1.25;color:var(--dish);font-weight:600;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-top:2px;-webkit-line-clamp:1;display:block;white-space:nowrap;text-overflow:ellipsis}
+.tile.buy{background:var(--card);box-shadow:var(--shadow)}
+.tile.buy:active{background:var(--ok-soft)}
+.tile.on{background:var(--ok-soft);color:var(--t1);border-color:transparent;box-shadow:none}
+.tile.on .ts{color:var(--t2)}
+.tile.on::after{content:"✓";position:absolute;top:5px;right:6px;width:17px;height:17px;border-radius:50%;background:var(--ok);color:#fff;font-size:11px;font-weight:900;line-height:17px;text-align:center}
+.tiles.cat .tile:not(.on),.shop-r .tiles .tile:not(.on){background:transparent}
+.catlbl{margin:16px 2px 6px;padding-bottom:5px;border-bottom:1px solid var(--line);font-size:12.5px}
+.cathead i{background:var(--ok)}
+.sempty{padding:22px 16px 6px}
+@media (min-width:700px){
+  .tiles{grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:7px}
+  .pastbtn{display:block}
+}
+
+/* Einstellungen */
+.setbtn{width:100%;text-align:left}
+.setbtn .chev{font-size:22px;color:var(--t3);flex:none}
+.deptlist{padding:2px 6px}
+.deptrow{display:flex;align-items:center;gap:10px;padding:8px 4px}
+.deptrow+.deptrow{border-top:1px solid var(--line)}
+.deptrow .dnum{width:20px;text-align:right;font-size:12px;color:var(--t3);font-variant-numeric:tabular-nums}
+.deptrow .de{font-size:20px;width:26px;text-align:center}
+.deptrow .dname{flex:1;font-size:14.5px;line-height:1.3}
+.deptrow button{width:38px;height:34px;border-radius:9px;background:var(--card2);color:var(--acc-t);font-size:13px}
+.deptrow button:disabled{opacity:.3}

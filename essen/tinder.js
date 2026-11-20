@@ -21,7 +21,7 @@ function deckList() {
     all: () => true,
     main: isMainDish,
     breakfast: isBreakfast,
-    sweet: r => (r.tags || []).some(t => /süß|dessert|snack|backen/i.test(t)),
+    sweet: isSnackOrDessert,
     veggie: r => !nutr(r).fish,
     fish: r => nutr(r).fish,
   }[sw.deck] || (() => true);
@@ -53,7 +53,7 @@ function renderSwipe() {
   let h = `<div class="who">${USERS.map(x => `<button class="who-b${u === x ? ' on' : ''}" data-act="swWho" data-u="${x}">${x === 'Fee' ? '👩' : '👨'} ${x}</button>`).join('')}</div>`;
   if (!u) { el.innerHTML = h + `<div class="empty"><div class="big">👆</div><b>Wer swipet?</b>Wähle oben deinen Namen, dann geht's los.</div>`; return; }
   const list = deckList(), mine = votesOf(u), done = list.filter(r => mine[r.id] !== undefined).length;
-  h += `<div class="swbar"><select data-change="swDeck" aria-label="Stapel">${[['main', 'Hauptgerichte'], ['all', 'Alle Rezepte'], ['breakfast', 'Frühstück'], ['sweet', 'Süßes & Snacks'], ['veggie', 'Vegetarisch'], ['fish', 'Fisch']].map(([k, l]) => `<option value="${k}" ${sw.deck === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+  h += `<div class="swbar"><select data-change="swDeck" aria-label="Stapel">${[['main', 'Hauptgerichte'], ['all', 'Alle Rezepte'], ['breakfast', 'Frühstück'], ['sweet', 'Snacks & Desserts'], ['veggie', 'Vegetarisch'], ['fish', 'Fisch']].map(([k, l]) => `<option value="${k}" ${sw.deck === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
     <span class="small muted">${done} / ${list.length} bewertet</span></div>`;
   if (!sw.cur || mine[sw.cur] !== undefined || !list.some(r => r.id === sw.cur)) sw.cur = (pickNext() || {}).id || null;
   const r = sw.cur && recipeById(sw.cur);
@@ -174,7 +174,7 @@ function plannedDaysAgo(id) {
 function suggestions(opts = {}) {
   const users = opts.for && opts.for !== 'both' ? [opts.for] : USERS;
   const meal = opts.meal || 'main';
-  const pool = allRecipes().filter(meal === 'breakfast' ? isBreakfast : meal === 'all' ? () => true : isMainDish);
+  const pool = allRecipes().filter(meal === 'breakfast' ? isBreakfast : meal === 'sweet' ? isSnackOrDessert : meal === 'all' ? () => true : isMainDish);
   const seed = String(opts.seed != null ? opts.seed : sw.seed);
   return pool.map(r => {
     // Ein „Nie“ von irgendwem schließt das Gericht immer aus – ebenso unpassende Ernährung oder gemiedene Allergene
@@ -198,7 +198,7 @@ function suggestions(opts = {}) {
 function soonHTML() {
   const list = suggestions({ for: sw.sugFor, meal: sw.sugMeal }).slice(0, 12);
   let h = `<div class="swwrap"><div class="field"><div class="seg">${[['both', '👫 Beide'], ['Fee', '👩 Fee'], ['Flo', '👨 Flo']].map(([k, l]) => `<button data-act="swSugFor" data-v="${k}" class="${sw.sugFor === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
-    <div class="field"><div class="seg">${[['main', 'Hauptgerichte'], ['breakfast', 'Frühstück'], ['all', 'Alles']].map(([k, l]) => `<button data-act="swSugMeal" data-v="${k}" class="${sw.sugMeal === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+    <div class="field"><div class="seg">${[['main', 'Hauptgerichte'], ['breakfast', 'Frühstück'], ['sweet', 'Snacks & Desserts'], ['all', 'Alles']].map(([k, l]) => `<button data-act="swSugMeal" data-v="${k}" class="${sw.sugMeal === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <div class="row" style="margin-bottom:14px"><button class="btn" data-act="swReshuffle">🎲 Neue Vorschläge</button><button class="btn primary" data-act="swFillWeek">📅 Woche füllen</button></div></div>`;
   if (!list.length) return h + `<div class="empty"><div class="big">🤷</div><b>Keine Vorschläge</b>Bewertet ein paar Rezepte positiv, dann klappt's.</div>`;
   h += `<div class="list rgrid">${list.map(x => `<div class="card sug">
@@ -281,33 +281,34 @@ Object.assign(ACT, {
 });
 CHANGE.swDeck = el => { sw.deck = el.value; sw.cur = null; renderSwipe(); };
 
-/* „Auffüllen“ im Wochenplan nutzt jetzt eure Bewertungen */
+/* „Auffüllen“: freie Plätze der nächsten 7 Tage passend zu euren Bewertungen füllen; Zutaten kommen auf die Liste */
 ACT.weekRandom = function () {
   const all = allRecipes();
   if (!all.length) { toast('Lege zuerst Rezepte an'); return; }
-  const used = new Set(weekKeys().flatMap(k => Object.values(S.plan[k] || {}).map(e => e.r)).filter(Boolean));
+  const keys = weekKeys();
+  const used = new Set(keys.flatMap(k => Object.values(S.plan[k] || {}).map(e => e.r)).filter(Boolean));
   const seed = Date.now();
-  const lists = { main: suggestions({ meal: 'main', seed }), breakfast: suggestions({ meal: 'breakfast', seed }) };
+  const lists = { main: suggestions({ meal: 'main', seed }), breakfast: suggestions({ meal: 'breakfast', seed }), sweet: suggestions({ meal: 'sweet', seed }) };
   const take = kind => {
     const x = lists[kind].find(s => !used.has(s.r.id));
     if (!x) return null;
     used.add(x.r.id); return x.r;
   };
   const added = [];
-  for (const k of weekKeys()) {
-    if (k < dkey(new Date())) continue;
+  for (const k of keys) {
     for (const m of S.settings.meals) {
       if (S.plan[k]?.[m]) continue;
-      const r = take(m === 'f' ? 'breakfast' : 'main'); if (!r) continue;
+      const r = take(m === 'f' ? 'breakfast' : m === 's' ? 'sweet' : 'main'); if (!r) continue;
       S.plan[k] = S.plan[k] || {}; S.plan[k][m] = { r: r.id, s: S.settings.servings }; added.push([k, m, r.id]);
+      linkSlot(k, m);
     }
   }
   const n = added.length;
-  if (!n) { toast(weekKeys()[6] < dkey(new Date()) ? 'Diese Woche ist schon vorbei' : 'Keine freien Plätze'); return; }
+  if (!n) { toast('Keine freien Plätze in den nächsten 7 Tagen'); return; }
   save(); render();
-  toast(`${n} ${n === 1 ? 'Gericht' : 'Gerichte'} eingeplant – passend zu euren Bewertungen`, {
+  toast(`${n} ${n === 1 ? 'Gericht' : 'Gerichte'} eingeplant – Zutaten stehen auf der Einkaufsliste`, {
     label: 'Rückgängig', fn: () => {
-      for (const [k, m, id] of added) if (S.plan[k]?.[m]?.r === id) { delete S.plan[k][m]; if (!Object.keys(S.plan[k]).length) delete S.plan[k]; }
+      for (const [k, m, id] of added) if (S.plan[k]?.[m]?.r === id) { delete S.plan[k][m]; unlinkSlot(slotKey(k, m)); if (!Object.keys(S.plan[k]).length) delete S.plan[k]; }
       save(); render();
     },
   });

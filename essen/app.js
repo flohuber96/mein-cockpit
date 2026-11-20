@@ -24,11 +24,12 @@ const MEALS = [
   { k: 'f', name: 'Frühstück', short: 'Früh' },
   { k: 'm', name: 'Mittagessen', short: 'Mittag' },
   { k: 'a', name: 'Abendessen', short: 'Abend' },
+  { k: 's', name: 'Snack / Nachtisch', short: 'Snack' },
 ];
 const meal = k => MEALS.find(m => m.k === k) || MEALS[2];
 const VIEWS = ['plan', 'recipes', 'swipe', 'shop', 'more'];
 const SORTS = ['name', 'time', 'kcal', 'protein', 'pp', 'ns', 'veg'];
-const APP_VERSION = '5.0';
+const APP_VERSION = '5.1';
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 const isStr = x => typeof x === 'string' && x !== '';
 const isNum = x => typeof x === 'number' && isFinite(x);
@@ -175,6 +176,20 @@ function guessCat(name) {
   if (/hack|hähnchen|huhn|pute|rind|schwein|speck|schinken|wurst|salami|lachs|fisch|thunfisch|garnele|steak|schnitzel/i.test(name)) return 'fleisch';
   return 'sonst';
 }
+/* Abteilungen (depts.js): eigene Reihenfolge aus den Einstellungen, fehlende hinten angehängt */
+function deptOrder() {
+  const saved = Array.isArray(S.settings.depts) ? S.settings.depts.filter(k => DEPT_BY[k]) : [];
+  return [...new Set([...saved, ...DEPTS.map(d => d.k)])].map(k => DEPT_BY[k]);
+}
+function guessDept(name) { const f = matchFood(name); return f ? f.dept : guessCat(name) === 'fleisch' ? 'fisch' : 'sonst'; }
+// Abteilung eines Artikels: selbst gewählt > aus dem Katalog > aus der alten Kategorie
+function deptOf(it) {
+  if (it.dept && DEPT_BY[it.dept]) return it.dept;
+  if (it.fid != null && FOODS[it.fid] && FOODS[it.fid].name === it.name) return FOODS[it.fid].dept;
+  const f = matchFood(it.name); if (f) return f.dept;
+  return OLD_TO_DEPT[it.cat] || 'sonst';
+}
+const showDish = () => S.settings.showDish !== false;
 const COUNTABLE = ['', 'Stk', 'Dose', 'Pck', 'Bund', 'Becher', 'Glas', 'Kopf', 'Knolle', 'Stange', 'Netz', 'Beutel', 'Schale', 'Zehe', 'Scheibe', 'Kugel', 'Würfel'];
 const LEVELS = ['', 'Einfach', 'Mittel', 'Anspruchsvoll'];
 
@@ -243,7 +258,8 @@ function cleanRecipe(r) {
     && isNum(r.servings) && r.servings >= 1
     && (r.time === '' || r.time == null || (isNum(r.time) && r.time >= 0))
     && (r.emoji == null || typeof r.emoji === 'string') && (r.notes == null || typeof r.notes === 'string')
-    && (r.photo == null || (typeof r.photo === 'string' && r.photo.startsWith('data:image/')));
+    && (r.photo == null || (typeof r.photo === 'string' && r.photo.startsWith('data:image/')))
+    && (r.kind == null || ['main', 'breakfast', 'snack', 'dessert'].includes(r.kind));
   if (ok) return r;
   const time = r.time === '' || r.time == null ? NaN : +r.time, serv = +r.servings;
   return {
@@ -251,6 +267,7 @@ function cleanRecipe(r) {
     tags: Array.isArray(r.tags) ? r.tags.filter(isStr) : [], servings: isNum(serv) && serv >= 1 ? serv : 1,
     time: isNum(time) && time >= 0 ? time : '', emoji: typeof r.emoji === 'string' ? r.emoji : '🍽️', notes: typeof r.notes === 'string' ? r.notes : '',
     photo: typeof r.photo === 'string' && r.photo.startsWith('data:image/') ? r.photo : undefined,
+    kind: ['main', 'breakfast', 'snack', 'dessert'].includes(r.kind) ? r.kind : undefined,
   };
 }
 function cleanItem(i) {
@@ -277,9 +294,10 @@ function cleanPlan(plan) {
     let o = day;
     for (const [m, e] of Object.entries(day)) {
       const usable = isObj(e) && (isStr(e.r) || isStr(e.t));
-      if (usable && (e.s === undefined || (isNum(e.s) && e.s >= 1))) continue;
+      const extrasOk = usable && (e.b === undefined || typeof e.b === 'boolean') && (e.sh === undefined || isNum(e.sh));
+      if (usable && extrasOk && (e.s === undefined || (isNum(e.s) && e.s >= 1))) continue;
       if (o === day) o = { ...day };
-      if (usable) { o[m] = { ...e }; delete o[m].s; } else delete o[m];
+      if (usable) { o[m] = { ...e }; if (!(isNum(e.s) && e.s >= 1)) delete o[m].s; if (typeof e.b !== 'boolean') delete o[m].b; if (!isNum(e.sh)) delete o[m].sh; } else delete o[m];
     }
     if (Object.keys(o).length) out[d] = o;
   }
@@ -312,6 +330,8 @@ function sanitize(s) {
   if ('goals' in ss && !(isObj(g) && Object.keys(g).every(k => (k === 'kcal' && isNum(g.kcal) && g.kcal >= 800 && g.kcal <= 6000) || (k === 'protein' && isNum(g.protein) && g.protein >= 10 && g.protein <= 400)))) drop.push('goals');
   if ('avoid' in ss && !(Array.isArray(ss.avoid) && ss.avoid.every(a => isStr(a) && ALLERGENS[a]))) drop.push('avoid');
   if ('diet' in ss && !['all', 'veggie', 'vegan'].includes(ss.diet)) drop.push('diet');
+  if ('depts' in ss && !(Array.isArray(ss.depts) && ss.depts.every(d => isStr(d) && DEPT_BY[d]))) drop.push('depts');
+  if ('showDish' in ss && typeof ss.showDish !== 'boolean') drop.push('showDish');
   if (drop.length) { s.settings = { ...ss }; drop.forEach(k => delete s.settings[k]); }
   const u = { ...f.ui, ...(isObj(s.ui) ? s.ui : {}) };
   if (!VIEWS.includes(u.view)) u.view = 'plan';
@@ -383,6 +403,7 @@ function persist() {
   return false;
 }
 function save(fromServer) {
+  _all = null;
   if (!persist() && !boot.saveWarned) {
     boot.saveWarned = true;
     toast('Speichern auf diesem Gerät nicht möglich – bitte ein Backup exportieren', { label: 'Backup', fn: () => exportData() });
@@ -402,18 +423,39 @@ function replaceState(data, msg) {
 if (lsGet(KEY) !== JSON.stringify(S)) persist(); // reparierten/ergänzten Stand gleich festhalten
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
-const ui = { weekStart: monday(new Date()), q: '', tag: '', sq: '', showPast: false, chipsAll: false, f: {}, strict: false };
+const ui = { q: '', tag: '', sq: '', showPast: false, ahead: 14, chipsAll: false, f: {}, strict: false, kind: '' };
 
 /* ───────── Rezepte & Nährwerte ───────── */
 let _all = null;
 const nutCache = new Map();
 function invalidate(id) { _all = null; if (id) nutCache.delete(id); else nutCache.clear(); }
 function withOverride(b) { return S.over[b.id] ? { ...b, ...S.over[b.id], id: b.id, builtin: true, edited: true } : b; }
+// Archivierte Varianten (curation.js) nur zeigen, wenn man sie nutzt: geplant, Favorit, bearbeitet – oder alle eingeblendet
+const ARCHIVED = new Set(BUILTINS.filter(b => ARCHIVED_NAMES.includes(b.name)).map(b => b.id));
+function inUse() {
+  const u = new Set([...S.favs, ...Object.keys(S.over)]);
+  for (const day of Object.values(S.plan)) for (const e of Object.values(day)) if (e && e.r) u.add(e.r);
+  return u;
+}
 function allRecipes() {
   if (_all) return _all;
-  const hidden = new Set(S.hidden);
-  _all = [...BUILTINS.filter(b => !hidden.has(b.id)).map(withOverride), ...S.recipes];
+  const hidden = new Set(S.hidden), used = S.ui.archive ? null : inUse();
+  _all = [...BUILTINS.filter(b => !hidden.has(b.id) && (!used || !ARCHIVED.has(b.id) || used.has(b.id))).map(withOverride), ...S.recipes];
   return _all;
+}
+const archivedCount = () => { const used = inUse(), hidden = new Set(S.hidden); return [...ARCHIVED].filter(id => !used.has(id) && !hidden.has(id)).length; };
+// Art: Hauptgericht, Frühstück, Snack & Beilage, Dessert & Gebäck (eigene Angabe > Ausnahme-Liste > Kategorien)
+const _kind = new WeakMap();
+function kindOf(r) {
+  if (!r) return 'main';
+  if (KIND_LABELS[r.kind]) return r.kind;
+  let k = _kind.get(r);
+  if (!k) {
+    const t = (r.tags || []).join(',');
+    k = KIND_OVERRIDES[r.name] || (/Frühstück/.test(t) ? 'breakfast' : /Dessert|Süß/.test(t) ? 'dessert' : /Snack|Dip|Beilage|Getränk|Tapas/.test(t) ? 'snack' : 'main');
+    _kind.set(r, k);
+  }
+  return k;
 }
 function recipeById(id) {
   const r = allRecipes().find(x => x.id === id);
@@ -466,8 +508,11 @@ const SMART = {
   protein: { label: '💪 Proteinreich (ab 25 %)', test: r => nutr(r).pp >= 25 },
   lowcarb: { label: '🥑 Low Carb', test: r => nutr(r).c <= 30 },
 };
-const isMainDish = r => !(r.tags || []).some(t => /frühstück|snack|dip|dessert|süß|beilage/i.test(t));
-const isBreakfast = r => (r.tags || []).some(t => /frühstück/i.test(t));
+const isMainDish = r => kindOf(r) === 'main';
+const isBreakfast = r => kindOf(r) === 'breakfast';
+const isSnackOrDessert = r => kindOf(r) === 'snack' || kindOf(r) === 'dessert';
+// Welche Art passt zu welcher Mahlzeit im Plan
+const KIND_FOR_MEAL = { f: 'breakfast', m: 'main', a: 'main', s: 'dessert' };
 
 /* ───────── Toast ───────── */
 let toastT;
@@ -533,7 +578,7 @@ function confirmSheet(text, okLabel, onOk) {
 }
 
 /* ───────── Rendering ───────── */
-const TITLES = { plan: 'Wochenplan', recipes: 'Rezepte', swipe: 'Essens-Tinder', shop: 'Einkaufsliste', more: 'Mehr' };
+const TITLES = { plan: 'Essensplan', recipes: 'Rezepte', swipe: 'Essens-Tinder', shop: 'Einkaufsliste', more: 'Mehr' };
 function render() {
   try { renderView(); }
   catch (e) { // eine Ansicht mit Fehler darf die App nicht leer lassen
@@ -577,16 +622,40 @@ function entryInfo(e) {
   return { emoji: '📝', name: e.t, meta: '', kcal: 0, p: 0, r: null };
 }
 const fmtInt = n => Math.round(n).toLocaleString('de-DE');
+
+/* ── Plan: fortlaufende Liste ab heute ──
+   Vergangene Tage sind ausgeblendet; die letzten 4 lassen sich ausgegraut einblenden. */
+const PAST_MAX = 4;
+const relLabel = i => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : i === -1 ? 'Gestern' : i === -2 ? 'Vorgestern' : i < 0 ? `Vor ${-i} Tagen` : '';
+const wdShort = d => DAYS_S[(d.getDay() + 6) % 7];
+function upcomingKeys(n = 7) { const t = startOfDay(new Date()); return Array.from({ length: n }, (_, i) => dkey(addDays(t, i))); }
+const weekKeys = () => upcomingKeys(7); // „nächste 7 Tage“ – für Auffüllen, Analyse, Leeren
+const ICON_NOBUY = '<svg viewBox="0 0 24 24"><path d="M2.5 3.5h2.6l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h8.7M21 7.5H9M3 3l18 18"/></svg>';
+function slotHTML(k, m, e, past) {
+  if (!e) return `<button class="slot empty" data-act="slotPick" data-d="${k}" data-m="${m.k}" aria-label="${m.name}: Gericht wählen"${past ? ' tabindex="-1"' : ''}><span class="slot-l">${m.short}</span><span class="slot-add">+ Gericht wählen</span></button>`;
+  const x = entryInfo(e);
+  const warn = x.r && badAllergens(x.r).length ? '<i class="slot-warn" title="Enthält gemiedene Allergene">⚠</i>' : '';
+  const nobuy = x.r && e.b === false ? `<i class="slot-nobuy" title="Zutaten werden nicht eingekauft">${ICON_NOBUY}</i>` : '';
+  return `<button class="slot filled" draggable="true" data-act="slotMenu" data-d="${k}" data-m="${m.k}"><span class="slot-l">${m.short}</span>${x.r ? thumbHTML(x.r, 'sthumb') : `<span class="sthumb noimg note"><i>${esc(x.emoji)}</i></span>`}<span class="slot-name">${esc(x.name)}</span><span class="slot-meta">${warn}${nobuy}${esc(x.meta)}</span></button>`;
+}
+function dayHTML(d, i, meals) {
+  const k = dkey(d), day = S.plan[k] || {}, past = i < 0;
+  let slots = '', kcal = 0, prot = 0;
+  for (const m of meals) { const e = day[m.k]; if (e) { const x = entryInfo(e); kcal += x.kcal; prot += x.p; } slots += slotHTML(k, m, e, past); }
+  // Gerichte aus abgewählten Mahlzeiten nicht verstecken
+  for (const m of MEALS) if (!meals.includes(m) && day[m.k]) slots += slotHTML(k, m, day[m.k], past);
+  if (past && !Object.keys(day).length) slots = '<p class="pastnone">Nichts geplant</p>';
+  const rel = relLabel(i), monday = d.getDay() === 1 && i > 0;
+  const gk = goals().kcal;
+  return `<section class="card day${i === 0 ? ' today' : ''}${past ? ' past' : ''}" data-day="${k}">
+    <div class="day-h"><span class="dn">${rel || DAYS[(d.getDay() + 6) % 7]}</span><small>${rel ? wdShort(d) + ', ' : ''}${fmtDay(d)}</small>${monday ? `<i class="kwchip">KW ${isoWeek(d)}</i>` : ''}${kcal ? `<em title="Geplante Mahlzeiten pro Person">${fmtInt(kcal)} kcal · ${fmtInt(prot)} g Eiweiß</em>` : ''}</div>
+    ${kcal && !past ? `<div class="daybar" title="${fmtInt(kcal / gk * 100)} % von ${fmtInt(gk)} kcal"><i style="width:${Math.min(100, kcal / gk * 100)}%"></i></div>` : ''}${slots}</section>`;
+}
 function viewPlan() {
-  const ws = ui.weekStart, we = addDays(ws, 6), today = dkey(new Date());
-  const isCur = dkey(ws) === dkey(monday(new Date()));
-  const range = ws.getMonth() === we.getMonth() ? `${ws.getDate()}.–${fmtDay(we)}` : `${fmtDay(ws)} – ${fmtDay(we)}`;
+  const t = startOfDay(new Date());
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
-  let h = `<div class="weeknav">
-    <button class="icon-btn" data-act="weekShift" data-n="-7" aria-label="Vorherige Woche">‹</button>
-    <button class="weeklabel" data-act="weekToday" title="Zur aktuellen Woche"><b>KW ${isoWeek(ws)}</b><span>${range}</span>${isCur ? '' : '<i class="todaychip">Zurück zu heute</i>'}</button>
-    <button class="icon-btn" data-act="weekShift" data-n="7" aria-label="Nächste Woche">›</button></div>`;
+  let h = '';
   if (boot.notice) {
     h += `<div class="hint warn"><span style="font-size:24px">🛟</span><div><b>Daten wiederhergestellt</b>${esc(boot.notice)}${window.Cloud && Cloud.isOn() ? ' Neuere Änderungen werden aus der Online-Datenbank ergänzt.' : ''}</div><button class="x" data-act="hideNotice" aria-label="Ausblenden">×</button></div>`;
   }
@@ -594,55 +663,82 @@ function viewPlan() {
     h += `<div class="hint"><span style="font-size:24px">📲</span><div><b>Als App installieren</b>Tippe in Safari auf <b style="display:inline">Teilen</b> und dann auf <b style="display:inline">„Zum Home-Bildschirm“</b>.</div><button class="x" data-act="hideHint" aria-label="Ausblenden">×</button></div>`;
   }
   const meals = MEALS.filter(m => S.settings.meals.includes(m.k));
-  let days = '', planned = 0, pastN = 0;
-  for (let i = 0; i < 7; i++) {
-    const d = addDays(ws, i), k = dkey(d), day = S.plan[k] || {};
-    let slots = '', kcal = 0, prot = 0;
-    for (const m of meals) {
-      const e = day[m.k];
-      if (e) {
-        const x = entryInfo(e); kcal += x.kcal; prot += x.p; planned++;
-        const warn = x.r && badAllergens(x.r).length ? '<i class="slot-warn" title="Enthält gemiedene Allergene">⚠</i>' : '';
-        slots += `<button class="slot filled" draggable="true" data-act="slotMenu" data-d="${k}" data-m="${m.k}"><span class="slot-l">${m.short}</span>${x.r ? thumbHTML(x.r, 'sthumb') : `<span class="sthumb noimg note"><i>${esc(x.emoji)}</i></span>`}<span class="slot-name">${esc(x.name)}</span><span class="slot-meta">${warn}${esc(x.meta)}</span></button>`;
-      } else {
-        slots += `<button class="slot empty" data-act="slotPick" data-d="${k}" data-m="${m.k}" aria-label="${DAYS[i]} ${m.name}: Gericht wählen"><span class="slot-l">${m.short}</span><span class="slot-add">+ Gericht wählen</span></button>`;
-      }
-    }
-    if (k < today) pastN++;
-    const gk = goals().kcal, kp = Math.min(100, kcal / gk * 100);
-    days += `<section class="card day${k === today ? ' today' : ''}${k < today ? ' past' : ''}"><div class="day-h"><span class="dn">${DAYS[i]}</span><small>${fmtDay(d)}</small>${k === today ? '<i class="tchip">Heute</i>' : ''}${kcal ? `<em title="Geplante Mahlzeiten pro Person">${fmtInt(kcal)} kcal · ${fmtInt(prot)} g Eiweiß</em>` : ''}</div>${kcal ? `<div class="daybar" title="${fmtInt(kcal / gk * 100)} % von ${fmtInt(gk)} kcal"><i style="width:${kp}%"></i></div>` : ''}${slots}</section>`;
-  }
-  const total = meals.length * 7, hidePast = isCur && pastN > 0 && !ui.showPast;
-  if (hidePast) h += `<button class="pastbtn" data-act="showPast">▸ ${pastN === 1 ? 'Gestern' : pastN + ' vergangene Tage'} anzeigen</button>`;
-  h += `<div class="week${hidePast ? ' hide-past' : ''}">${days}
-    <section class="card weeksum">
-      <div class="ws-h"><b>${isCur ? 'Diese Woche' : 'KW ' + isoWeek(ws)}</b><span>${planned} von ${total} Mahlzeiten geplant</span></div>
+  // Übersicht über die nächsten 7 Tage
+  const next = upcomingKeys(7);
+  const planned = next.reduce((a, k) => a + meals.filter(m => S.plan[k] && S.plan[k][m.k]).length, 0), total = meals.length * 7;
+  const missing = missingPlanEntries().length;
+  h += `<section class="card plansum">
+      <div class="ps-top"><div><b>Nächste 7 Tage</b><span>${planned} von ${total} Mahlzeiten geplant</span></div>
+        <button class="btn soft ps-shop" data-act="tab" data-view="shop">🛒 ${S.shop.length} ${S.shop.length === 1 ? 'Artikel' : 'Artikel'}</button></div>
       <div class="progress"><i style="width:${total ? Math.round(planned / total * 100) : 0}%"></i></div>
-      <div class="ws-acts">
-        <button class="btn primary" data-act="weekToShop">🛒 Zutaten auf die Einkaufsliste</button>
-        <button class="btn" data-act="weekAnalysis" ${planned ? '' : 'disabled'}>${ICON.chart}<span>Wochen-Analyse</span></button>
+      ${missing ? `<button class="btn primary ps-miss" data-act="planToShop">🛒 Zutaten für ${missing} ${missing === 1 ? 'Gericht' : 'Gerichte'} auf die Liste</button>` : ''}
+      <div class="ps-acts">
         <button class="btn" data-act="weekRandom">🎲 Auffüllen</button>
-        <button class="btn" data-act="weekClear">🧹 Leeren</button>
-      </div>
-      <p class="small muted">Angaben pro Person · Balken = Anteil am Tagesziel (${fmtInt(goals().kcal)} kcal) · Gerichte lassen sich durch Ziehen verschieben</p>
-    </section></div>`;
+        <button class="btn" data-act="weekAnalysis" ${planned ? '' : 'disabled'}>${ICON.chart}<span>Analyse</span></button>
+        <button class="btn" data-act="weekClear" ${planned ? '' : 'disabled'}>🧹 Leeren</button>
+      </div></section>`;
+  const pastN = ui.showPast ? PAST_MAX : 0;
+  h += `<button class="pastbtn" data-act="togglePast">${ui.showPast ? '▾ Vergangene Tage ausblenden' : `▸ Letzte ${PAST_MAX} Tage einblenden`}</button>`;
+  let days = '';
+  for (let i = -pastN; i < ui.ahead; i++) days += dayHTML(addDays(t, i), i, meals);
+  h += `<div class="week">${days}</div>
+    <button class="btn plain moredays" data-act="moreDays">＋ Weitere 7 Tage anzeigen</button>
+    <p class="small muted" style="text-align:center;margin-top:10px">Angaben pro Person · Balken = Anteil am Tagesziel (${fmtInt(goals().kcal)} kcal) · Gerichte lassen sich durch Ziehen verschieben</p>`;
   return h;
+}
+
+/* ── Plan ↔ Einkaufsliste ──
+   Jedes geplante Rezept bringt seine Zutaten automatisch auf die Liste (außer „nicht einkaufen“).
+   Die Mengen merken sich ihren Platz im Plan (q.w = "Datum|Mahlzeit"); so lassen sie sich beim
+   Entfernen, Verschieben oder Ändern der Portionen gezielt anpassen. Gekauftes bleibt gekauft. */
+const slotKey = (d, m) => `${d}|${m}`;
+function unlinkSlot(key) {
+  S.shop = S.shop.filter(it => {
+    const q = Array.isArray(it.q) ? it.q : [];
+    if (!q.some(x => x.w === key) && it.w !== key) return true;
+    const gone = q.filter(x => x.w === key).map(x => x.n).filter(Boolean);
+    it.q = q.filter(x => x.w !== key);
+    const left = new Set(it.q.map(x => x.n).filter(Boolean));
+    it.src = (it.src || []).filter(n => !gone.includes(n) || left.has(n));
+    if (it.w === key) { const other = it.q.find(x => x.w); if (!other && !it.q.length) return false; it.w = other ? other.w : null; }
+    return !(it.w && !it.q.length);
+  });
+}
+function linkSlot(d, m) {
+  const key = slotKey(d, m); unlinkSlot(key);
+  const e = S.plan[d] && S.plan[d][m];
+  if (!e || !e.r || e.b === false || d < dkey(new Date())) return 0;
+  const r = recipeById(e.r); if (!r) return 0;
+  const items = recipeItems(r, e.s || r.servings);
+  addToShop(items, key);
+  e.sh = 1;
+  return items.length;
+}
+// Verschieben: Mengen wandern mit, nichts wird neu eingekauft
+function rekeySlots(a, b) {
+  const sw = w => (w === a ? b : w === b ? a : w);
+  for (const it of S.shop) { if (it.w) it.w = sw(it.w); for (const q of it.q || []) if (q.w) q.w = sw(q.w); }
+}
+function rescaleSlot(key, f) { for (const it of S.shop) for (const q of it.q || []) if (q.w === key) q.a *= f; }
+// Geplante Gerichte ab heute, deren Zutaten noch nicht übernommen wurden
+function missingPlanEntries() {
+  const today = dkey(new Date()), out = [];
+  for (const [d, day] of Object.entries(S.plan)) if (d >= today) for (const [m, e] of Object.entries(day)) if (e && e.r && e.b !== false && !e.sh && recipeById(e.r)) out.push([d, m]);
+  return out;
 }
 
 /* ── Rezepte ── */
 const SORT_LABELS = [['name', 'Name'], ['ns', 'Nutri-Score'], ['veg', 'Gemüse-Anteil'], ['time', 'Zubereitungszeit'], ['kcal', 'Kalorien'], ['protein', 'Eiweiß (g)'], ['pp', 'Protein-Anteil']];
 // Zusatzfilter (nur für diese Sitzung); gemiedene Allergene und Ernährungsweise stehen in den Einstellungen
 const FILTER_DEF = {
-  meal: { label: 'Mahlzeit', opts: [['', 'Alle'], ['main', 'Hauptgericht'], ['breakfast', 'Frühstück'], ['sweet', 'Süßes & Snacks']] },
   time: { label: 'Zubereitungszeit', opts: [['', 'Egal'], ['15', 'bis 15 Min.'], ['30', 'bis 30 Min.'], ['45', 'bis 45 Min.']] },
   ns: { label: 'Nutri-Score (geschätzt)', opts: [['', 'Egal'], ['A', 'nur A'], ['B', 'A oder B'], ['C', 'A bis C']] },
   veg: { label: 'Gemüse & Obst pro Portion', opts: [['', 'Egal'], ['1', 'ab 1 Portion'], ['2', 'ab 2 Portionen'], ['3', 'ab 3 Portionen']] },
   kcal: { label: 'Kalorien pro Portion', opts: [['', 'Egal'], ['400', 'bis 400 kcal'], ['600', 'bis 600 kcal'], ['800', 'bis 800 kcal']] },
 };
-const isSweet = r => (r.tags || []).some(t => /süß|dessert|snack|backen/i.test(t));
 function filterTests() {
   const f = ui.f || {}, t = [];
-  if (f.meal === 'main') t.push(isMainDish); else if (f.meal === 'breakfast') t.push(isBreakfast); else if (f.meal === 'sweet') t.push(isSweet);
+  if (ui.kind) t.push(r => kindOf(r) === ui.kind);
   if (f.time) t.push(r => r.time && r.time <= +f.time);
   if (f.ns) t.push(r => { const n = nutr(r).ns; return !!n && n.grade <= f.ns; });
   if (f.veg) t.push(r => nutr(r).vegPortions >= +f.veg);
@@ -653,8 +749,9 @@ function filterTests() {
 const activeFilters = () => Object.values(ui.f || {}).filter(Boolean).length + (ui.strict ? 1 : 0);
 function viewRecipes() {
   const nf = activeFilters();
-  return `<div class="rtools"><div class="search">${ICON.search}<input id="rq" type="search" placeholder="Rezepte oder Zutaten suchen" value="${esc(ui.q)}" autocomplete="off" aria-label="Rezepte oder Zutaten suchen"></div>
+  return `<div class="rtools"><div class="search">${ICON.search}<input id="rq" type="search" placeholder="Rezept oder Zutat suchen" value="${esc(ui.q)}" autocomplete="off" aria-label="Rezepte oder Zutaten suchen"></div>
     <button class="btn filterbtn${nf ? ' on' : ''}" data-act="filterOpen" aria-label="Filter">${ICON.filter}<span>Filter</span>${nf ? `<i>${nf}</i>` : ''}</button></div>
+    <div class="seg kindseg" id="rkind">${[['', 'Alle'], ['main', 'Hauptgerichte'], ['breakfast', 'Frühstück'], ['snack', 'Snacks'], ['dessert', 'Desserts']].map(([k, l]) => `<button type="button" data-act="kindTab" data-v="${k}" class="${ui.kind === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="chips${ui.chipsAll ? ' all' : ''}" id="rtags"></div>
     <div class="listbar"><span class="small muted"><span id="rcount"></span><button class="tlink chipmore" data-act="chipsToggle">${ui.chipsAll ? 'Weniger Kategorien' : 'Alle Kategorien'}</button></span>
       <label class="sortsel"><span>Sortieren:</span><select data-change="sort">
@@ -783,7 +880,7 @@ function decorate(it) {
   const f = matchFood(it.name);
   it.fid = f ? f.id : null;
   if (!it.cat) it.cat = f ? f.cat : guessCat(it.name);
-  it.emoji = f ? f.emoji : catOf(it.cat).e;
+  it.emoji = f ? f.emoji : DEPT_BY[deptOf(it)].e;
   return it;
 }
 function qtyText(it) {
@@ -796,11 +893,11 @@ function findItem(name, fid) {
   const s = stem(name);
   return S.shop.find(i => stem(i.name) === s) || (fid != null ? S.shop.find(i => i.fid === fid) : null);
 }
-function addQty(it, a, u, w) {
+function addQty(it, a, u, w, n) {
   if (a == null) return;
   const b = toBase(a, u), unit = b.unit || '';
   const q = it.q.find(x => x.u === unit && (x.w || null) === (w || null));
-  if (q) q.a += b.amount; else it.q.push({ a: b.amount, u: unit, w: w || null });
+  if (q) q.a += b.amount; else it.q.push(n ? { a: b.amount, u: unit, w: w || null, n } : { a: b.amount, u: unit, w: w || null });
 }
 function addToShop(items, w = null) {
   let added = 0;
@@ -810,16 +907,10 @@ function addToShop(items, w = null) {
       it = decorate({ id: uid(), name: x.display || shortName(x.name) || x.name, cat: null, q: [], note: '', src: [], w });
       S.shop.push(it); added++;
     } else if (!w) it.w = null;
-    addQty(it, x.amount, x.unit, w);
+    addQty(it, x.amount, x.unit, w, w && x.src ? x.src[0] : undefined);
     for (const s of x.src || []) if (!it.src.includes(s)) it.src.push(s);
   }
   return added;
-}
-function removeWeek(wk) {
-  S.shop = S.shop.filter(it => {
-    it.q = (it.q || []).filter(q => q.w !== wk);
-    return !(it.w === wk && !it.q.length);
-  });
 }
 function pushRecent(it) {
   const s = stem(it.name);
@@ -833,9 +924,17 @@ function buyItem(it) {
   toast(`${it.name} erledigt`, { label: 'Rückgängig', fn: () => { S.shop.splice(Math.min(idx, S.shop.length), 0, it); save(); renderShop(); } });
 }
 function pantrySet() { return new Set(S.settings.pantry.split('\n').map(s => s.trim().toLowerCase()).filter(Boolean)); }
+// Vorrat („Immer zuhause“) auch über das Lebensmittel erkennen: „Wasser“ trifft „lauwarmes Wasser“, „Salz“ trifft „Meersalz“
+function pantryFoods(set) { const ids = new Set(); for (const n of set) { const f = matchFood(n); if (f) ids.add(f.id); } return ids; }
+function inPantry(name, set, ids) {
+  if (set.has(nameKey(name)) || set.has(name.toLowerCase())) return true;
+  const f = matchFood(name); return !!f && ids.has(f.id);
+}
+// Kurzname eines Gerichts für die Einkaufsliste („Gemüse-Curry mit Kichererbsen“ → „Gemüse-Curry“)
+const shortDish = n => String(n).split(/ mit | in | auf | \(|,/)[0].trim() || n;
 function recipeItems(r, servings, skipPantry = true) {
-  const f = servings / (r.servings || 1), pantry = skipPantry ? pantrySet() : new Set();
-  return r.ingredients.filter(i => !pantry.has(nameKey(i.name)) && !pantry.has(i.name.toLowerCase()))
+  const f = servings / (r.servings || 1), pantry = skipPantry ? pantrySet() : new Set(), ids = pantryFoods(pantry);
+  return r.ingredients.filter(i => !inPantry(i.name, pantry, ids))
     .map(i => ({ name: i.name, amount: i.amount != null ? i.amount * f : null, unit: i.unit, src: [r.name] }));
 }
 function parseQuery(q) {
@@ -848,9 +947,10 @@ function parseQuery(q) {
   p.name = p.name.charAt(0).toUpperCase() + p.name.slice(1);
   return p;
 }
-function tileHTML({ emoji, name, spec, on, data }) {
+// buy = Artikel auf der Liste (zum Abhaken), on = im Katalog schon auf der Liste
+function tileHTML({ emoji, name, spec, on, buy, dish, data }) {
   const attrs = Object.entries(data).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ');
-  return `<button class="tile${on ? ' on' : ''}" data-act="tile" ${attrs}><span class="te">${esc(emoji)}</span><span class="tn">${esc(name)}</span>${spec ? `<span class="ts">${esc(spec)}</span>` : ''}</button>`;
+  return `<button class="tile${buy ? ' buy' : on ? ' on' : ''}" data-act="tile" ${attrs}${on && !buy ? ' aria-label="' + esc(name) + ' – steht schon auf der Liste"' : ''}><span class="te">${esc(emoji)}</span><span class="tn">${esc(name)}</span>${spec ? `<span class="ts">${esc(spec)}</span>` : ''}${dish ? `<span class="td">${esc(dish)}</span>` : ''}</button>`;
 }
 function viewShop() {
   return `<div class="search">${ICON.search}<input id="sq" type="search" placeholder="Was brauchst du?" value="${esc(ui.sq)}" autocomplete="off" enterkeyhint="done" aria-label="Artikel suchen oder hinzufügen"></div><div id="shoparea"></div>`;
@@ -869,7 +969,7 @@ function renderShop() {
     const exact = hits.some(f => f.name.toLowerCase() === lq);
     const qd = p.amount != null ? { a: p.amount, u: p.unit } : {};
     let h = '<div class="tiles">';
-    if (!exact) h += tileHTML({ emoji: catOf(guessCat(p.name)).e, name: p.name, spec: spec || 'Neu', on: isOn(null, p.name), data: { n: p.name, ...qd } });
+    if (!exact) h += tileHTML({ emoji: DEPT_BY[guessDept(p.name)].e, name: p.name, spec: spec || 'Neu', on: isOn(null, p.name), data: { n: p.name, ...qd } });
     h += hits.map(f => tileHTML({ emoji: f.emoji, name: f.name, spec, on: isOn(f.id, f.name), data: { f: f.id, ...qd } })).join('');
     el.innerHTML = h + '</div><p class="small muted" style="margin:10px 4px">Tipp: Menge mit eingeben, z. B. „2 l Milch“ oder „Äpfel 6“. Enter fügt den ersten Treffer hinzu.</p>';
     return;
@@ -877,26 +977,29 @@ function renderShop() {
   // Links: was zu kaufen ist · Rechts (auf großen Bildschirmen daneben): zuletzt verwendet und Katalog
   let left = '', right = '';
   if (S.shop.length) {
-    // Nach Kategorien gruppiert – in der Reihenfolge, in der man durch den Supermarkt geht
+    // Nach Abteilungen gruppiert – in der Reihenfolge des eigenen Supermarkts (einstellbar unter „Mehr“)
     left += `<div class="shead"><b>Zu kaufen</b><span>${S.shop.length} Artikel · <button class="tlink" data-act="shopClear">Liste leeren</button></span></div>`;
-    for (const c of CATS) {
-      const items = S.shop.filter(i => catOf(i.cat).k === c.k); if (!items.length) continue;
-      left += `<div class="catlbl"><span>${c.e}</span>${c.name}<i>${items.length}</i></div><div class="tiles">${items.map(i => tileHTML({ emoji: i.emoji || c.e, name: i.name, spec: qtyText(i), on: true, data: { i: i.id } })).join('')}</div>`;
+    const dish = showDish();
+    for (const d of deptOrder()) {
+      const items = S.shop.filter(i => deptOf(i) === d.k); if (!items.length) continue;
+      items.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+      left += `<div class="catlbl"><span>${d.e}</span>${d.name}<i>${items.length}</i></div><div class="tiles">${items.map(i => tileHTML({ emoji: i.emoji || d.e, name: i.name, spec: qtyText(i), buy: true, dish: dish ? [...new Set((i.src || []).map(shortDish))].join(' · ') : '', data: { i: i.id } })).join('')}</div>`;
     }
-    left += `<p class="small muted" style="margin:8px 4px 0">Tippen = gekauft · Gedrückt halten (oder Rechtsklick) = Menge & Details</p>`;
+    left += `<p class="small muted" style="margin:10px 4px 0">Tippen = gekauft · Gedrückt halten (oder Rechtsklick) = Menge, Abteilung & Details</p>`;
   } else {
     left += `<div class="sempty"><div class="big">🎉</div><b>Alles erledigt!</b><span>Tippe auf Artikel im Katalog oder suche oben, um sie hinzuzufügen.</span></div>`;
   }
-  left += `<button class="btn soft" data-act="weekToShopFromList" style="width:100%;margin-top:14px">📅 Zutaten aus dem Wochenplan holen</button>`;
+  const miss = missingPlanEntries().length;
+  if (miss) left += `<button class="btn soft" data-act="planToShop" style="width:100%;margin-top:14px">📅 Zutaten für ${miss} geplante${miss === 1 ? 's Gericht' : ' Gerichte'} holen</button>`;
   const recent = S.recent.filter(r => !isOn(null, r.name)).slice(0, 15);
   if (recent.length) {
     right += `<div class="shead"><b>Zuletzt verwendet</b></div><div class="tiles">`;
-    right += recent.map(r => { const f = matchFood(r.name); return isOn(f && f.id, r.name) ? '' : tileHTML({ emoji: f ? f.emoji : catOf(guessCat(r.name)).e, name: r.name, data: { n: r.name } }); }).join('');
+    right += recent.map(r => { const f = matchFood(r.name); return isOn(f && f.id, r.name) ? '' : tileHTML({ emoji: f ? f.emoji : DEPT_BY[guessDept(r.name)].e, name: r.name, data: { n: r.name } }); }).join('');
     right += '</div>';
   }
   right += `<div class="shead"><b>Katalog</b></div>`;
-  for (const c of CATS) {
-    const foods = FOODS.filter(f => f.cat === c.k);
+  for (const c of deptOrder()) {
+    const foods = FOODS.filter(f => f.dept === c.k);
     if (!foods.length) continue;
     const open = !!S.ui.open[c.k];
     const n = foods.filter(f => isOn(f.id, f.name)).length;
@@ -928,7 +1031,7 @@ function openItemEdit(it) {
     body: `<form data-form="itemSave" autocomplete="off">
       <div class="field"><label for="e-name">Artikel</label><input id="e-name" value="${esc(it.name)}"></div>
       <div class="field"><label for="e-spec">Menge oder Beschreibung</label><input id="e-spec" value="${esc(qtyText(it))}" placeholder="z. B. 500 g, 2 Stk oder „bio“"></div>
-      <div class="field"><label for="e-cat">Kategorie</label><select id="e-cat">${CATS.map(c => `<option value="${c.k}" ${c.k === it.cat ? 'selected' : ''}>${c.e} ${c.name}</option>`).join('')}</select></div>
+      <div class="field"><label for="e-cat">Abteilung</label><select id="e-cat">${deptOrder().map(c => `<option value="${c.k}" ${c.k === deptOf(it) ? 'selected' : ''}>${c.e} ${c.name}</option>`).join('')}</select></div>
       ${(it.src || []).length ? `<p class="small muted" style="margin:0 4px 14px">Für: ${esc(it.src.join(', '))}</p>` : ''}
       <button class="btn primary" style="width:100%">Speichern</button>
       <div class="row" style="margin-top:8px"><button type="button" class="btn plain" data-act="itemBuy">✓ Gekauft</button><button type="button" class="btn danger" data-act="itemDelete">Entfernen</button></div></form>`,
@@ -992,6 +1095,15 @@ function viewMore() {
     <div class="setting"><span><span class="lbl">Standard-Portionen</span><br><span class="sub">für neue Einträge im Plan</span></span>
       <span class="stepper"><button data-act="defServ" data-n="-1" aria-label="Weniger">−</button><output>${st.servings}</output><button data-act="defServ" data-n="1" aria-label="Mehr">+</button></span></div>
   </div>
+  <div class="section-t">Einkaufsliste</div>
+  <div class="card">
+    <label class="setting"><span><span class="lbl">Gericht unter der Zutat anzeigen</span><br><span class="sub">z. B. „Shakshuka · Linsensuppe“</span></span><span class="switch"><input type="checkbox" data-change="showDish" ${showDish() ? 'checked' : ''}><i></i></span></label>
+    <button class="setting setbtn" data-act="deptOrder"><span><span class="lbl">Reihenfolge der Abteilungen</span><br><span class="sub">${deptOrder().slice(0, 4).map(d => d.e + ' ' + d.name.split(/[,:&]/)[0].trim()).join(' → ')} → …</span></span><span class="chev">›</span></button>
+  </div>
+  <div class="section-t">Rezepte</div>
+  <div class="card">
+    <label class="setting"><span><span class="lbl">Archivierte Varianten zeigen</span><br><span class="sub">${S.ui.archive ? 'Alle eingebauten Rezepte werden angezeigt' : `${archivedCount()} sehr ähnliche Rezepte sind ausgeblendet`}</span></span><span class="switch"><input type="checkbox" data-change="archive" ${S.ui.archive ? 'checked' : ''}><i></i></span></label>
+  </div>
   <div class="section-t">Immer zuhause</div>
   <div class="card" style="padding:12px">
     <textarea id="pantry" data-change="pantry" rows="5" placeholder="Eine Zutat pro Zeile" aria-label="Zutaten, die immer zuhause sind">${esc(st.pantry)}</textarea>
@@ -1004,51 +1116,81 @@ function viewMore() {
     <span class="muted small">Die App startet dann im Vollbild und funktioniert auch ohne Netz. Mit der Online-Datenbank ${online ? 'sind' : 'wären'} alle Geräte automatisch auf demselben Stand.</span>
   </div>
   </div></div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Essensplaner v${APP_VERSION} · <button class="tlink" data-act="diag">Diagnose</button> · <button class="tlink" data-act="credits">Bildnachweise</button><br>Nährwerte, Nutri-Score und Allergene sind automatisch aus den Zutaten geschätzt und ersetzen keine Packungsangaben.</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte (${allRecipes().filter(isMainDish).length} Hauptgerichte) · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Essensplaner v${APP_VERSION} · <button class="tlink" data-act="diag">Diagnose</button> · <button class="tlink" data-act="credits">Bildnachweise</button><br>Nährwerte, Nutri-Score und Allergene sind automatisch aus den Zutaten geschätzt und ersetzen keine Packungsangaben.</p>`;
+}
+
+function openDeptOrder() {
+  const sh = openSheet({
+    title: 'Reihenfolge der Abteilungen', left: '<button class="lnk" data-act="deptReset">Standard</button>', right: '<button class="lnk r" data-act="closeSheet">Fertig</button>',
+    body: `<p class="small muted" style="margin:0 4px 12px">So, wie du durch deinen Supermarkt gehst. In dieser Reihenfolge erscheint die Einkaufsliste.</p><div class="card deptlist"></div>`,
+    onClose: () => { if (S.ui.view === 'shop' || S.ui.view === 'more') render(); },
+  });
+  drawDeptOrder(sh);
+}
+function drawDeptOrder(sh) {
+  const el = sh && $('.deptlist', sh); if (!el) return;
+  const list = deptOrder();
+  el.innerHTML = list.map((d, i) => `<div class="deptrow"><span class="dnum">${i + 1}</span><span class="de">${d.e}</span><span class="dname">${esc(d.name)}</span>
+    <button data-act="deptMove" data-k="${d.k}" data-n="-1" aria-label="${esc(d.name)} nach oben" ${i ? '' : 'disabled'}>▲</button><button data-act="deptMove" data-k="${d.k}" data-n="1" aria-label="${esc(d.name)} nach unten" ${i < list.length - 1 ? '' : 'disabled'}>▼</button></div>`).join('');
 }
 
 /* ───────── Plan-Aktionen ───────── */
-function setEntry(d, m, e) {
+// shop: Zutaten automatisch auf die Liste bringen bzw. von ihr nehmen (Standard). Gibt die Zahl der Zutaten zurück.
+function setEntry(d, m, e, { shop = true } = {}) {
   S.plan[d] = S.plan[d] || {};
   if (e) S.plan[d][m] = e; else { delete S.plan[d][m]; if (!Object.keys(S.plan[d]).length) delete S.plan[d]; }
+  const n = shop ? linkSlot(d, m) : 0;
   save();
+  return n;
 }
-// Zwei Plätze im Plan tauschen bzw. ein Gericht auf einen freien Platz schieben
+const plannedMsg = (n, base = 'Eingeplant') => n ? `${base} · ${n} ${n === 1 ? 'Zutat' : 'Zutaten'} auf der Einkaufsliste` : base;
+// Zwei Plätze im Plan tauschen bzw. ein Gericht auf einen freien Platz schieben – die Einkaufsmengen wandern mit
+function swapSlots(d, m, to, tm) {
+  const a = S.plan[d]?.[m], b = S.plan[to]?.[tm];
+  setEntry(to, tm, a || null, { shop: false }); setEntry(d, m, b || null, { shop: false });
+  rekeySlots(slotKey(d, m), slotKey(to, tm)); save();
+}
 function moveEntry(d, m, to, tm) {
   if (d === to && m === tm) return false;
   const a = S.plan[d]?.[m], b = S.plan[to]?.[tm];
   if (!a) return false;
-  setEntry(to, tm, a); setEntry(d, m, b || null);
+  swapSlots(d, m, to, tm);
   render();
-  toast(b ? 'Getauscht' : 'Verschoben', { label: 'Rückgängig', fn: () => { setEntry(d, m, a); setEntry(to, tm, b || null); render(); } });
+  toast(b ? 'Getauscht' : 'Verschoben', { label: 'Rückgängig', fn: () => { swapSlots(d, m, to, tm); render(); } });
   return true;
 }
 function stepperHTML(id, val, label = 'Portionen') {
   return `<div class="setting card" style="margin-bottom:14px"><span class="lbl">${label}</span><span class="stepper" data-stepper="${id}"><button data-act="step" data-n="-1" aria-label="Weniger">−</button><output>${val}</output><button data-act="step" data-n="1" aria-label="Mehr">+</button></span></div>`;
 }
+const buySwitchHTML = (on = true) => `<div class="card" style="margin-bottom:14px"><label class="setting"><span><span class="lbl">🛒 Zutaten einkaufen</span><br><span class="sub">kommen automatisch auf die Einkaufsliste</span></span><span class="switch"><input type="checkbox" class="buysw" ${on ? 'checked' : ''}><i></i></span></label></div>`;
+const buyChecked = sh => { const c = sh && $('.buysw', sh); return !c || c.checked; };
+const PICK_KINDS = [['main', 'Hauptgerichte'], ['breakfast', 'Frühstück'], ['sd', 'Snacks & Desserts'], ['all', 'Alle']];
+const pickKindTest = k => (k === 'all' ? () => true : k === 'sd' ? isSnackOrDessert : r => kindOf(r) === k);
 function openRecipePicker(title, onPick, mealKey) {
+  const def = mealKey === 'f' ? 'breakfast' : mealKey === 's' ? 'sd' : 'main';
   const sh = openSheet({
     title,
     body: `<div class="search">${ICON.search}<input id="pq" type="search" placeholder="Rezept oder Zutat suchen" autocomplete="off" aria-label="Rezept suchen"></div>
-      ${stepperHTML('pickServ', S.settings.servings)}
+      <div class="seg wrap" id="pkind" style="margin-bottom:12px">${PICK_KINDS.map(([k, l]) => `<button type="button" data-act="pickKind" data-v="${k}" class="${k === def ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="pickopts">${stepperHTML('pickServ', S.settings.servings)}${buySwitchHTML(true)}</div>
       <form class="addbar" data-form="pickText" style="margin-bottom:14px"><input id="pt" placeholder="Oder eigener Eintrag, z. B. Reste" enterkeyhint="done" aria-label="Eigener Eintrag"><button class="btn soft" style="font-size:15px;width:auto;padding:0 14px">OK</button></form>
       <div class="card" style="padding:2px 12px" id="plist"></div>`,
   });
   pending.pick = onPick;
-  const pref = mealKey === 'f' ? isBreakfast : isMainDish;
-  const draw = () => {
-    const match = matcher($('#pq', sh).value);
-    const list = allRecipes().filter(match)
-      .sort((a, b) => (suits(b) - suits(a)) || (isFav(b.id) - isFav(a.id)) || (pref(b) - pref(a)) || a.name.localeCompare(b.name, 'de'));
+  sh.dataset.kind = def;
+  sh._draw = () => {
+    const match = matcher($('#pq', sh).value), q = $('#pq', sh).value.trim(), kt = pickKindTest(sh.dataset.kind);
+    // Beim Suchen in allen Arten suchen, sonst nur in der gewählten
+    const list = allRecipes().filter(r => (q || kt(r)) && match(r))
+      .sort((a, b) => (suits(b) - suits(a)) || (isFav(b.id) - isFav(a.id)) || (kt(b) - kt(a)) || a.name.localeCompare(b.name, 'de'));
     const el = $('#plist', sh);
     if (!list.length) { el.innerHTML = `<p class="muted" style="padding:16px 4px">Keine Rezepte gefunden.</p>`; return; }
     chunked(el, list, r => `<button class="pick${suits(r) ? '' : ' unsuit'}" data-act="pickRecipe" data-id="${esc(r.id)}">${thumbHTML(r, 'pthumb')}<span class="rbody"><b>${esc(r.name)}</b><small>${recipeMeta(r)}</small><span class="rtags">${recipeBadges(r)}</span></span>${isFav(r.id) ? '<span class="fav">♥</span>' : ''}</button>`, 40);
   };
-  $('#pq', sh).addEventListener('input', draw);
-  draw();
+  $('#pq', sh).addEventListener('input', sh._draw);
+  sh._draw();
 }
 function stepperVal(sh, id) { const o = sh && $(`[data-stepper="${id}"] output`, sh); return o ? +o.textContent || 1 : S.settings.servings; }
-function weekKeys() { return Array.from({ length: 7 }, (_, i) => dkey(addDays(ui.weekStart, i))); }
 
 /* ───────── Rezept-Detail & Editor ───────── */
 // Referenzmengen pro Tag (EU-Lebensmittelinformationsverordnung; Ballaststoffe nach DGE). Energie & Eiweiß aus den eigenen Zielen.
@@ -1286,6 +1428,7 @@ function openEditor(id) {
         <div class="field"><label for="f-serv">Portionen</label><input id="f-serv" type="number" inputmode="numeric" min="1" value="${esc(v.servings)}"></div>
         <div class="field"><label for="f-time">Zeit (Min.)</label><input id="f-time" type="number" inputmode="numeric" min="0" value="${esc(v.time)}"></div>
       </div>
+      <div class="field"><label for="f-kind">Art</label><select id="f-kind">${Object.entries(KIND_SHORT).map(([k, l]) => `<option value="${k}" ${kindOf(v) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="field"><label for="f-level">Schwierigkeit</label><select id="f-level">${[1, 2, 3].map(l => `<option value="${l}" ${+v.level === l ? 'selected' : ''}>${LEVELS[l]}</option>`).join('')}</select></div>
       <div class="field"><label for="f-tags">Kategorien</label><input id="f-tags" value="${esc((v.tags || []).join(', '))}" placeholder="z. B. Pasta, Italienisch"><p class="help">Mit Komma trennen</p></div>
       <div class="field"><label for="f-ing">Zutaten</label><textarea id="f-ing" rows="8" placeholder="200 g Mehl&#10;2 Eier&#10;1 Prise Salz">${esc(v.ingredients.map(ingLine).join('\n'))}</textarea><p class="help">Eine Zutat pro Zeile: Menge, Einheit, Zutat. Nährwerte werden daraus automatisch berechnet.</p></div>
@@ -1309,6 +1452,7 @@ function saveEditor(sh) {
     servings: Math.max(1, parseInt($('#f-serv', sh).value) || 1),
     time: Math.max(0, parseInt($('#f-time', sh).value) || 0) || '',
     level: +$('#f-level', sh).value || 1,
+    kind: KIND_LABELS[$('#f-kind', sh).value] ? $('#f-kind', sh).value : 'main',
     tags: [...new Set($('#f-tags', sh).value.split(',').map(s => s.trim()).filter(Boolean))],
     ingredients: $('#f-ing', sh).value.split('\n').map(parseIng).filter(Boolean),
     steps: $('#f-steps', sh).value.split('\n').map(s => s.trim()).filter(Boolean),
@@ -1342,6 +1486,7 @@ function openPlanFor(recipe) {
     body: `<div class="field"><label for="pp-day">Tag</label><select id="pp-day">${opts.join('')}</select></div>
       <div class="field"><label>Mahlzeit</label><div class="seg" id="pp-meal">${(meals.length ? meals : MEALS).map(m => `<button type="button" data-act="seg" data-v="${m.k}" class="${m.k === def ? 'on' : ''}">${m.short}</button>`).join('')}</div></div>
       ${stepperHTML('ppServ', S.settings.servings)}
+      ${buySwitchHTML(true)}
       <button class="btn primary" style="width:100%" data-act="planForSave">Eintragen</button>`,
   });
   sh.dataset.recipe = recipe.id;
@@ -1388,25 +1533,37 @@ const ACT = {
   hideNotice() { boot.notice = ''; render(); },
   reload() { location.reload(); },
   showPast() { ui.showPast = true; render(); },
+  togglePast() { ui.showPast = !ui.showPast; render(); },
+  moreDays() { ui.ahead = Math.min(60, ui.ahead + 7); const y = window.scrollY; render(); window.scrollTo(0, y); },
 
-  weekShift(el) { ui.weekStart = addDays(ui.weekStart, +el.dataset.n); render(); },
-  weekToday() { ui.weekStart = monday(new Date()); render(); },
   slotPick(el) {
     const { d, m } = el.dataset, dt = fromKey(d);
-    openRecipePicker(`${DAYS[(dt.getDay() + 6) % 7]} · ${meal(m).name}`, e => { setEntry(d, m, e); render(); }, m);
+    openRecipePicker(`${DAYS[(dt.getDay() + 6) % 7]}, ${fmtDay(dt)} · ${meal(m).name}`, e => {
+      const old = S.plan[d]?.[m];
+      const n = setEntry(d, m, e); render();
+      toast(plannedMsg(n), { label: 'Rückgängig', fn: () => { setEntry(d, m, old || null); render(); } });
+    }, m);
   },
   pickRecipe(el) {
-    const sh = topSheet(), cb = pending.pick, s = stepperVal(sh, 'pickServ');
-    closeSheet(true); cb && cb({ r: el.dataset.id, s });
+    const sh = topSheet(), cb = pending.pick, s = stepperVal(sh, 'pickServ'), buy = buyChecked(sh);
+    closeSheet(true); cb && cb(buy ? { r: el.dataset.id, s } : { r: el.dataset.id, s, b: false });
+  },
+  pickKind(el) {
+    const sh = topSheet(); if (!sh) return;
+    sh.dataset.kind = el.dataset.v;
+    $$('#pkind button', sh).forEach(b => b.classList.toggle('on', b === el));
+    if (sh._draw) sh._draw();
   },
   slotMenu(el) {
     const { d, m } = el.dataset, e = S.plan[d]?.[m]; if (!e) return;
     const dt = fromKey(d), x = entryInfo(e), r = e.r && recipeById(e.r);
+    const onList = S.shop.filter(it => (it.q || []).some(q => q.w === slotKey(d, m))).length;
     const sh = openSheet({
-      title: `${DAYS[(dt.getDay() + 6) % 7]} · ${meal(m).name}`,
+      title: `${DAYS[(dt.getDay() + 6) % 7]}, ${fmtDay(dt)} · ${meal(m).name}`,
       left: '<button class="lnk" data-act="closeSheet">Fertig</button>',
-      body: `<div class="hero" style="padding-bottom:12px"><div class="e" style="font-size:48px">${esc(x.emoji)}</div><h2 style="font-size:20px">${esc(x.name)}</h2>${r ? `<p class="small muted" style="margin-top:6px">${recipeMeta(r)}</p>` : ''}</div>
+      body: `<div class="hero" style="padding-bottom:12px">${r ? `<div class="slothero">${thumbHTML(r, 'pthumb')}</div>` : `<div class="e" style="font-size:48px">${esc(x.emoji)}</div>`}<h2 style="font-size:20px">${esc(x.name)}</h2>${r ? `<p class="small muted" style="margin-top:6px">${recipeMeta(r)}</p>` : ''}</div>
         ${r ? stepperHTML('slotServ', e.s || r.servings) : ''}
+        ${r ? `<div class="card" style="margin-bottom:14px"><label class="setting"><span><span class="lbl">🛒 Zutaten einkaufen</span><br><span class="sub slotbuy-sub">${e.b === false ? 'Aus – kommt nicht auf die Einkaufsliste' : onList ? `${onList} ${onList === 1 ? 'Zutat steht' : 'Zutaten stehen'} auf der Einkaufsliste` : 'Alles schon gekauft oder vorrätig'}</span></span><span class="switch"><input type="checkbox" data-change="slotBuy" ${e.b === false ? '' : 'checked'}><i></i></span></label></div>` : ''}
         <div class="card menu">
           ${r ? `<button data-act="slotView"><span class="ico">📖</span>Rezept ansehen</button>` : ''}
           ${r && r.steps.length ? `<button data-act="slotCook"><span class="ico">👩‍🍳</span>Jetzt kochen (Schritt für Schritt)</button>` : ''}
@@ -1427,17 +1584,19 @@ const ACT = {
   slotRemove() {
     const sh = topSheet(), { d, m } = sh.dataset, old = S.plan[d]?.[m];
     setEntry(d, m, null); closeSheet(true);
-    toast('Entfernt', old ? { label: 'Rückgängig', fn: () => { setEntry(d, m, old); render(); } } : null);
+    toast(old && old.r && old.b !== false ? 'Entfernt – Zutaten von der Liste genommen' : 'Entfernt', old ? { label: 'Rückgängig', fn: () => { setEntry(d, m, old); render(); } } : null);
   },
   slotMove() {
     const sh = topSheet(), { d, m } = sh.dataset;
-    const days = weekKeys(), meals = MEALS.filter(x => S.settings.meals.includes(x.k));
+    const t = startOfDay(new Date()), meals = MEALS.filter(x => S.settings.meals.includes(x.k) || x.k === m);
+    const days = Array.from({ length: 14 }, (_, i) => addDays(t, i));
     const ms = openSheet({
       title: 'Verschieben nach …',
-      body: `<div class="card menu">${days.flatMap((k, i) => meals.map(mm => {
+      body: `<div class="card menu">${days.flatMap((dt, i) => meals.map(mm => {
+        const k = dkey(dt);
         if (k === d && mm.k === m) return '';
         const occ = S.plan[k]?.[mm.k];
-        return `<button data-act="slotMoveTo" data-to="${k}" data-tm="${mm.k}"><span class="ico">${DAYS_S[i]}</span>${mm.short}${occ ? ` <span class="muted small">· tauscht mit ${esc(entryInfo(occ).name)}</span>` : ''}</button>`;
+        return `<button data-act="slotMoveTo" data-to="${k}" data-tm="${mm.k}"><span class="ico mvday">${relLabel(i) || wdShort(dt)}</span>${mm.short} <span class="muted small">${fmtDay(dt)}${occ ? ` · tauscht mit ${esc(entryInfo(occ).name)}` : ''}</span></button>`;
       })).join('')}</div>`,
     });
     ms.dataset.d = d; ms.dataset.m = m;
@@ -1448,31 +1607,26 @@ const ACT = {
   },
   weekRandom() { /* wird in tinder.js ersetzt (nutzt die Bewertungen) */ },
   weekClear() {
-    const keys = weekKeys(), old = keys.map(k => S.plan[k]);
-    if (!old.some(Boolean)) { toast('Diese Woche ist schon leer'); return; }
-    confirmSheet('Alle Einträge dieser Woche entfernen?', 'Woche leeren', () => {
-      keys.forEach(k => delete S.plan[k]); bulkOk(); save(); render();
-      toast('Woche geleert', { label: 'Rückgängig', fn: () => { keys.forEach((k, i) => { if (old[i]) S.plan[k] = old[i]; }); save(); render(); } });
+    const keys = weekKeys(), old = keys.map(k => S.plan[k] && { ...S.plan[k] });
+    if (!old.some(Boolean)) { toast('In den nächsten 7 Tagen ist nichts geplant'); return; }
+    confirmSheet('Alle Gerichte der nächsten 7 Tage entfernen? Ihre Zutaten werden von der Einkaufsliste genommen.', 'Leeren', () => {
+      keys.forEach(k => { for (const m of Object.keys(S.plan[k] || {})) unlinkSlot(slotKey(k, m)); delete S.plan[k]; });
+      bulkOk(); save(); render();
+      toast('Nächste 7 Tage geleert', { label: 'Rückgängig', fn: () => { keys.forEach((k, i) => { if (old[i]) { S.plan[k] = old[i]; for (const m of Object.keys(old[i])) linkSlot(k, m); } }); save(); render(); } });
     });
   },
-  weekToShop() {
-    const wk = weekKeys()[0], items = [];
-    let meals = 0;
-    for (const k of weekKeys()) for (const e of Object.values(S.plan[k] || {})) {
-      const r = e.r && recipeById(e.r); if (!r) continue;
-      items.push(...recipeItems(r, e.s || r.servings)); meals++;
-    }
-    if (!meals) { toast('In dieser Woche ist noch nichts geplant'); return; }
-    removeWeek(wk);
-    const n = addToShop(items, wk);
-    S.ui.view = 'shop'; ui.sq = ''; save(); render(); window.scrollTo(0, 0);
-    toast(`${n} Artikel aus ${meals} Gerichten`);
+  // Gerichte, deren Zutaten noch nicht auf der Liste sind (z. B. von früher oder „Einkaufen“ wieder eingeschaltet)
+  planToShop() {
+    const miss = missingPlanEntries();
+    if (!miss.length) { toast('Alle geplanten Gerichte sind schon auf der Einkaufsliste'); return; }
+    let n = 0; for (const [d, m] of miss) n += linkSlot(d, m) ? 1 : 0;
+    save(); render();
+    toast(`Zutaten für ${n} ${n === 1 ? 'Gericht' : 'Gerichte'} auf der Einkaufsliste`);
   },
-  weekToShopFromList() { ui.weekStart = monday(new Date()); ACT.weekToShop(); },
-
+  weekToShopFromList() { ACT.planToShop(); },
   tagFilter(el) { ui.tag = ui.tag === el.dataset.tag ? '' : el.dataset.tag; renderRecipeList(); },
   chipsToggle(el) { ui.chipsAll = !ui.chipsAll; $('#rtags').classList.toggle('all', ui.chipsAll); el.textContent = ui.chipsAll ? 'Weniger Kategorien' : 'Alle Kategorien'; },
-  recipeResetFilter() { ui.q = ''; ui.tag = ''; ui.f = {}; ui.strict = false; render(); },
+  recipeResetFilter() { ui.q = ''; ui.tag = ''; ui.f = {}; ui.strict = false; ui.kind = ''; render(); },
   recipeOpen(el) { openRecipe(el.dataset.id); },
   recipeNew() { openEditor(null); },
   recipeEdit(el) { openEditor(el.dataset.id); },
@@ -1501,7 +1655,7 @@ const ACT = {
       else S.recipes = S.recipes.filter(x => x.id !== r.id);
       S.favs = S.favs.filter(x => x !== r.id);
       for (const k of Object.keys(S.plan)) {
-        for (const m of Object.keys(S.plan[k])) if (S.plan[k][m].r === r.id) { slots.push([k, m, S.plan[k][m]]); delete S.plan[k][m]; }
+        for (const m of Object.keys(S.plan[k])) if (S.plan[k][m].r === r.id) { slots.push([k, m, S.plan[k][m]]); delete S.plan[k][m]; unlinkSlot(slotKey(k, m)); }
         if (!Object.keys(S.plan[k]).length) delete S.plan[k];
       }
       invalidate(r.id); save(); closeAllSheets(); render();
@@ -1510,7 +1664,7 @@ const ACT = {
           if (r.builtin) S.hidden = S.hidden.filter(x => x !== r.id);
           else if (own && !S.recipes.some(x => x.id === own.id)) S.recipes.push(own);
           if (wasFav && !isFav(r.id)) S.favs.push(r.id);
-          for (const [k, m, e] of slots) { S.plan[k] = S.plan[k] || {}; if (!S.plan[k][m]) S.plan[k][m] = e; }
+          for (const [k, m, e] of slots) { S.plan[k] = S.plan[k] || {}; if (!S.plan[k][m]) { S.plan[k][m] = e; linkSlot(k, m); } }
           invalidate(r.id); save(); render();
         },
       });
@@ -1531,10 +1685,11 @@ const ACT = {
   planForSave() {
     const sh = topSheet();
     const d = $('#pp-day', sh).value, on = $('#pp-meal .on', sh), m = on ? on.dataset.v : 'a';
-    const old = S.plan[d]?.[m];
-    setEntry(d, m, { r: sh.dataset.recipe, s: stepperVal(sh, 'ppServ') }); closeSheet(true);
+    const old = S.plan[d]?.[m], e = { r: sh.dataset.recipe, s: stepperVal(sh, 'ppServ') };
+    if (!buyChecked(sh)) e.b = false;
+    const n = setEntry(d, m, e); closeSheet(true);
     const dt = fromKey(d);
-    toast(`Eingetragen: ${DAYS[(dt.getDay() + 6) % 7]}, ${meal(m).short}`, old ? { label: 'Rückgängig', fn: () => { setEntry(d, m, old); if (S.ui.view === 'plan') render(); } } : null);
+    toast(plannedMsg(n, `Eingetragen: ${DAYS[(dt.getDay() + 6) % 7]}, ${meal(m).short}`), { label: 'Rückgängig', fn: () => { setEntry(d, m, old || null); if (S.ui.view === 'plan') render(); } });
     if (S.ui.view === 'plan') render();
   },
   seg(el) { $$('button', el.parentElement).forEach(b => b.classList.toggle('on', b === el)); },
@@ -1547,7 +1702,10 @@ const ACT = {
     out.textContent = v;
     const sh = topSheet();
     if (st.dataset.stepper === 'detServ') drawIngredients(sh);
-    if (st.dataset.stepper === 'slotServ') { const e = S.plan[sh.dataset.d]?.[sh.dataset.m]; if (e) { e.s = v; save(); } }
+    if (st.dataset.stepper === 'slotServ') {
+      const e = S.plan[sh.dataset.d]?.[sh.dataset.m], r = e && recipeById(e.r);
+      if (e) { const old = e.s || (r ? r.servings : v); e.s = v; if (old) rescaleSlot(slotKey(sh.dataset.d, sh.dataset.m), v / old); save(); }
+    }
   },
 
   tile(el) {
@@ -1563,9 +1721,11 @@ const ACT = {
     const sh = topSheet(), it = S.shop.find(x => x.id === sh.dataset.id); if (!it) { closeSheet(true); renderShop(); return; }
     const name = $('#e-name', sh).value.trim(); if (!name) { toast('Name fehlt'); return; }
     const sp = parseSpec($('#e-spec', sh).value);
-    const cat = $('#e-cat', sh).value;
-    Object.assign(it, { name, q: sp.q, note: sp.note, w: null });
-    decorate(it); it.cat = cat; if (!matchFood(name)) it.emoji = catOf(cat).e;
+    const dept = DEPT_BY[$('#e-cat', sh).value] ? $('#e-cat', sh).value : 'sonst';
+    // Mengen aus dem Plan behalten, wenn nur Name/Abteilung geändert wurden
+    const same = sp.note === '' && qtyText({ q: sp.q }) === qtyText({ q: it.q });
+    Object.assign(it, same ? { name } : { name, q: sp.q, note: sp.note, w: null });
+    decorate(it); it.dept = dept; it.cat = DEPT_TO_OLD[dept]; if (!matchFood(name)) it.emoji = DEPT_BY[dept].e;
     save(); closeSheet(true); renderShop();
   },
   itemBuy() { const sh = topSheet(), it = S.shop.find(x => x.id === sh.dataset.id); closeSheet(true); if (it) buyItem(it); },
@@ -1584,14 +1744,23 @@ const ACT = {
   },
   async shopShare() {
     if (!S.shop.length) { toast('Die Liste ist leer'); return; }
-    const text = 'Einkaufsliste\n' + CATS.map(c => {
-      const it = S.shop.filter(i => catOf(i.cat).k === c.k);
+    const text = 'Einkaufsliste\n' + deptOrder().map(c => {
+      const it = S.shop.filter(i => deptOf(i) === c.k);
       return it.length ? `\n${c.e} ${c.name}\n` + it.map(i => { const q = qtyText(i); return `▢ ${i.name}${q ? ' – ' + q : ''}`; }).join('\n') : '';
     }).join('');
     if (navigator.share) { try { await navigator.share({ title: 'Einkaufsliste', text }); } catch (e) { /* abgebrochen */ } return; }
     try { await navigator.clipboard.writeText(text); toast('Liste kopiert'); } catch (e) { toast('Teilen nicht möglich'); }
   },
 
+  deptOrder() { openDeptOrder(); },
+  deptMove(el) {
+    const order = deptOrder().map(d => d.k), i = order.indexOf(el.dataset.k), j = i + +el.dataset.n;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    S.settings = { ...S.settings, depts: order }; save(); drawDeptOrder(topSheet());
+  },
+  deptReset() { const st = { ...S.settings }; delete st.depts; S.settings = st; save(); drawDeptOrder(topSheet()); toast('Standard-Reihenfolge wiederhergestellt'); },
+  kindTab(el) { ui.kind = el.dataset.v; $$('#rkind button').forEach(b => b.classList.toggle('on', b === el)); renderRecipeList(); },
   defServ(el) {
     S.settings.servings = Math.max(1, Math.min(20, S.settings.servings + +el.dataset.n)); save();
     el.parentElement.querySelector('output').textContent = S.settings.servings;
@@ -1653,6 +1822,14 @@ const FORMS = {
 };
 
 const CHANGE = {
+  showDish(el) { S.settings = { ...S.settings, showDish: el.checked }; save(); },
+  archive(el) { S.ui.archive = el.checked; saveUI(); invalidate(); render(); },
+  slotBuy(el) {
+    const sh = topSheet(), { d, m } = sh.dataset, e = S.plan[d]?.[m]; if (!e) return;
+    if (el.checked) { delete e.b; const n = linkSlot(d, m); save(); toast(n ? `${n} ${n === 1 ? 'Zutat' : 'Zutaten'} auf die Einkaufsliste` : 'Nichts zu kaufen – alles vorrätig'); }
+    else { e.b = false; unlinkSlot(slotKey(d, m)); save(); toast('Zutaten von der Einkaufsliste genommen'); }
+    const sub = $('.slotbuy-sub', sh); if (sub) sub.textContent = el.checked ? 'Auf der Einkaufsliste' : 'Aus – kommt nicht auf die Einkaufsliste';
+  },
   mealToggle(el) {
     const m = el.dataset.m, set = new Set(S.settings.meals);
     el.checked ? set.add(m) : set.delete(m);

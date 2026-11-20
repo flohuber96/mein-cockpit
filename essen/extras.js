@@ -84,7 +84,7 @@ function weekStats() {
       if (n.ns) ns[n.ns.grade]++;
       if (n.fish) fishMeals++;
       if (r.ingredients.some(x => { const f = matchFood(x.name); return f && f.grp === 'l'; })) legMeals++;
-      if (badAllergens(r).length) warn.push(`${DAYS_S[i]} ${meal(m).short}: ${r.name} (${badAllergens(r).map(a => ALLERGENS[a].short).join(', ')})`);
+      if (badAllergens(r).length) warn.push(`${relLabel(i) || wdShort(fromKey(k))} ${meal(m).short}: ${r.name} (${badAllergens(r).map(a => ALLERGENS[a].short).join(', ')})`);
       for (const x of r.ingredients) { const f = matchFood(x.name); if (f && (f.grp === 'v' || f.grp === 'l') && !HERBS.test(f.name)) foods.set(f.id, f); }
     }
     days.push(d);
@@ -94,7 +94,7 @@ function weekStats() {
 }
 function openWeekAnalysis() {
   const st = weekStats(), g = goals();
-  if (!st.meals) { toast('In dieser Woche sind noch keine Rezepte geplant'); return; }
+  if (!st.meals) { toast('In den nächsten 7 Tagen sind noch keine Rezepte geplant'); return; }
   const kpi = (lbl, val, goal, unit, lvl) => `<div class="wkpi ${lvl}"><span>${lbl}</span><b>${val}</b><small>${goal}</small></div>`;
   const lvl = (v, lo, hi) => v >= hi ? 'good' : v >= lo ? 'mid' : 'bad';
   const nsT = Object.values(st.ns).reduce((a, b) => a + b, 0) || 1;
@@ -108,7 +108,7 @@ function openWeekAnalysis() {
   if (st.foods.length >= 15) tips.push(['good', `Große Vielfalt: ${st.foods.length} verschiedene Gemüse, Früchte und Hülsenfrüchte.`]);
   if ((st.ns.A + st.ns.B) / nsT >= 0.6) tips.push(['good', `${fmtInt((st.ns.A + st.ns.B) / nsT * 100)} % der Gerichte mit Nutri-Score A oder B.`]);
   openSheet({
-    title: `Wochen-Analyse · KW ${isoWeek(ui.weekStart)}`, cls: 'wide', left: '<button class="lnk" data-act="closeSheet">Schließen</button>',
+    title: 'Analyse · nächste 7 Tage', cls: 'wide', left: '<button class="lnk" data-act="closeSheet">Schließen</button>',
     body: `<p class="small muted" style="margin:0 4px 12px">Durchschnitt pro Person an ${st.act.length} geplanten Tagen (${st.meals} Mahlzeiten). Nicht geplante Mahlzeiten und Snacks fehlen.</p>
       <div class="wkpis">
         ${kpi('Kalorien', fmtInt(st.avg.kcal), `von ${fmtInt(g.kcal)} kcal`, '', lvl(st.avg.kcal / g.kcal, 0.5, 0.75))}
@@ -119,7 +119,7 @@ function openWeekAnalysis() {
       </div>
       <div class="wk-grid"><div>
       <div class="section-t">Tag für Tag</div>
-      <div class="card wdays">${st.days.map(d => `<div class="wday${d.n ? '' : ' none'}"><b>${DAYS_S[d.i]}</b>${d.n ? `<span class="wbar" title="${fmtInt(d.kcal)} kcal"><i style="width:${Math.min(100, d.kcal / g.kcal * 100)}%"></i></span><span class="wv">${fmtInt(d.kcal)} kcal</span><span class="wv">${fmtInt(d.p)} g E.</span>${vegDotsHTML(d.veg)}` : '<span class="wv muted">nichts geplant</span>'}</div>`).join('')}</div>
+      <div class="card wdays">${st.days.map(d => `<div class="wday${d.n ? '' : ' none'}"><b>${relLabel(d.i) || wdShort(fromKey(d.k))}</b>${d.n ? `<span class="wbar" title="${fmtInt(d.kcal)} kcal"><i style="width:${Math.min(100, d.kcal / g.kcal * 100)}%"></i></span><span class="wv">${fmtInt(d.kcal)} kcal</span><span class="wv">${fmtInt(d.p)} g E.</span>${vegDotsHTML(d.veg)}` : '<span class="wv muted">nichts geplant</span>'}</div>`).join('')}</div>
       <div class="section-t">Nutri-Score der Gerichte</div>
       <div class="card" style="padding:14px"><div class="nsdist">${'ABCDE'.split('').filter(k => st.ns[k]).map(k => `<i class="ns-${k}" style="flex:${st.ns[k]}">${k} · ${st.ns[k]}</i>`).join('')}</div></div>
       </div><div>
