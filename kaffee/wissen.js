@@ -14,7 +14,7 @@
       <div><small>Out</small><b>${n(st.outMin, 0)}–${n(st.outMax, 0)} g</b><em>Ratio 1 : ${n(r1, 1)}–${n(r2, 1)}</em></div>
       <div><small>Zeit</small><b>${st.tMin}–${st.tMax} s</b><em>ab Hebel hoch</em></div>
       <div><small>1. Tropfen</small><b>${st.fdMin}–${st.fdMax} s</b><em>Pre-Infusion</em></div>
-      <div class="wide"><small>Fluss ab 1. Tropfen</small><b>${n(st.fMin, 1)}–${n(st.fMax, 1)} g/s</b><em>Out ÷ (Zeit − 1. Tropfen)</em></div>
+      <div class="wide"><small>Fluss ab 1. Tropfen</small><b>${n(st.fMin, 1)}–${n(st.fMax, 1)} g/s</b><em>Out ÷ (Zeit − 1. Tropfen) · ohne Tropfen ${st.fdDef || 10} s angenommen</em></div>
     </div>
     <p class="small muted kp">Dosis, Out und Zeit stammen aus deinen Notizen und decken sich mit den üblichen Richtwerten für Espresso (1 : 2 bis 1 : 2,5, ca. 25–30 s). Für den Fluss gibt es keinen offiziellen Standard – üblich sind ca. 1,5–2,5 g/s, aus deinen Zielen folgen 1,8–2,4 g/s. Alles unter „Einstellungen“ anpassbar.</p>
 
@@ -22,6 +22,7 @@
     <div class="card pad kt">
       <p>Die Zeit hängt davon ab, wie viel du in die Tasse laufen lässt: Mit 42 g dauert ein Shot länger als mit 36 g – auch wenn der Mahlgrad gleich ist. Der <b>Fluss</b> (Gramm pro Sekunde, sobald es läuft) bleibt dagegen fast gleich. Er zeigt deshalb direkt, ob der <b>Mahlgrad</b> passt:</p>
       <ul><li><b>Fluss zu hoch</b> → feiner mahlen</li><li><b>Fluss zu niedrig</b> → gröber mahlen</li><li><b>Fluss passt, Menge nicht</b> → nur früher oder später stoppen</li></ul>
+      <p><b>Mehr Kaffee, z. B. 20 g?</b> Kein Problem. Bei gleicher Ratio soll auch mehr in die Tasse (ca. ${n(st.outMin * 20 / st.dose, 0)}–${n(st.outMax * 20 / st.dose, 0)} g) – in ungefähr derselben Zeit. Der Fluss ist dann höher (ca. ${n(st.fMin * 20 / st.dose, 1)}–${n(st.fMax * 20 / st.dose, 1)} g/s). Die App passt die Ziele automatisch an und rechnet den Fluss im Diagramm auf ${n(st.dose, 0)} g um, damit alle Shots vergleichbar bleiben. Was sich ändert: Mehr Kaffee bremst stärker, der passende Mahlgrad liegt also meist etwas gröber. Der Sweet Spot wird deshalb aus Shots mit ähnlicher Dosis berechnet. Und: Das Sieb muss die Menge fassen – für 20 g+ lohnt ein größeres Sieb.</p>
     </div>
 
     <div class="section-t">So stellst du ein</div>

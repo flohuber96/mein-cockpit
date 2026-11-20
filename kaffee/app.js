@@ -22,12 +22,12 @@ const vib = n => { if (navigator.vibrate) navigator.vibrate(n || 10); };
 const KEY = 'kaffee.v1';
 // Empfohlene Ziele: aus deinen Notizen (18 g → 36–40 g in 25–30 s, erster Tropfen 9–10 s)
 // und üblichen Richtwerten für E61-Maschinen. Alles unter „Einstellungen“ änderbar.
-const DEFAULTS = { dose: 18, outMin: 36, outMax: 40, tMin: 25, tMax: 30, fdMin: 8, fdMax: 11, fMin: 1.8, fMax: 2.4, step: 0.25, coarserUp: true };
+const DEFAULTS = { dose: 18, outMin: 36, outMax: 40, tMin: 25, tMax: 30, fdMin: 8, fdMax: 11, fMin: 1.8, fMax: 2.4, fdDef: 10, step: 0.25, coarserUp: true };
 function fresh() {
   return {
     v: 2, shots: [], beans: [],
     settings: { theme: 'auto', machine: 'Lelit Mara X V2', grinder: 'Eureka Mignon Zero 65 AP', ...DEFAULTS },
-    ui: { view: 'coffee', bean: '', chart: 'history' },
+    ui: { view: 'coffee', bean: '', chart: 'sweet' },
   };
 }
 function migrate(s) {
@@ -131,7 +131,7 @@ const arrow = st => st === 'hi' ? '<i class="ar hi" title="zu hoch">▲</i>' : s
 
 function tipFor(s) {
   const f = Advice.flow(s, T());
-  return `<b>${dShort(s.ts)} ${hm(s.ts)}</b><small>${fmt(s.din)} → ${s.dout ? fmt(s.dout) : '–'} g · ${s.t ? fmt(s.t, 0) : '–'} s${s.fd ? ' · 💧 ' + fmt(s.fd, 0) + ' s' : ''}</small><small>Fluss ${f ? (f.est ? '~' : '') + fmt(f.v) + ' g/s' : '–'} · Mahlgrad ${fmtG(s.grind)}</small>${noteText(s) ? `<small>„${esc(noteText(s))}“</small>` : ''}`;
+  return `<b>${dShort(s.ts)} ${hm(s.ts)}</b><small>${fmt(s.din)} → ${s.dout ? fmt(s.dout) : '–'} g · ${s.t ? fmt(s.t, 0) : '–'} s${s.fd ? ' · 💧 ' + fmt(s.fd, 0) + ' s' : ''}</small><small>Fluss ${f ? (f.est ? '~' : '') + fmt(f.v) + ' g/s' + (Math.abs(s.din - T().dose) >= 0.5 ? ` (≙ ${fmt(f.n)} bei ${fmt(T().dose)} g)` : '') : '–'} · Mahlgrad ${fmtG(s.grind)}</small>${noteText(s) ? `<small>„${esc(noteText(s))}“</small>` : ''}`;
 }
 
 function beanBar(sel) {
@@ -149,38 +149,39 @@ function stepper(k, label, v, step, unit) {
     <button type="button" data-act="bump" data-k="${k}" data-d="${step}" aria-label="${label} mehr">+</button>
   </div><span class="hint" data-hint="${k}"></span></div>`;
 }
-function fields(d) {
+function fields(d, timer) {
   return `<div class="fgrid">
+      ${stepper('grind', 'Mahlgrad', d.grind, T().step, '')}
+      <div class="step flowbox" data-flowbox><label>Fluss · Ergebnis</label><div class="fv" data-live="flow">–</div><span class="hint" data-hint="flow"></span></div>
       ${stepper('din', 'In (g)', d.din, 0.1, 'Gramm')}
       ${stepper('dout', 'Out (g)', d.dout, 0.1, 'Gramm')}
       ${stepper('t', 'Zeit (s)', d.t, 1, 'Sekunden')}
       ${stepper('fd', '1. Tropfen (s)', d.fd, 1, 'Sekunden')}
-      ${stepper('grind', 'Mahlgrad', d.grind, T().step, '')}
-      <div class="step flowbox"><label>Fluss</label><div class="fv" data-live="flow">–</div><span class="hint" data-hint="flow"></span></div>
     </div>
-    <textarea data-f="notes" rows="1" placeholder="Kommentar (optional) – z. B. neue Packung, gut verteilt …">${esc(d.notes || '')}</textarea>`;
+    <div class="noterow ${timer ? 'with-timer' : ''}">
+      <textarea data-f="notes" rows="2" placeholder="Kommentar (optional)">${esc(d.notes || '')}</textarea>
+      ${timer ? `<div id="timerBox">${timerHTML()}</div>` : ''}
+    </div>`;
 }
 
-/* Stoppuhr: Start → erster Tropfen → Stop füllt Zeit und Tropfen */
+/* Stoppuhr (ein Knopf): Start → 💧 erster Tropfen → Stop füllt Zeit und Tropfen */
 const TM = { start: 0, fd: 0, raf: 0, lock: null };
 function timerHTML() {
-  if (!TM.start) return `<button type="button" class="btn soft timerbtn" data-act="tStart">⏱ Stoppuhr starten</button>`;
-  return `<div class="timer-run"><span class="clock" id="clock">0,0 s</span>
-    ${TM.fd ? '' : `<button type="button" class="btn soft" data-act="tDrop">💧 Tropfen</button>`}
-    <button type="button" class="btn primary" data-act="tStop">■ Stop</button></div>`;
+  if (!TM.start) return `<button type="button" class="timer idle" data-act="tStart"><b>⏱</b><span>Stoppuhr</span></button>`;
+  return `<button type="button" class="timer run" data-act="${TM.fd ? 'tStop' : 'tDrop'}"><b id="clock">0,0</b><span>${TM.fd ? '■ Stop' : '💧 Tropfen'}</span></button>`;
 }
 function tick() {
   const c = $('#clock'); if (!c || !TM.start) return;
-  const sec = (performance.now() - TM.start) / 1000;
-  c.textContent = fmt(sec) + ' s' + (TM.fd ? ` · 💧 ${fmt((TM.fd - TM.start) / 1000, 0)}` : '');
+  c.textContent = fmt((performance.now() - TM.start) / 1000);
   TM.raf = requestAnimationFrame(tick);
 }
 
 let draft = null; // „Neuer Shot“ der aktuellen Sorte – bleibt beim Tippen und Umschalten erhalten
+// Startwerte: Mahlgrad und Dosis aus dem letzten Shot mit diesem Kaffee, Out passend zur Dosis
 function newDraft(b) {
   const list = shotsOf(b ? b.id : ''), last = lastValid(list), st = T();
-  const nx = last ? Advice.next(last, list, st, st) : null;
-  return { bean: b ? b.id : '', din: st.dose, dout: nx ? nx.dout : Advice.r05((st.outMin + st.outMax) / 2), t: null, fd: null, grind: nx ? nx.grind : null, notes: '' };
+  const din = last ? last.din : st.dose, o = Advice.outRange(din, st);
+  return { bean: b ? b.id : '', din, dout: Advice.r05((o[0] + o[1]) / 2), t: null, fd: null, grind: last && last.grind !== '' ? last.grind : null, notes: '' };
 }
 
 function viewCoffee() {
@@ -195,28 +196,31 @@ function viewCoffee() {
   const nx = last ? Advice.next(last, list, st, st) : null;
   h += `<div class="card newcard" data-form="new">
     <div class="nh"><b>Neuer Shot</b></div>
-    ${nx ? `<div class="advice ${nx.status}"><b>${nx.status === 'good' ? '✓' : '→'} ${esc(nx.title)}</b><span>${esc(nx.sub)}</span></div>` : `<div class="advice"><b>Ziel: ${fmt(st.dose)} g → ${fmt(st.outMin, 0)}–${fmt(st.outMax, 0)} g in ${st.tMin}–${st.tMax} s</b><span>Fluss ${fmt(st.fMin)}–${fmt(st.fMax)} g/s ab dem ersten Tropfen.</span></div>`}
-    <div id="timerBox">${timerHTML()}</div>
-    ${fields(draft)}
+    ${nx ? `<div class="advice ${nx.status}"><b>${nx.status === 'good' ? '✓' : '→'} ${esc(nx.title)}</b><span>${esc(nx.sub)}</span>${nx.grind != null && (nx.grind !== draft.grind || Math.abs(nx.dout - (draft.dout || 0)) >= 0.5) ? `<button class="btn soft sm" data-act="applyAdvice" data-g="${nx.grind}" data-o="${nx.dout}">Vorschlag übernehmen</button>` : ''}</div>` : `<div class="advice"><b>Ziel: ${fmt(st.dose)} g → ${fmt(st.outMin, 0)}–${fmt(st.outMax, 0)} g in ${st.tMin}–${st.tMax} s</b><span>Fluss ${fmt(st.fMin)}–${fmt(st.fMax)} g/s ab dem ersten Tropfen.</span></div>`}
+    ${fields(draft, true)}
     <button class="btn primary" data-act="saveNew" style="width:100%;margin-top:10px">Shot speichern</button>
   </div>`;
 
   if (!list.length) return h + (b ? `<div class="card empty"><div class="big">☕</div><b>Noch keine Shots mit ${esc(b.name)}</b>Trag oben deinen ersten Shot ein.</div>` : '');
 
   // 2) Diagramm: Verlauf oder Sweet Spot
-  const sw = Advice.sweet(list, st, st);
-  const rows = list.slice(-30).map(s => { const f = Advice.flow(s, st); return { flow: f ? f.v : null, t: s.t || null, grind: s.grind === '' ? null : s.grind, label: dShort(s.ts), tip: tipFor(s) }; });
-  const chart = S.ui.chart === 'sweet' ? 'sweet' : 'history';
+  const dose = draft.din > 0 ? draft.din : (last ? last.din : st.dose);
+  const sw = Advice.sweet(list, st, st, dose);
+  const mixed = list.some(s => s.din > 0 && Math.abs(s.din - st.dose) >= 0.5);
+  const flowLabel = mixed ? `Fluss (g/s, auf ${fmt(st.dose)} g bezogen)` : 'Fluss (g/s)';
+  const rows = list.slice(-30).map(s => { const f = Advice.flow(s, st); return { flow: f ? f.n : null, t: s.t || null, grind: s.grind === '' ? null : s.grind, label: dShort(s.ts), tip: tipFor(s) }; });
+  const chart = S.ui.chart === 'history' ? 'history' : 'sweet';
   h += `<div class="card chart">
-    <div class="seg chseg"><button class="${chart === 'history' ? 'on' : ''}" data-act="chart" data-v="history">Verlauf</button><button class="${chart === 'sweet' ? 'on' : ''}" data-act="chart" data-v="sweet">Sweet Spot</button></div>`;
+    <div class="seg chseg"><button class="${chart === 'sweet' ? 'on' : ''}" data-act="chart" data-v="sweet">Sweet Spot</button><button class="${chart === 'history' ? 'on' : ''}" data-act="chart" data-v="history">Verlauf</button></div>`;
   if (chart === 'history') {
-    h += Charts.history(rows, { flowBand: [st.fMin, st.fMax], timeBand: [st.tMin, st.tMax], grindBand: sw.range && !sw.extrap ? sw.range : null });
+    h += Charts.history(rows, { flowBand: [st.fMin, st.fMax], flowAxis: [1, 2.5], flowLabel, timeBand: [st.tMin, st.tMax], grindBand: sw.range && !sw.extrap ? sw.range : null });
     h += `<p class="cap">Grün = Zielbereich, orange Punkte liegen daneben. Antippen zeigt alle Werte eines Shots.${sw.range && !sw.extrap ? ' Beim Mahlgrad ist der Sweet Spot dieser Sorte grün hinterlegt.' : ''}</p>`;
   } else if (sw.pts.length) {
-    h += sweetText(sw);
-    h += Charts.sweet(sw, st, { coarserUp: st.coarserUp, step: st.step, tip: tipFor, nextGrind: nx && nx.grind != null && last && nx.grind !== +last.grind ? nx.grind : null });
-    h += `<p class="cap">Jeder Punkt ist ein Shot mit ca. ${fmt(st.dose)} g. Grünes Band = Ziel-Fluss. Der grüne Streifen ist der Mahlgrad, bei dem diese Sorte im Ziel landet.</p>`;
-  } else h += `<p class="cap">Für den Sweet Spot brauche ich Shots mit ca. ${fmt(st.dose)} g Dosis und eingetragenem Mahlgrad.</p>`;
+    h += sweetText(sw, list);
+    const center = sw.range && !sw.extrap ? (sw.range[0] + sw.range[1]) / 2 : sw.pts[sw.pts.length - 1].x;
+    h += Charts.sweet(sw, st, { coarserUp: st.coarserUp, step: st.step, tip: tipFor, center: Advice.snap(center, st.step), yLabel: flowLabel, nextGrind: nx && nx.grind != null && last && nx.grind !== +last.grind ? nx.grind : null });
+    h += `<p class="cap">Jeder Punkt ist ein Shot mit ca. ${fmt(sw.dose)} g. Grünes Band = Ziel-Fluss, grüner Streifen = Mahlgrad, bei dem diese Sorte im Ziel landet. Achsen sind bei allen Sorten gleich: Fluss 1–2,5 g/s, drei Mahlstufen breit.</p>`;
+  } else h += `<p class="cap">Für den Sweet Spot brauche ich Shots mit ca. ${fmt(dose)} g Dosis und eingetragenem Mahlgrad.</p>`;
   h += `</div>`;
 
   // 3) Historie
@@ -227,21 +231,27 @@ function viewCoffee() {
     const c = Advice.check(s, st);
     h += `<button class="hrow" data-act="editShot" data-id="${s.id}">
       <span class="d">${dShort(s.ts)}<small>${hm(s.ts)}</small></span>
-      <span>${fmt(s.din)}${arrow(c.din)}</span>
+      <span>${fmt(s.din)}</span>
       <span>${s.dout ? fmt(s.dout) : '–'}${arrow(c.dout)}</span>
       <span>${s.t ? fmt(s.t, 0) : '–'}${arrow(c.t)}</span>
       <span>${s.fd ? fmt(s.fd, 0) : '–'}${arrow(c.fd)}</span>
       <span>${c.f ? (c.f.est ? '~' : '') + fmt(c.f.v) : '–'}${arrow(c.flow)}</span>
-      <span>${fmtG(s.grind)}</span>
+      <span class="mg ${c.flow === 'ok' ? 'ok' : ''}">${fmtG(s.grind)}</span>
       ${noteText(s) ? `<em class="note">${esc(noteText(s))}</em>` : ''}
     </button>`;
   }
-  h += `</div><p class="small muted legend-line"><i class="ar hi">▲</i> zu hoch · <i class="ar lo">▼</i> zu niedrig · ohne Pfeil = im Ziel · ~ = Fluss geschätzt (Tropfen nicht gemessen) · antippen zum Bearbeiten</p>`;
+  h += `</div><p class="small muted legend-line"><i class="ar hi">▲</i> zu hoch · <i class="ar lo">▼</i> zu niedrig · ohne Pfeil = im Ziel · <span class="mg ok">MG</span> grün = Fluss perfekt · ~ = Tropfen nicht eingetragen (${st.fdDef || 10} s angenommen) · antippen zum Bearbeiten</p>`;
   return h;
 }
 
-function sweetText(sw) {
-  if (!sw.range) return `<p class="swt"><span><b>Noch kein Sweet Spot.</b> ${sw.n < 3 ? 'Dafür brauche ich ein paar Shots mit verschiedenen Mahlgraden.' : 'Die Shots zeigen noch keinen klaren Trend – meist schwanken Dosis oder Verteilung.'}</span></p>`;
+function sweetText(sw, list) {
+  const st = T(), rTxt = r => fmtG(r[0]) + (r[1] !== r[0] ? '–' + fmtG(r[1]) : '');
+  if (!sw.range) {
+    // Für diese Dosis noch nichts – aber vielleicht für die Bezugsdosis?
+    const ref = Math.abs(sw.dose - st.dose) >= 0.5 ? Advice.sweet(list, st, st, st.dose) : null;
+    const alt = ref && ref.range && !ref.extrap ? ` Bei ${fmt(st.dose)} g lag er bei <b>${rTxt(ref.range)}</b> – mit ${fmt(sw.dose)} g bremst der Kaffee stärker, also eher etwas gröber.` : '';
+    return `<p class="swt"><span><b>Noch kein Sweet Spot${Math.abs(sw.dose - st.dose) >= 0.5 ? ` für ${fmt(sw.dose)} g` : ''}.</b> ${sw.n < 3 ? 'Dafür brauche ich ein paar Shots mit verschiedenen Mahlgraden.' : 'Die Shots zeigen noch keinen klaren Trend – meist schwanken Dosis oder Verteilung.'}${alt}</span></p>`;
+  }
   const r = fmtG(sw.range[0]) + (sw.range[1] !== sw.range[0] ? '–' + fmtG(sw.range[1]) : '');
   const how = sw.method === 'data' ? `Hier lag der Fluss bei ${sw.hits === 1 ? 'einem Shot' : sw.hits + ' Shots'} im Ziel.` : sw.method === 'between' ? 'Liegt zwischen zwei Mahlgraden, die links und rechts danebenlagen.' : sw.extrap ? 'Hochrechnung aus dem Trend – außerhalb deiner bisherigen Shots, vorsichtig annähern.' : 'Aus dem Trend deiner Shots geschätzt.';
   const noisy = sw.spread != null && sw.spread > 0.3 ? ` Bei gleichem Mahlgrad schwankt der Fluss um ±${fmt(sw.spread)} g/s – gleichmäßige Dosis und Verteilung machen den Wert verlässlicher.` : '';
@@ -261,13 +271,14 @@ function updateLive(form) {
   const cls = s => s === 'ok' ? 'good' : s ? 'warn' : '';
   const word = s => s === 'hi' ? '▲ zu hoch' : '▼ zu niedrig';
   const show = (k, s, base) => hint(k, s && s !== 'ok' ? word(s) : base, cls(s));
-  show('din', c.din, `Ziel ${fmt(st.dose)}`);
+  hint('din', d.din > 0 && Math.abs(d.din - st.dose) >= 0.5 ? 'Ziele angepasst' : `Bezug ${fmt(st.dose)}`, '');
   show('dout', c.dout, `Ziel ${fmt(c.o[0], 0)}–${fmt(c.o[1], 0)}`);
   show('t', c.t, `Ziel ${st.tMin}–${st.tMax}`);
-  show('fd', c.fd, `sonst ${st.fdMin}–${st.fdMax}`);
-  show('flow', c.flow, `Ziel ${fmt(st.fMin)}–${fmt(st.fMax)}`);
-  const fv = $('[data-live="flow"]', form);
+  if (d.fd == null) hint('fd', `leer = ${st.fdDef || 10} s`, ''); else show('fd', c.fd, `sonst ${st.fdMin}–${st.fdMax}`);
+  show('flow', c.flow, `Ziel ${fmt(c.fr[0])}–${fmt(c.fr[1])}`);
+  const fv = $('[data-live="flow"]', form), box = $('[data-flowbox]', form);
   if (fv) fv.innerHTML = c.f ? `${c.f.est ? '~' : ''}${fmt(c.f.v)}<small> g/s</small>` : '–';
+  if (box) box.className = 'step flowbox ' + (c.flow === 'ok' ? 'good' : c.flow ? 'warn' : '');
 }
 function syncDraft() { const f = $('[data-form="new"]'); if (f && draft) Object.assign(draft, readForm(f)); }
 
@@ -281,11 +292,12 @@ function viewSettings() {
   const fLo = st.outMin / (st.tMax - fdMid), fHi = st.outMax / (st.tMin - fdMid);
   const arch = S.beans.filter(b => b.archived);
   return `<div class="section-t">Ziele</div><div class="card">
-    ${setRow('Dosis In (g)', 'dose')}
+    ${setRow('Bezugs-Dosis (g)', 'dose', 'Out- und Fluss-Ziele gelten dafür und wachsen bei mehr Kaffee mit')}
     ${setRow('Out von (g)', 'outMin')}
     ${setRow('Out bis (g)', 'outMax')}
     ${setRow('Zeit von (s)', 'tMin', 'ab Hebel hoch, inkl. Pre-Infusion')}
     ${setRow('Zeit bis (s)', 'tMax')}
+    ${setRow('1. Tropfen angenommen (s)', 'fdDef', 'wenn kein erster Tropfen eingetragen ist')}
     ${setRow('1. Tropfen von (s)', 'fdMin')}
     ${setRow('1. Tropfen bis (s)', 'fdMax')}
     ${setRow('Fluss von (g/s)', 'fMin', `aus Out, Zeit und Tropfen ergibt sich ca. ${fmt(fLo)}–${fmt(fHi)}`)}
@@ -368,6 +380,11 @@ const ACT = {
     vib(6); updateLive(form); if (form.dataset.form === 'new') syncDraft();
   },
   tStart() { syncDraft(); TM.start = performance.now(); TM.fd = 0; vib(20); lockScreen(); $('#timerBox').innerHTML = timerHTML(); tick(); },
+  applyAdvice(el) {
+    const form = $('[data-form="new"]');
+    $('[data-f="grind"]', form).value = numStr(+el.dataset.g); $('[data-f="dout"]', form).value = gStr(+el.dataset.o);
+    updateLive(form); syncDraft(); el.remove(); vib(8); toast('Vorschlag übernommen');
+  },
   tDrop() { TM.fd = performance.now(); vib(12); $('#timerBox').innerHTML = timerHTML(); tick(); },
   tStop() {
     const end = performance.now(), form = $('[data-form="new"]'); stopTimer(); vib([20, 40, 20]);
@@ -430,7 +447,7 @@ const ACT = {
 
   setDir(el) { S.settings.coarserUp = el.dataset.v === '1'; save(); render(); },
   setTheme(el) { S.settings.theme = el.dataset.v; save(); applyTheme(); render(); },
-  resetTargets() { confirmSheet('Ziele auf die empfohlenen Werte zurücksetzen? (18 g → 36–40 g in 25–30 s, Tropfen 8–11 s, Fluss 1,8–2,4 g/s)', 'Zurücksetzen', () => { Object.assign(S.settings, DEFAULTS); save(); render(); toast('Empfohlene Werte gesetzt'); }); },
+  resetTargets() { confirmSheet('Ziele auf die empfohlenen Werte zurücksetzen? (18 g → 36–40 g in 25–30 s, Tropfen 8–11 s, angenommen 10 s, Fluss 1,8–2,4 g/s)', 'Zurücksetzen', () => { Object.assign(S.settings, DEFAULTS); save(); render(); toast('Empfohlene Werte gesetzt'); }); },
   async importNotebook() {
     let j;
     try { const r = await fetch('notizbuch.json', { cache: 'no-cache' }); j = await r.json(); } catch (e) { toast('Notizbuch-Daten nicht erreichbar – Internet prüfen'); return; }
@@ -529,7 +546,7 @@ render();
 
 /* ───────── Online-Datenbank (../shared/cloud.js) ───────── */
 const CLOUD_ARR = { shot: ['s:', 'shots'], bean: ['b:', 'beans'] };
-const SYNC_SETTINGS = ['dose', 'outMin', 'outMax', 'tMin', 'tMax', 'fdMin', 'fdMax', 'fMin', 'fMax', 'machine', 'grinder', 'coarserUp', 'step'];
+const SYNC_SETTINGS = ['dose', 'outMin', 'outMax', 'tMin', 'tMax', 'fdMin', 'fdMax', 'fMin', 'fMax', 'fdDef', 'machine', 'grinder', 'coarserUp', 'step'];
 if (window.Cloud) Cloud.init({
   app: 'kaffee',
   records() {
