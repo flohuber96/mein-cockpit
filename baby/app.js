@@ -51,19 +51,19 @@ const KINDS = [
   { k: 'schlaf', name: 'Schlaf', e: '😴' },
 ];
 const kind = k => KINDS.find(x => x.k === k);
+const ENTRY_KINDS = KINDS.filter(k => k.k === 'flasche' || k.k === 'zusatz'); // Brust (abgestillt) und Schlaf nur noch bei alten Einträgen
 const FEED = ['brust', 'flasche', 'zusatz'];
 const isFeed = x => x.kinds.some(k => FEED.includes(k));
 const isSleep = x => x.kinds.includes('schlaf');
 const isBreast = x => x.kinds.includes('brust');
 const kindNames = x => x.kinds.map(k => kind(k).name).join(' + ');
-const TODO_SUGG = ['Geburtsurkunde beantragen', 'Bei der Krankenkasse anmelden', 'Kindergeld beantragen', 'Elterngeld beantragen', 'U-Untersuchung vereinbaren', 'Hebamme anrufen', 'Windeln kaufen', 'Pre-Nahrung kaufen', 'Vitamin D nachkaufen', 'Fotos an Familie schicken'];
 
 /* ───────── State ───────── */
 const KEY = 'baby.v1';
 function fresh() {
   return {
     v: 1, log: [], todos: [], growth: [], vitd: {},
-    settings: { name: '', birth: '', theme: 'auto', vitd: true, feedInt: 180, feedFrom: 'start', nightOn: false, nightInt: 240 },
+    settings: { name: '', birth: '', theme: 'auto', vitd: true, feedInt: 180, feedFrom: 'start', nightOn: false, nightInt: 240, scoops: 3, water: 90 },
     ui: { view: 'today' },
   };
 }
@@ -102,7 +102,7 @@ const endOf = x => x.e || (x.run ? Date.now() : x.s);
 const lastWhere = fn => sorted().find(fn);
 
 function nextSide() {
-  const last = lastWhere(x => isBreast(x) && x.side.length);
+  const last = lastWhere(x => !isSleep(x) && x.side.length);
   if (!last) return null;
   const s = last.side;
   // Nur eine Seite → nächstes Mal die andere. Beide → mit der zuletzt gegebenen anfangen.
@@ -119,7 +119,7 @@ function dayStats(key) {
     if (isFeed(x)) st.feeds++;
     if (x.ml) st.ml += x.ml;
     if (isBreast(x) && (x.e || x.run)) st.breastMin += (endOf(x) - x.s) / MIN;
-    if (isBreast(x)) { if (x.side.includes('L')) st.L++; if (x.side.includes('R')) st.R++; }
+    if (!isSleep(x)) { if (x.side.includes('L')) st.L++; if (x.side.includes('R')) st.R++; }
     if (x.pee) st.pee++;
     if (x.poo) st.poo++;
   }
@@ -178,7 +178,7 @@ function confirmSheet(text, okLabel, onOk) {
 /* ───────── Eingabe-Formular ───────── */
 // F = Formular auf der Startseite, E = Formular im Bearbeiten-Fenster
 function newDraft(day) {
-  return { id: null, day: day || dkey(new Date()), von: '', bis: '', vonSet: !!day, kinds: [], side: [], ml: 0, poo: false, pee: false, note: '' };
+  return { id: null, day: day || dkey(new Date()), von: '', bis: '', vonSet: !!day, kinds: [], side: [], ml: 0, pu: null, wa: null, poo: false, pee: false, note: '' };
 }
 let F = newDraft(), E = null;
 const formOf = fid => fid === 'edit' ? E : F;
@@ -186,10 +186,12 @@ const formOf = fid => fid === 'edit' ? E : F;
 function draftFromEntry(x) {
   return {
     id: x.id, day: dkey(new Date(x.s)), von: hm(x.s), bis: x.e ? hm(x.e) : '', vonSet: true,
-    kinds: [...x.kinds], side: [...x.side], ml: x.ml || 0, poo: !!x.poo, pee: !!x.pee, note: x.note || '', run: !!(x.run && !x.e),
+    kinds: [...x.kinds], side: [...x.side], ml: x.ml || 0, pu: x.pu ?? null, wa: x.wa ?? null, poo: !!x.poo, pee: !!x.pee, note: x.note || '', run: !!(x.run && !x.e),
   };
 }
 
+// Beim Eintragen: Flasche und Zusatz – Brust/Schlaf nur, wenn ein alter Eintrag sie schon hat
+const shownKinds = f => KINDS.filter(k => ENTRY_KINDS.includes(k) || f.kinds.includes(k.k));
 function formHTML(f, fid) {
   const main = fid === 'main';
   const von = main && !f.vonSet ? hm(Date.now()) : f.von;
@@ -204,12 +206,16 @@ function formHTML(f, fid) {
       <label class="tbox"><small><span>bis</span>${f.bis ? '<button type="button" data-act="bisClr">leeren</button>' : '<button type="button" data-act="bisNow">jetzt</button>'}</small><input type="time" data-in="bis" value="${f.bis}"></label>
     </div>
     <div class="chiprow"><span class="lbl">Dauer</span>${[5, 10, 15, 20, 30, 45, 60].map(n => `<button type="button" class="chip ${durOf(f, von) === n ? 'on' : ''}" data-act="dur" data-n="${n}">${n}′</button>`).join('')}</div>
-    <div class="tgs k4">${KINDS.map(k => `<button type="button" class="tg ${f.kinds.includes(k.k) ? 'on' : ''}" data-act="kind" data-k="${k.k}" aria-pressed="${f.kinds.includes(k.k)}"><span class="e">${k.e}</span>${k.name}</button>`).join('')}</div>
+    <div class="tgs k${shownKinds(f).length}">${shownKinds(f).map(k => `<button type="button" class="tg ${f.kinds.includes(k.k) ? 'on' : ''}" data-act="kind" data-k="${k.k}" aria-pressed="${f.kinds.includes(k.k)}"><span class="e">${k.e}</span>${k.name}</button>`).join('')}</div>
     <div class="mlrow">
       ${['L', 'R'].map(s => `<button type="button" class="tg side ${f.side.includes(s) ? 'on' : ''} ${sug === s && !f.side.length && main ? 'sug' : ''}" data-act="side" data-s="${s}" aria-pressed="${f.side.includes(s)}">${s}<small>${sug === s && !f.side.length && main ? 'nächste' : s === 'L' ? 'links' : 'rechts'}</small></button>`).join('')}
       <div class="stepper"><button type="button" data-act="mlStep" data-n="-10" aria-label="10 ml weniger">−</button><label><input type="number" inputmode="numeric" min="0" max="999" placeholder="0" data-in="ml" value="${ml}"><span>ml</span></label><button type="button" data-act="mlStep" data-n="10" aria-label="10 ml mehr">+</button></div>
     </div>
-    <div class="chiprow"><span class="lbl">Menge</span>${[20, 30, 50, 60, 80, 90, 100, 120, 150].map(n => `<button type="button" class="chip ${f.ml === n ? 'on' : ''}" data-act="mlSet" data-n="${n}">${n}</button>`).join('')}</div>
+    ${f.kinds.includes('flasche') ? `<div class="bottle">
+      <div class="mini"><span>Pulver</span><button type="button" data-act="puStep" data-n="-1" aria-label="Ein Löffel weniger">−</button><b>${num(f.pu ?? S.settings.scoops)}</b><small>Löffel</small><button type="button" data-act="puStep" data-n="1" aria-label="Ein Löffel mehr">+</button></div>
+      <div class="mini"><span>Wasser</span><button type="button" data-act="waStep" data-n="-10" aria-label="10 ml weniger">−</button><b>${f.wa ?? S.settings.water}</b><small>ml</small><button type="button" data-act="waStep" data-n="10" aria-label="10 ml mehr">+</button></div>
+    </div>` : ''}
+    <div class="chiprow"><span class="lbl">Getrunken</span>${[20, 30, 50, 60, 80, 90, 100, 120, 150].map(n => `<button type="button" class="chip ${f.ml === n ? 'on' : ''}" data-act="mlSet" data-n="${n}">${n}</button>`).join('')}</div>
     <div class="tgs k2">
       <button type="button" class="tg row ${f.poo ? 'on' : ''}" data-act="diaper" data-k="poo" aria-pressed="${f.poo}"><span class="e">💩</span>Groß</button>
       <button type="button" class="tg row ${f.pee ? 'on' : ''}" data-act="diaper" data-k="pee" aria-pressed="${f.pee}"><span class="e">💧</span>Klein</button>
@@ -255,13 +261,15 @@ function draftToEntry(f, main) {
   return {
     id: f.id || uid(), s, e, kinds: KINDS.map(k => k.k).filter(k => f.kinds.includes(k)), side: [...f.side],
     ml: f.ml > 0 ? f.ml : null, poo: f.poo, pee: f.pee, note: f.note.trim(), run: false,
+    ...(f.kinds.includes('flasche') ? { pu: f.pu ?? S.settings.scoops, wa: f.wa ?? S.settings.water } : {}),
   };
 }
 const hasContent = x => x.kinds.length || x.poo || x.pee || x.ml || x.note;
 
 /* ───────── Rendering ───────── */
-const TITLES = { today: 'Heute', stats: 'Statistik', todo: 'To-do', more: 'Mehr' };
+const TITLES = { today: 'Heute', stats: 'Statistik', more: 'Mehr' };
 function render() {
+  if (!TITLES[S.ui.view]) S.ui.view = 'today'; // z. B. früher geöffnete To-do-Seite
   const v = S.ui.view;
   $('#title').textContent = v === 'today' && S.settings.name ? S.settings.name : TITLES[v];
   const age = fmtAge(S.settings.birth);
@@ -271,14 +279,10 @@ function render() {
   const main = $('#main');
   if (v === 'today') { main.innerHTML = viewToday(); updateFeedCard(Date.now()); }
   if (v === 'stats') main.innerHTML = viewStats();
-  if (v === 'todo') main.innerHTML = viewTodo();
   if (v === 'more') main.innerHTML = viewMore();
   updateBadge();
 }
-function updateBadge() {
-  const n = todoDueCount(), b = $('#todoBadge'); // offen und heute oder überfällig
-  b.hidden = !n; b.textContent = n;
-}
+function updateBadge() { /* kein Tab-Abzeichen mehr (To-do entfernt) */ }
 
 /* ── Heute ── */
 function viewToday() {
@@ -351,31 +355,25 @@ function statusHTML() {
     const k = isSleep(x) ? kind('schlaf') : kind(x.kinds.find(k => FEED.includes(k)) || 'brust');
     return `<div class="running">
       <span class="re">${k.e}</span>
-      <div class="ri"><small>${isSleep(x) ? 'Schläft' : k.name} · ab ${hm(x.s)}</small><b data-clock="${x.s}">${fmtClock(now - x.s)}</b></div>
-      ${isBreast(x) ? `<div class="rs">${['L', 'R'].map(s => `<button class="tg side ${x.side.includes(s) ? 'on' : ''}" data-act="runSide" data-id="${x.id}" data-s="${s}">${s}</button>`).join('')}</div>` : ''}
+      <div class="ri"><small>${isSleep(x) ? 'Schläft' : k.name} ${hm(x.s)}</small><b data-clock="${x.s}">${fmtClock(now - x.s)}</b></div>
+      ${!isSleep(x) ? `<div class="rs">${['L', 'R'].map(s => `<button class="tg side ${x.side.includes(s) ? 'on' : ''}" data-act="runSide" data-id="${x.id}" data-s="${s}">${s}</button>`).join('')}</div>` : ''}
       <button class="btn stop" data-act="stop" data-id="${x.id}">■ Stopp</button>
     </div>`;
   }).join('');
 
   const lf = lastWhere(isFeed), sug = nextSide();
-  const ls = lastWhere(x => isSleep(x));
   const lpee = lastWhere(x => x.pee), lpoo = lastWhere(x => x.poo);
   const lastDiaper = [lpee, lpoo].filter(Boolean).sort((a, b) => b.s - a.s)[0];
-  const sleeping = running().find(isSleep);
-  const lastBreast = lastWhere(x => isBreast(x) && x.side.length);
+  const lastSide = lastWhere(x => !isSleep(x) && x.side.length);
+  const vitOn = !!S.vitd[dkey(new Date())];
   const td = dayStats(dkey(new Date()));
   h += feedCardHTML(lf);
   h += `<div class="status">
     <div class="card st"><small>🍼 Heute</small><b>${td.feeds}× gefüttert</b><span>${[td.ml ? td.ml + ' ml' : '', td.breastMin ? '🤱 ' + fmtDur(td.breastMin * MIN) : ''].filter(Boolean).join(' · ') || 'noch nichts'}</span></div>
-    <div class="card st"><small>🤱 Nächste Seite</small>${sug ? `<b><span class="side">${sug}</span>${sug === 'L' ? 'links' : 'rechts'}</b><span>zuletzt ${lastBreast.side.join(' → ')} um ${hm(lastBreast.s)}</span>` : '<b>–</b><span>nach dem ersten Stillen</span>'}</div>
-    <div class="card st"><small>😴 Schlaf</small>${sleeping ? `<b data-ago="${sleeping.s}">${fmtDur(now - sleeping.s)}</b><span>schläft seit ${hm(sleeping.s)}</span>`
-      : ls && ls.e ? `<b data-ago="${ls.e}">${fmtDur(now - ls.e)}</b><span>wach seit ${hm(ls.e)}</span>` : '<b>–</b><span>Schlaf per Timer starten</span>'}</div>
+    <div class="card st"><small>↔️ Nächste Seite</small>${sug ? `<b><span class="side">${sug}</span>${sug === 'L' ? 'links' : 'rechts'}</b><span>zuletzt ${lastSide.side.join(' → ')} um ${hm(lastSide.s)}</span>` : '<b>–</b><span>L/R beim Füttern wählen</span>'}</div>
+    ${S.settings.vitd ? `<button class="card st vit ${vitOn ? 'on' : ''}" data-act="vitd"><small>☀️ Vitamin D</small><b>${vitOn ? 'Gegeben ✓' : 'Heute geben'}</b><span>${vitOn ? 'für heute erledigt' : 'antippen zum Abhaken'}</span></button>` : ''}
     <div class="card st"><small>🧷 Letzte Windel</small>${lastDiaper ? `<b data-ago="${lastDiaper.s}">${fmtDur(now - lastDiaper.s)}</b><span>${lpoo ? '💩 vor ' + fmtDur(now - lpoo.s) : '💩 –'}</span>` : '<b>–</b><span>noch keine</span>'}</div>
   </div>`;
-  if (S.settings.vitd) {
-    const on = !!S.vitd[dkey(new Date())];
-    h += `<button class="card vitd ${on ? 'on' : ''}" data-act="vitd"><span style="font-size:20px">☀️</span>Vitamin D ${on ? 'gegeben' : 'heute geben'}<span class="ck"></span></button>`;
-  }
   return `<div id="statusWrap">${h}</div>`;
 }
 function logHTML() {
@@ -393,7 +391,7 @@ function logHTML() {
     <span>🍼 <b>${st.feeds}×</b></span>
     ${st.ml ? `<span><b>${st.ml}</b> ml</span>` : ''}
     ${st.breastMin ? `<span>🤱 <b>${fmtDur(st.breastMin * MIN)}</b></span>` : ''}
-    <span>😴 <b>${st.sleepMs ? fmtDur(st.sleepMs) : '0'}</b></span>
+    ${st.sleepMs ? `<span>😴 <b>${fmtDur(st.sleepMs)}</b></span>` : ''}
     <span>💧 <b>${st.pee}</b></span><span>💩 <b>${st.poo}</b></span>
     ${S.vitd[ui.day] ? '<span>☀️ <b>Vit. D</b></span>' : ''}
   </div>`;
@@ -411,7 +409,7 @@ function rowHTML(x) {
   const dur = x.e ? fmtDur(x.e - x.s) : run ? 'läuft' : '';
   return `<button class="lrow ${run ? 'isrun' : ''}" data-act="edit" data-id="${x.id}">
     <span class="lt"><b>${hm(x.s)}</b>${x.e ? `<small>bis ${hm(x.e)}</small>` : ''}${dur ? `<small>${dur}</small>` : ''}</span>
-    <span class="lk">${x.kinds.map(k => kind(k).e).join('') || (x.poo || x.pee ? '🧷' : '📝')}<small>${esc(kindNames(x) || (x.poo || x.pee ? 'Windel' : 'Notiz'))}</small></span>
+    <span class="lk">${x.kinds.map(k => kind(k).e).join('') || (x.poo || x.pee ? '🧷' : '📝')}<small>${esc(kindNames(x) || (x.poo || x.pee ? 'Windel' : 'Notiz'))}${x.pu ? ` · ${num(x.pu)} Lö./${x.wa} ml` : ''}</small></span>
     <span class="ls">${x.side.map(s => `<i>${s}</i>`).join('')}</span>
     <span class="lm">${x.ml ? `${x.ml}<small> ml</small>` : ''}</span>
     <span class="ld">${x.poo ? '💩' : ''}${x.pee ? '💧' : ''}</span>
@@ -441,36 +439,33 @@ function chartHTML(id, title, keys, vals, fmt, unit, avgFmt = fmt) {
 function viewStats() {
   const keys = lastDays(7), st = keys.map(dayStats);
   const int = v => String(Math.round(v));
-  const hrs = v => num(v / HOUR);
   // Durchschnittlicher Abstand zwischen Mahlzeiten (7 Tage, Lücken > 8 h ignoriert)
   const since = fromKey(keys[0]).getTime();
   const feeds = S.log.filter(x => isFeed(x) && x.s >= since).sort((a, b) => a.s - b.s);
   const gaps = []; for (let i = 1; i < feeds.length; i++) { const g = feeds[i].s - feeds[i - 1].s; if (g > 10 * MIN && g < 8 * HOUR) gaps.push(g); }
   const avgGap = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
   const L = st.reduce((a, s) => a + s.L, 0), R = st.reduce((a, s) => a + s.R, 0);
-  const sleeps = S.log.filter(x => isSleep(x) && x.e && x.s >= since);
-  const longest = sleeps.reduce((m, x) => Math.max(m, x.e - x.s), 0);
+  const bottles = S.log.filter(x => isFeed(x) && x.ml && x.s >= since);
+  const avgMl = bottles.length ? bottles.reduce((a, x) => a + x.ml, 0) / bottles.length : 0;
 
   let h = `<div class="status" style="margin-top:4px">
     <div class="card st"><small>⏱ Ø Abstand</small><b>${avgGap ? fmtDur(avgGap) : '–'}</b><span>zwischen Mahlzeiten</span></div>
-    <div class="card st"><small>🌙 Längster Schlaf</small><b>${longest ? fmtDur(longest) : '–'}</b><span>letzte 7 Tage</span></div>
+    <div class="card st"><small>🍼 Ø getrunken</small><b>${avgMl ? Math.round(avgMl) + ' ml' : '–'}</b><span>pro Mahlzeit, 7 Tage</span></div>
   </div>`;
   if (L + R) {
-    h += `<div class="card chart" style="margin-bottom:10px"><div class="ch-h"><b>Seitenverteilung</b><span>letzte 7 Tage</span></div>
+    h += `<div class="card chart" style="margin-bottom:10px"><div class="ch-h"><b>Seitenverteilung beim Füttern</b><span>letzte 7 Tage</span></div>
       <div class="split"><i class="l" style="width:${L / (L + R) * 100}%"></i><i class="r" style="width:${R / (L + R) * 100}%"></i></div>
       <div class="kv"><span>Links <b>${L}×</b></span><span><b>${R}×</b> Rechts</span></div></div>`;
   }
   h += `<div class="charts">
     ${chartHTML('feeds', 'Mahlzeiten', keys, st.map(s => s.feeds), int, '', num)}
     ${chartHTML('ml', 'Flasche & Zusatz', keys, st.map(s => s.ml), int, 'ml')}
-    ${chartHTML('sleep', 'Schlaf', keys, st.map(s => s.sleepMs), hrs, 'h')}
-    ${chartHTML('breast', 'Stillzeit', keys, st.map(s => s.breastMin), int, 'min')}
     ${chartHTML('pee', 'Nasse Windeln 💧', keys, st.map(s => s.pee), int, '', num)}
     ${chartHTML('poo', 'Stuhlgang 💩', keys, st.map(s => s.poo), int, '', num)}
   </div>`;
   h += `<div class="section-t">Tabelle</div><div class="card" style="padding:2px 6px;overflow-x:auto"><table class="tbl">
-    <tr><th>Tag</th><th>🍼</th><th>ml</th><th>🤱 min</th><th>😴 h</th><th>💧</th><th>💩</th></tr>
-    ${keys.map((k, i) => { const s = st[i], d = fromKey(k); return `<tr><td>${DAYS_S[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.</td><td>${s.feeds}</td><td>${s.ml}</td><td>${Math.round(s.breastMin)}</td><td>${hrs(s.sleepMs)}</td><td>${s.pee}</td><td>${s.poo}</td></tr>`; }).reverse().join('')}
+    <tr><th>Tag</th><th>🍼</th><th>ml</th><th>💧</th><th>💩</th></tr>
+    ${keys.map((k, i) => { const s = st[i], d = fromKey(k); return `<tr><td>${DAYS_S[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.</td><td>${s.feeds}</td><td>${s.ml}</td><td>${s.pee}</td><td>${s.poo}</td></tr>`; }).reverse().join('')}
   </table></div>`;
   h += growthHTML();
   return h;
@@ -490,7 +485,7 @@ function growthHTML() {
   return h;
 }
 
-/* ── To-do: siehe todo.js ── */
+/* (To-do-Seite entfernt; gespeicherte Aufgaben bleiben in S.todos erhalten) */
 
 /* ── Mehr ── */
 function viewMore() {
@@ -499,6 +494,11 @@ function viewMore() {
   <div class="card">
     <label class="setting"><span class="lbl">Name</span><input type="text" data-change="name" value="${esc(st.name)}" placeholder="optional"></label>
     <label class="setting"><span class="lbl">Geburtstag</span><input type="date" data-change="birth" value="${st.birth}"></label>
+  </div>
+  <div class="section-t">Fläschchen (Standard)</div>
+  <div class="card">
+    <div class="setting"><span class="lbl">Pulver</span><span class="mini"><button data-act="defStep" data-k="scoops" data-n="-1" aria-label="weniger">−</button><b>${num(st.scoops)}</b><small>Löffel</small><button data-act="defStep" data-k="scoops" data-n="1" aria-label="mehr">+</button></span></div>
+    <div class="setting"><span class="lbl">Wasser</span><span class="mini"><button data-act="defStep" data-k="water" data-n="-10" aria-label="weniger">−</button><b>${st.water}</b><small>ml</small><button data-act="defStep" data-k="water" data-n="10" aria-label="mehr">+</button></span></div>
   </div>
   <div class="section-t">Anzeige</div>
   <div class="card">
@@ -524,13 +524,13 @@ function viewMore() {
   </div>
   <div class="section-t">Tipps</div>
   <div class="card" style="padding:14px 16px;font-size:14px;line-height:1.55;color:var(--t2)">
-    • <b>Timer</b>: Brust oder Schlaf wählen und „▶ Timer“ tippen – läuft weiter, auch wenn die App zu ist.<br>
-    • Beim Stillen kannst du im laufenden Timer die Seite wechseln (L/R).<br>
-    • „<b>Nächste Seite</b>“: nach einer Seite die andere, nach beiden die zuletzt gegebene.<br>
+    • <b>Flasche</b> antippen: Pulver und Wasser stehen auf dem Standard (oben änderbar), nur bei Bedarf anpassen.<br>
+    • <b>L/R</b> = wie das Baby beim Füttern liegt. „Nächste Seite“ schlägt die andere vor.<br>
+    • <b>Timer</b>: Art wählen und „▶ Timer“ tippen – läuft weiter, auch wenn die App zu ist.<br>
     • Eintrag antippen zum Bearbeiten oder Löschen.<br>
     • Uhrzeit nach Mitternacht? Eine spätere Uhrzeit als jetzt wird automatisch auf gestern gelegt.
   </div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.3</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.5</p>`;
 }
 
 /* ───────── Aktionen ───────── */
@@ -563,8 +563,8 @@ function dayText(key) {
   const d0 = fromKey(key).getTime(), d1 = d0 + DAY, st = dayStats(key), d = fromKey(key);
   const items = S.log.filter(x => x.s >= d0 && x.s < d1).sort((a, b) => a.s - b.s);
   let t = `${S.settings.name ? S.settings.name + ' – ' : ''}${DAYS[d.getDay()]}, ${fmtDate(d)}\n`;
-  t += `🍼 ${st.feeds} Mahlzeiten${st.ml ? `, ${st.ml} ml` : ''}${st.breastMin ? `, ${fmtDur(st.breastMin * MIN)} gestillt` : ''}\n😴 ${fmtDur(st.sleepMs)} Schlaf · 💧 ${st.pee} · 💩 ${st.poo}\n\n`;
-  t += items.map(x => `${hm(x.s)}${x.e ? '–' + hm(x.e) : ''}  ${[kindNames(x), x.side.join('+'), x.ml ? x.ml + ' ml' : '', x.poo ? '💩' : '', x.pee ? '💧' : '', x.note].filter(Boolean).join(' · ')}`).join('\n');
+  t += `🍼 ${st.feeds} Mahlzeiten${st.ml ? `, ${st.ml} ml` : ''}${st.breastMin ? `, ${fmtDur(st.breastMin * MIN)} gestillt` : ''}\n💧 ${st.pee} · 💩 ${st.poo}\n\n`;
+  t += items.map(x => `${hm(x.s)}${x.e ? '–' + hm(x.e) : ''}  ${[kindNames(x), x.side.join('+'), x.ml ? x.ml + ' ml' : '', x.pu ? `${num(x.pu)} Lö./${x.wa} ml Wasser` : '', x.poo ? '💩' : '', x.pee ? '💧' : '', x.note].filter(Boolean).join(' · ')}`).join('\n');
   return t;
 }
 
@@ -578,15 +578,22 @@ const ACT = {
   kind(el, f, fid) {
     const k = el.dataset.k, on = !f.kinds.includes(k);
     f.kinds = on ? [...f.kinds, k] : f.kinds.filter(x => x !== k);
-    if (k === 'brust' && on && !f.side.length && fid === 'main') { const s = nextSide(); if (s) f.side = [s]; }
-    if (k === 'brust' && !on) f.side = [];
+    if (k === 'flasche' && on) { if (f.pu == null) f.pu = S.settings.scoops; if (f.wa == null) f.wa = S.settings.water; }
+    if (FEED.includes(k) && on && !f.side.length && fid === 'main') { const s = nextSide(); if (s) f.side = [s]; }
+    if (!f.kinds.some(x => FEED.includes(x))) f.side = [];
     vib(); rerenderForm(fid);
   },
   side(el, f, fid) {
     const s = el.dataset.s;
     f.side = f.side.includes(s) ? f.side.filter(x => x !== s) : [...f.side, s];
-    if (f.side.length && !f.kinds.includes('brust')) f.kinds = ['brust', ...f.kinds];
+    if (f.side.length && !f.kinds.some(x => FEED.includes(x))) { f.kinds = ['flasche', ...f.kinds]; if (f.pu == null) f.pu = S.settings.scoops; if (f.wa == null) f.wa = S.settings.water; }
     vib(); rerenderForm(fid);
+  },
+  puStep(el, f, fid) { f.pu = Math.max(1, Math.min(12, (f.pu ?? S.settings.scoops) + +el.dataset.n)); vib(); rerenderForm(fid); },
+  waStep(el, f, fid) { f.wa = Math.max(10, Math.min(300, (f.wa ?? S.settings.water) + +el.dataset.n)); vib(); rerenderForm(fid); },
+  defStep(el) {
+    const k = el.dataset.k, lim = k === 'scoops' ? [1, 12] : [10, 300];
+    S.settings[k] = Math.max(lim[0], Math.min(lim[1], S.settings[k] + +el.dataset.n)); vib(); save(); render();
   },
   mlStep(el, f, fid) { f.ml = Math.max(0, Math.min(999, (f.ml || 0) + +el.dataset.n)); rerenderForm(fid); },
   mlSet(el, f, fid) { const n = +el.dataset.n; f.ml = f.ml === n ? 0 : n; vib(); rerenderForm(fid); },
@@ -608,7 +615,7 @@ const ACT = {
     undoable(`Eingetragen um ${hm(r.x.s)}`, r.before);
   },
   timerStart() {
-    if (!F.kinds.length) { toast('Erst Brust, Flasche oder Schlaf wählen'); return; }
+    if (!F.kinds.length) { toast('Erst Flasche oder Zusatz wählen'); return; }
     const x = draftToEntry({ ...F, bis: '' }, true);
     x.run = true;
     const before = S.log.map(e => ({ ...e }));
@@ -693,10 +700,10 @@ const ACT = {
   importData() { $('#importFile').click(); },
   exportCsv() {
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['Datum', 'Von', 'Bis', 'Dauer (min)', 'Art', 'Seite', 'Menge (ml)', 'Groß', 'Klein', 'Notiz']];
+    const rows = [['Datum', 'Von', 'Bis', 'Dauer (min)', 'Art', 'Seite', 'Getrunken (ml)', 'Pulver (Löffel)', 'Wasser (ml)', 'Groß', 'Klein', 'Notiz']];
     for (const x of [...S.log].sort((a, b) => a.s - b.s)) {
       const d = new Date(x.s);
-      rows.push([`${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`, hm(x.s), x.e ? hm(x.e) : '', x.e ? Math.round((x.e - x.s) / MIN) : '', kindNames(x), x.side.join('+'), x.ml || '', x.poo ? 'x' : '', x.pee ? 'x' : '', x.note]);
+      rows.push([`${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`, hm(x.s), x.e ? hm(x.e) : '', x.e ? Math.round((x.e - x.s) / MIN) : '', kindNames(x), x.side.join('+'), x.ml || '', x.pu || '', x.wa || '', x.poo ? 'x' : '', x.pee ? 'x' : '', x.note]);
     }
     const csv = '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n');
     exportFile(csv, `baby-protokoll-${dkey(new Date())}.csv`, 'text/csv', 'Baby-Protokoll');
@@ -729,9 +736,6 @@ const FORMS = {
     S.growth.push({ id: uid(), d: form.d.value || dkey(new Date()), g, cm }); save(); closeSheet(); render();
   },
 };
-
-Object.assign(ACT, TODO_ACT);
-Object.assign(FORMS, TODO_FORMS);
 
 const CHANGE = {
   name(el) { S.settings.name = el.value.trim(); save(); render(); },
@@ -799,6 +803,7 @@ document.addEventListener('visibilitychange', () => {
 render();
 
 /* ───────── Online-Datenbank (../shared/cloud.js) ───────── */
+// todos bleiben im Abgleich, damit alte Aufgaben online nicht gelöscht werden
 const CLOUD_ARR = { log: ['l:', 'log'], todo: ['t:', 'todos'], growth: ['g:', 'growth'] };
 if (window.Cloud) Cloud.init({
   app: 'baby',
@@ -807,7 +812,7 @@ if (window.Cloud) Cloud.init({
     for (const [k, [p, arr]] of Object.entries(CLOUD_ARR)) for (const x of S[arr]) m[p + x.id] = { kind: k, data: x };
     for (const d of Object.keys(S.vitd)) if (S.vitd[d]) m['v:' + d] = { kind: 'vitd', data: true };
     const st = {}, def = fresh().settings;
-    for (const k of ['name', 'birth', 'vitd', 'feedInt', 'feedFrom', 'nightOn', 'nightInt']) st[k] = S.settings[k];
+    for (const k of ['name', 'birth', 'vitd', 'feedInt', 'feedFrom', 'nightOn', 'nightInt', 'scoops', 'water']) st[k] = S.settings[k];
     m.settings = { kind: 'settings', data: st, soft: Object.keys(st).every(k => st[k] === def[k]) };
     return m;
   },
