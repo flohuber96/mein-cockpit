@@ -64,9 +64,28 @@ const Moves = (function () {
       l1: [s(a.l1[0], b.l1[0]), s(a.l1[1], b.l1[1]), s(a.l1[2], b.l1[2])], l2: [s(a.l2[0], b.l2[0]), s(a.l2[1], b.l2[1]), s(a.l2[2], b.l2[2])]
     };
   }
+  // Zwei-Glieder-Kinematik: Arm/Bein so beugen, dass Hand bzw. Knöchel ein Ziel erreicht.
+  // ik: [[glied, ziel, beugung]] · glied 'a1'|'a2'|'l1'|'l2' · ziel [x, y] absolut oder
+  // ['K2', dx, dy] (Gelenk derselben Pose) · beugung: mittleres Gelenk 'f' vorn, 'b' hinten, 'u' oben, 'd' unten
+  const ROOT = { a1: ['S1', 'ua', 'fa'], a2: ['S2', 'ua', 'fa'], l1: ['H1', 'th', 'sh'], l2: ['H2', 'th', 'sh'] };
+  const deg = (dx, dy) => Math.atan2(dx, dy) / R;
+  const near = (a, ref) => { while (a - ref > 180) a -= 360; while (ref - a > 180) a += 360; return a; };
+  function applyIK(p, list) {
+    (list || []).forEach(([lb, tg, bend]) => {
+      const J = fk(p), [rk, k1, k2] = ROOT[lb], r = J[rk], L1 = LEN[k1], L2 = LEN[k2];
+      const t = typeof tg[0] === 'string' ? [J[tg[0]][0] + (tg[1] || 0), J[tg[0]][1] + (tg[2] || 0)] : tg;
+      const dx = t[0] - r[0], dy = t[1] - r[1], d = Math.max(Math.abs(L1 - L2) + 0.01, Math.min(L1 + L2 - 0.01, Math.hypot(dx, dy)));
+      const base = deg(dx, dy), al = Math.acos((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d)) / R;
+      const cand = [base + al, base - al].map(a1 => { const m = [r[0] + Math.sin(a1 * R) * L1, r[1] + Math.cos(a1 * R) * L1]; return { a1, m, a2: deg(t[0] - m[0], t[1] - m[1]) }; });
+      const score = c => bend === 'f' ? c.m[0] : bend === 'b' ? -c.m[0] : bend === 'u' ? -c.m[1] : c.m[1];
+      const c = score(cand[0]) >= score(cand[1]) ? cand[0] : cand[1];
+      p[lb][0] = [near(c.a1, p[lb][0][0]), 1]; p[lb][1] = [near(c.a2, p[lb][1][0]), 1];
+    });
+    return p;
+  }
   // Pose mit Zwangsbedingung: Parameter so wählen, dass ein Gelenk eine Höhe/Position erreicht
   function solve(fr, v) {
-    if (!fr.fn) return norm(fr, v);
+    if (!fr.fn) return fr.ik ? applyIK(norm(fr, v), fr.ik) : norm(fr, v);
     const [j, ax, val, lo, hi] = fr.fit, i = ax === 'x' ? 0 : 1;
     const g = x => fk(norm(fr.fn(x), v))[j][i] - val;
     let a = lo, b = hi, ga = g(a), gb = g(b), x;
@@ -74,7 +93,7 @@ const Moves = (function () {
     else { for (let n = 0; n < 40; n++) { const m = (a + b) / 2, gm = g(m); if (ga * gm <= 0) { b = m; gb = gm; } else { a = m; ga = gm; } } x = (a + b) / 2; }
     const p = norm(fr.fn(x), v);
     if (fr.hd != null) p.hd = fr.hd; if (fr.mv != null) p.mv = fr.mv;
-    return p;
+    return fr.ik ? applyIK(p, fr.ik) : p;
   }
 
   /* ── Ablauf ── */
@@ -280,6 +299,6 @@ const Moves = (function () {
   }
   let pend = false;
   if ('MutationObserver' in window) new MutationObserver(() => { if (pend) return; pend = true; requestAnimationFrame(() => { pend = false; scan(document); }); }).observe(document.documentElement, { childList: true, subtree: true });
-  return { has, thumb, scan, prep, fk, poseAt, _cache: cache };
+  return { has, thumb, scan, prep, fk, poseAt, _cache: cache, _frame: frameSVG };
 })();
 if (typeof module !== 'undefined') module.exports = Moves;
