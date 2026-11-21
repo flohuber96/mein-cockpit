@@ -65,7 +65,8 @@
         <li>Dosis und Out immer wiegen (0,1 g).</li>
         <li>Kaffee im Sieb verteilen, gerade tampen.</li>
         <li>Siebträger warm und trocken halten.</li>
-        <li>Nach einem komischen Shot erst noch einen ziehen.</li>
+        <li>Nach einem komischen Shot erst noch einen ziehen – die App erkennt Ausreißer und sagt es dir.</li>
+        <li>Neue Packung in der App markieren (Sorte bearbeiten → 📦), dann lernt der Sweet Spot neu.</li>
       </ul></div>
       <div class="card pad dont"><b>✗ Lassen</b><ul>
         <li>Mehrere Dinge gleichzeitig ändern.</li>

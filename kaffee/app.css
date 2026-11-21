@@ -229,3 +229,11 @@ main{padding:4px 14px calc(96px + var(--bot));max-width:720px;margin:0 auto}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 .toast.has-act.show{pointer-events:auto}
 .toast button{color:inherit;font-weight:800;font-size:14px;padding:2px 0;text-decoration:underline}
+
+/* Stoppuhr abbrechen */
+.timerwrap{position:relative}
+.tcancel{position:absolute;top:-7px;right:-7px;width:26px;height:26px;border-radius:50%;background:var(--card);color:var(--t2);font-size:13px;font-weight:800;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+/* Historie: Packungs-Trenner, mehr anzeigen */
+.hsep{padding:6px 12px;font-size:12px;font-weight:800;color:var(--acc-t);background:var(--acc-soft);text-align:center}
+.hmore{display:block;width:100%;padding:12px;font-size:14px;font-weight:700;color:var(--acc-t);border-top:1px solid var(--line)}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px}
