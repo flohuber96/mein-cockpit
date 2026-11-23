@@ -68,6 +68,14 @@ function curBean() {
 }
 const shotsOf = id => S.shots.filter(s => (s.bean || '') === (id || '')).sort((a, b) => a.ts - b.ts);
 const lastValid = list => [...list].reverse().find(Advice.valid) || null;
+// Grundlage für Sweet Spot und Vorschlag: seit „Neue Packung“ nur die Shots dieser Packung
+function learnSet(id) {
+  const b = bean(id), all = shotsOf(id);
+  if (b && b.packSince) { const since = all.filter(s => s.ts >= b.packSince); if (since.some(Advice.valid)) return { list: since, pack: true, empty: false }; return { list: all, pack: false, empty: true }; }
+  return { list: all, pack: false, empty: false };
+}
+const rangeTxt = r => fmtG(r[0]) + (r[1] !== r[0] ? '–' + fmtG(r[1]) : '');
+function beanSweet(id, dose) { const L = learnSet(id), last = lastValid(L.list); return Advice.sweet(L.list, T(), T(), dose || (last ? last.din : T().dose)); }
 
 /* ───────── Toast / Sheets ───────── */
 let toastT;
@@ -119,10 +127,11 @@ const TITLES = { coffee: 'Kaffee', know: 'Wissen', settings: 'Einstellungen' };
 function render() {
   const v = S.ui.view, b = curBean();
   $('#title').textContent = v === 'coffee' && b ? b.name : TITLES[v];
-  $('#sub').textContent = v === 'coffee' ? (b ? [b.roaster, `${shotsOf(b.id).length} Shots`].filter(Boolean).join(' · ') : 'Lege deine erste Sorte an') : v === 'know' ? 'Ziele, Stellschrauben, Tipps' : `${T().machine} · ${T().grinder}`;
+  const swH = v === 'coffee' && b ? beanSweet(b.id) : null;
+  $('#sub').textContent = v === 'coffee' ? (b ? [b.roaster, `${shotsOf(b.id).length} Shots`, swH && swH.range && !swH.extrap ? `Sweet Spot ${rangeTxt(swH.range)}` : ''].filter(Boolean).join(' · ') : 'Lege deine erste Sorte an') : v === 'know' ? 'Ziele, Stellschrauben, Tipps' : `${T().machine} · ${T().grinder}`;
   $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'coffee' && b ? `<button class="hbtn" data-act="editBean" data-id="${b.id}" aria-label="Sorte bearbeiten"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>` : '');
   $$('#tabbar button').forEach(x => x.classList.toggle('on', x.dataset.view === v));
-  $('#main').innerHTML = v === 'coffee' ? viewCoffee() : v === 'know' ? Wissen.html(T(), activeBeans().map(b => { const sw = Advice.sweet(shotsOf(b.id), T(), T()); return { name: b.name, range: sw.range && !sw.extrap ? sw.range : null }; })) : viewSettings();
+  $('#main').innerHTML = v === 'coffee' ? viewCoffee() : v === 'know' ? Wissen.html(T(), activeBeans().map(b => { const sw = beanSweet(b.id); return { name: b.name, range: sw.range && !sw.extrap ? sw.range : null }; })) : viewSettings();
   if (v === 'coffee') updateLive($('[data-form="new"]'));
 }
 
@@ -149,8 +158,9 @@ function stepper(k, label, v, step, unit) {
     <button type="button" data-act="bump" data-k="${k}" data-d="${step}" aria-label="${label} mehr">+</button>
   </div><span class="hint" data-hint="${k}"></span></div>`;
 }
-function fields(d, timer) {
-  return `<div class="fgrid">
+function fields(d, timer, withBean) {
+  const beanSel = withBean ? `<div class="field"><label>Kaffeesorte</label><select data-f="bean">${S.beans.filter(b => !b.archived || b.id === d.bean).map(b => `<option value="${b.id}" ${b.id === d.bean ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}${d.bean && bean(d.bean) ? '' : '<option value="" selected>Ohne Sorte</option>'}</select></div>` : '';
+  return `${beanSel}<div class="fgrid">
       ${stepper('grind', 'Mahlgrad', d.grind, T().step, '')}
       <div class="step flowbox" data-flowbox><label>Fluss · Ergebnis</label><div class="fv" data-live="flow">–</div><span class="hint" data-hint="flow"></span></div>
       ${stepper('din', 'In (g)', d.din, 0.1, 'Gramm')}
@@ -168,7 +178,7 @@ function fields(d, timer) {
 const TM = { start: 0, fd: 0, raf: 0, lock: null };
 function timerHTML() {
   if (!TM.start) return `<button type="button" class="timer idle" data-act="tStart"><b>⏱</b><span>Stoppuhr</span></button>`;
-  return `<button type="button" class="timer run" data-act="${TM.fd ? 'tStop' : 'tDrop'}"><b id="clock">0,0</b><span>${TM.fd ? '■ Stop' : '💧 Tropfen'}</span></button>`;
+  return `<div class="timerwrap"><button type="button" class="timer run" data-act="${TM.fd ? 'tStop' : 'tDrop'}"><b id="clock">0,0</b><span>${TM.fd ? '■ Stop' : '💧 Tropfen'}</span></button><button type="button" class="tcancel" data-act="tCancel" aria-label="Stoppuhr abbrechen">✕</button></div>`;
 }
 function tick() {
   const c = $('#clock'); if (!c || !TM.start) return;
@@ -186,14 +196,15 @@ function newDraft(b) {
 
 function viewCoffee() {
   const b = curBean(), id = b ? b.id : '', st = T();
-  const list = shotsOf(id), last = lastValid(list);
+  const list = shotsOf(id), last = lastValid(list), L = learnSet(id);
   if (!draft || draft.bean !== id) draft = newDraft(b);
   let h = beanBar(id);
   if (!S.shots.some(x => /^nb-/.test(x.id))) h += `<div class="card pad slim"><span><b>📓 Alte Notizen übernehmen</b><br><span class="small muted">34 Shots aus dem Notizbuch</span></span><button class="btn soft sm" data-act="importNotebook">Übernehmen</button></div>`;
   if (!b && !S.beans.length) h += `<div class="card empty"><div class="big">🫘</div><b>Lege deine erste Kaffeesorte an</b>Dann siehst du hier alle Shots dieser Sorte.<div style="margin-top:12px"><button class="btn soft" data-act="newBean" style="margin:0 auto">+ Sorte anlegen</button></div></div>`;
 
   // 1) Neuer Shot (mit einem Satz Vorschlag aus dem letzten Shot)
-  const nx = last ? Advice.next(last, list, st, st) : null;
+  const nx = last ? Advice.next(last, L.list.includes(last) ? L.list : list, st, st) : null;
+  if (nx && L.empty) nx.sub = `Neue Packung: noch kein Shot – Startwert aus der alten Packung. ` + nx.sub;
   h += `<div class="card newcard" data-form="new">
     <div class="nh"><b>Neuer Shot</b></div>
     ${nx ? `<div class="advice ${nx.status}"><b>${nx.status === 'good' ? '✓' : '→'} ${esc(nx.title)}</b><span>${esc(nx.sub)}</span>${nx.grind != null && (nx.grind !== draft.grind || Math.abs(nx.dout - (draft.dout || 0)) >= 0.5) ? `<button class="btn soft sm" data-act="applyAdvice" data-g="${nx.grind}" data-o="${nx.dout}">Vorschlag übernehmen</button>` : ''}</div>` : `<div class="advice"><b>Ziel: ${fmt(st.dose)} g → ${fmt(st.outMin, 0)}–${fmt(st.outMax, 0)} g in ${st.tMin}–${st.tMax} s</b><span>Fluss ${fmt(st.fMin)}–${fmt(st.fMax)} g/s ab dem ersten Tropfen.</span></div>`}
@@ -205,7 +216,7 @@ function viewCoffee() {
 
   // 2) Diagramm: Verlauf oder Sweet Spot
   const dose = draft.din > 0 ? draft.din : (last ? last.din : st.dose);
-  const sw = Advice.sweet(list, st, st, dose);
+  const sw = Advice.sweet(L.list, st, st, dose);
   const mixed = list.some(s => s.din > 0 && Math.abs(s.din - st.dose) >= 0.5);
   const flowLabel = mixed ? `Fluss (g/s, auf ${fmt(st.dose)} g bezogen)` : 'Fluss (g/s)';
   const rows = list.slice(-30).map(s => { const f = Advice.flow(s, st); return { flow: f ? f.n : null, t: s.t || null, grind: s.grind === '' ? null : s.grind, label: dShort(s.ts), tip: tipFor(s) }; });
@@ -216,10 +227,10 @@ function viewCoffee() {
     h += Charts.history(rows, { flowBand: [st.fMin, st.fMax], flowAxis: [1, 2.5], flowLabel, timeBand: [st.tMin, st.tMax], grindBand: sw.range && !sw.extrap ? sw.range : null });
     h += `<p class="cap">Grün = Zielbereich, orange Punkte liegen daneben. Antippen zeigt alle Werte eines Shots.${sw.range && !sw.extrap ? ' Beim Mahlgrad ist der Sweet Spot dieser Sorte grün hinterlegt.' : ''}</p>`;
   } else if (sw.pts.length) {
-    h += sweetText(sw, list);
+    h += sweetText(sw, L.list);
     const center = sw.range && !sw.extrap ? (sw.range[0] + sw.range[1]) / 2 : sw.pts[sw.pts.length - 1].x;
     h += Charts.sweet(sw, st, { coarserUp: st.coarserUp, step: st.step, tip: tipFor, center: Advice.snap(center, st.step), yLabel: flowLabel, nextGrind: nx && nx.grind != null && last && nx.grind !== +last.grind ? nx.grind : null });
-    h += `<p class="cap">Jeder Punkt ist ein Shot mit ca. ${fmt(sw.dose)} g. Grünes Band = Ziel-Fluss, grüner Streifen = Mahlgrad, bei dem diese Sorte im Ziel landet. Achsen sind bei allen Sorten gleich: Fluss 1–2,5 g/s, drei Mahlstufen breit.</p>`;
+    h += `<p class="cap">Jeder Punkt ist ein Shot mit ca. ${fmt(sw.dose)} g${L.pack ? ' aus der aktuellen Packung' : ''}. Grünes Band = Ziel-Fluss, grüner Streifen = Mahlgrad, bei dem diese Sorte im Ziel landet. Achsen sind bei allen Sorten gleich: Fluss 1–2,5 g/s, drei Mahlstufen breit.</p>`;
   } else h += `<p class="cap">Für den Sweet Spot brauche ich Shots mit ca. ${fmt(dose)} g Dosis und eingetragenem Mahlgrad.</p>`;
   h += `</div>`;
 
@@ -227,8 +238,10 @@ function viewCoffee() {
   h += `<div class="section-t">Alle Shots${b ? ' · ' + esc(b.name) : ''}</div>
   <div class="card hist">
     <div class="hrow hh"><span>Datum</span><span>In</span><span>Out</span><span>Zeit</span><span>💧</span><span>Fluss</span><span>MG</span></div>`;
-  for (const s of [...list].reverse()) {
-    const c = Advice.check(s, st);
+  const rows2 = [...list].reverse(), limit = S.ui.histAll ? rows2.length : 12;
+  rows2.slice(0, limit).forEach((s, i) => {
+    const c = Advice.check(s, st), prevTs = i ? rows2[i - 1].ts : Infinity;
+    if (b && b.packSince && prevTs >= b.packSince && s.ts < b.packSince) h += `<div class="hsep">▲ neue Packung seit ${dShort(b.packSince)}</div>`;
     h += `<button class="hrow" data-act="editShot" data-id="${s.id}">
       <span class="d">${dShort(s.ts)}<small>${hm(s.ts)}</small></span>
       <span>${fmt(s.din)}</span>
@@ -239,7 +252,8 @@ function viewCoffee() {
       <span class="mg ${c.flow === 'ok' ? 'ok' : ''}">${fmtG(s.grind)}</span>
       ${noteText(s) ? `<em class="note">${esc(noteText(s))}</em>` : ''}
     </button>`;
-  }
+  });
+  if (rows2.length > 12) h += `<button class="hmore" data-act="histAll">${S.ui.histAll ? 'Weniger anzeigen' : `Alle ${rows2.length} Shots anzeigen`}</button>`;
   h += `</div><p class="small muted legend-line"><i class="ar hi">▲</i> zu hoch · <i class="ar lo">▼</i> zu niedrig · ohne Pfeil = im Ziel · <span class="mg ok">MG</span> grün = Fluss perfekt · ~ = Tropfen nicht eingetragen (${st.fdDef || 10} s angenommen) · antippen zum Bearbeiten</p>`;
   return h;
 }
@@ -261,7 +275,7 @@ function sweetText(sw, list) {
 /* Live-Anzeige im Formular: Fluss + Hinweise unter den Feldern */
 function readForm(form) {
   const d = {};
-  $$('[data-f]', form).forEach(el => { const k = el.dataset.f; d[k] = k === 'notes' ? el.value.trim() : k === 'ts' ? new Date(el.value).getTime() : parseNum(el.value); });
+  $$('[data-f]', form).forEach(el => { const k = el.dataset.f; d[k] = k === 'notes' || k === 'bean' ? el.value.trim() : k === 'ts' ? new Date(el.value).getTime() : parseNum(el.value); });
   return d;
 }
 function updateLive(form) {
@@ -328,7 +342,7 @@ function viewSettings() {
 function openShot(s) {
   const sh = openSheet({
     title: 'Shot bearbeiten', right: `<button class="lnk r" data-act="saveEdit" data-id="${s.id}">Sichern</button>`,
-    body: `<div data-form="edit">${fields({ ...s, notes: noteText(s) })}
+    body: `<div data-form="edit">${fields({ ...s, notes: noteText(s) }, false, true)}
       <div class="field" style="margin-top:12px"><label>Datum & Uhrzeit</label><input type="datetime-local" data-f="ts" value="${toLocalInput(s.ts)}"></div>
       <div class="stack"><button class="btn primary" data-act="saveEdit" data-id="${s.id}">Speichern</button><button class="btn danger" data-act="delShot" data-id="${s.id}">Shot löschen</button></div></div>`,
   });
@@ -344,7 +358,9 @@ function openBean(b, isNew) {
       <div class="field"><label>Röster (optional)</label><input data-b="roaster" value="${esc(b.roaster || '')}" autocomplete="off"></div>
       <div class="field"><label>Notiz (optional)</label><textarea data-b="notes" rows="2">${esc(b.notes || '')}</textarea></div>
       <div class="stack"><button class="btn primary" data-act="saveBean">${isNew ? 'Sorte anlegen' : 'Speichern'}</button>
-      ${isNew ? '' : `<button class="btn plain" data-act="archiveBean">${b.archived ? 'Wieder einblenden' : 'Packung leer (ausblenden)'}</button>
+      ${isNew ? '' : `<button class="btn soft" data-act="newPack">${b.packSince ? `Packungs-Markierung entfernen (seit ${dShort(b.packSince)})` : '📦 Neue Packung angefangen'}</button>
+      <p class="small muted" style="margin:-4px 4px 2px">Jede Packung kann einen anderen Mahlgrad brauchen. Ab der Markierung lernen Sweet Spot und Vorschlag nur aus der neuen Packung – die alten Shots bleiben sichtbar.</p>
+      <button class="btn plain" data-act="archiveBean">${b.archived ? 'Wieder einblenden' : 'Packung leer (ausblenden)'}</button>
       <button class="btn danger" data-act="delBean">Sorte löschen${n ? ` (${n} Shots bleiben erhalten)` : ''}</button>`}</div>`,
   });
 }
@@ -359,6 +375,17 @@ function download(name, text, type) {
 
 /* ───────── Aktionen ───────── */
 function validShot(d) { if (!(d.din > 0) || !(d.dout > 0) || !(d.t > 0)) { toast('Bitte In, Out und Zeit eintragen'); return false; } if (d.fd != null && d.fd >= d.t) d.fd = null; return true; }
+// Tippfehler abfangen (z. B. 380 statt 38,0) – speichern geht trotzdem nach Rückfrage
+function oddValues(d) {
+  const w = [];
+  if (d.din < 7 || d.din > 30) w.push(`In ${fmt(d.din)} g`);
+  if (d.dout < 10 || d.dout > 120) w.push(`Out ${fmt(d.dout)} g`);
+  else if (d.dout / d.din < 1 || d.dout / d.din > 4) w.push(`Ratio 1 : ${fmt(d.dout / d.din)}`);
+  if (d.t < 8 || d.t > 120) w.push(`Zeit ${fmt(d.t, 0)} s`);
+  if (d.fd != null && (d.fd < 2 || d.fd > 40)) w.push(`Tropfen ${fmt(d.fd, 0)} s`);
+  return w;
+}
+function withCheck(d, go) { const w = oddValues(d); if (w.length) confirmSheet(`Ungewöhnliche Werte: ${w.join(', ')}. Tippfehler? Trotzdem speichern?`, 'Trotzdem speichern', go); else go(); }
 async function lockScreen() { try { if (navigator.wakeLock) TM.lock = await navigator.wakeLock.request('screen'); } catch (e) { /* egal */ } }
 function stopTimer() { cancelAnimationFrame(TM.raf); if (TM.lock) { TM.lock.release().catch(() => {}); TM.lock = null; } }
 
@@ -373,7 +400,8 @@ const ACT = {
   bump(el) {
     const form = el.closest('[data-form]'), k = el.dataset.k, d = parseFloat(el.dataset.d), inp = $(`[data-f="${k}"]`, form), st = T();
     let v = parseNum(inp.value);
-    if (v == null) v = { din: st.dose, dout: Advice.r05((st.outMin + st.outMax) / 2), t: Math.round((st.tMin + st.tMax) / 2), fd: Math.round((st.fdMin + st.fdMax) / 2), grind: 0 }[k];
+    const lastG = (() => { const cb = curBean(), l = lastValid(shotsOf(cb ? cb.id : '')); return l && l.grind != null && l.grind !== '' ? +l.grind : null; })();
+    if (v == null) v = { din: st.dose, dout: Advice.r05((st.outMin + st.outMax) / 2), t: Math.round((st.tMin + st.tMax) / 2), fd: st.fdDef || 10, grind: lastG != null ? lastG : 0 }[k];
     else v += d;
     v = Math.max(0, +v.toFixed(k === 'grind' ? 2 : 1));
     inp.value = k === 'din' || k === 'dout' ? gStr(v) : numStr(v);
@@ -384,6 +412,13 @@ const ACT = {
     const form = $('[data-form="new"]');
     $('[data-f="grind"]', form).value = numStr(+el.dataset.g); $('[data-f="dout"]', form).value = gStr(+el.dataset.o);
     updateLive(form); syncDraft(); el.remove(); vib(8); toast('Vorschlag übernommen');
+  },
+  tCancel() { stopTimer(); TM.start = TM.fd = 0; $('#timerBox').innerHTML = timerHTML(); toast('Stoppuhr abgebrochen'); },
+  histAll() { S.ui.histAll = !S.ui.histAll; const y = scrollY; render(); scrollTo(0, y); },
+  newPack() {
+    const b = bean(B.id); if (!b) return;
+    if (b.packSince) { delete b.packSince; save(); closeSheet(); render(); toast('Markierung entfernt – alle Shots zählen wieder'); return; }
+    b.packSince = Date.now(); save(); closeSheet(); draft = null; render(); toast('Neue Packung markiert – Sweet Spot und Vorschlag lernen jetzt neu');
   },
   tDrop() { TM.fd = performance.now(); vib(12); $('#timerBox').innerHTML = timerHTML(); tick(); },
   tStop() {
@@ -397,20 +432,26 @@ const ACT = {
   saveNew() {
     const form = $('[data-form="new"]'), d = readForm(form), b = curBean();
     if (!validShot(d)) return;
-    const s = { id: uid(), ts: Date.now(), bean: b ? b.id : '', din: d.din, dout: d.dout, t: d.t, fd: d.fd, grind: d.grind, notes: d.notes || '' };
-    S.shots.push(s); save(); draft = null; render();
-    const nx = Advice.next(s, shotsOf(s.bean), T(), T());
-    toast(nx.status === 'good' ? 'Gespeichert ✓ ' + nx.title : 'Gespeichert – nächster Vorschlag steht oben');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    withCheck(d, () => {
+      const s = { id: uid(), ts: Date.now(), bean: b ? b.id : '', din: d.din, dout: d.dout, t: d.t, fd: d.fd, grind: d.grind, notes: d.notes || '' };
+      S.shots.push(s); save(); draft = null; render();
+      const nx = Advice.next(s, learnSet(s.bean).list, T(), T());
+      toast(nx.status === 'good' ? 'Gespeichert ✓ ' + nx.title : 'Gespeichert – nächster Vorschlag steht oben');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
   },
   editShot(el) { const s = S.shots.find(x => x.id === el.dataset.id); if (s) openShot(s); },
   saveEdit(el) {
     const s = S.shots.find(x => x.id === el.dataset.id); if (!s) return;
     const d = readForm($('[data-form="edit"]', sheetStack[sheetStack.length - 1].sh));
     if (!validShot(d)) return;
-    Object.assign(s, { din: d.din, dout: d.dout, t: d.t, fd: d.fd, grind: d.grind, notes: d.notes || '' });
-    if (d.ts && !isNaN(d.ts)) s.ts = d.ts;
-    save(); closeSheet(); draft = null; render(); toast('Gespeichert');
+    withCheck(d, () => {
+      const moved = d.bean != null && d.bean !== (s.bean || '');
+      Object.assign(s, { din: d.din, dout: d.dout, t: d.t, fd: d.fd, grind: d.grind, notes: d.notes || '' });
+      if (d.bean != null) s.bean = d.bean;
+      if (d.ts && !isNaN(d.ts)) s.ts = d.ts;
+      save(); closeAllSheets(); draft = null; render(); toast(moved ? `Verschoben zu ${bean(s.bean) ? bean(s.bean).name : 'Ohne Sorte'}` : 'Gespeichert');
+    });
   },
   delShot(el) {
     const before = S.shots.slice();
@@ -463,7 +504,7 @@ const ACT = {
   exportCsv() {
     const head = ['Datum', 'Kaffee', 'In (g)', 'Out (g)', 'Zeit (s)', '1. Tropfen (s)', 'Fluss (g/s)', 'Mahlgrad', 'Kommentar'];
     const q = v => { const t = String(v ?? ''); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
-    const rows = [...S.shots].sort((a, b) => a.ts - b.ts).map(s => { const b = bean(s.bean), f = Advice.flow(s, T()); return [new Date(s.ts).toLocaleString('de-DE'), b ? b.name : '', fmt(s.din), s.dout ? fmt(s.dout) : '', s.t ? fmt(s.t, 0) : '', s.fd ? fmt(s.fd, 0) : '', f && !f.est ? fmt(f.v, 2) : '', fmtG(s.grind), s.notes || ''].map(q).join(';'); });
+    const rows = [...S.shots].sort((a, b) => a.ts - b.ts).map(s => { const b = bean(s.bean), f = Advice.flow(s, T()); return [new Date(s.ts).toLocaleString('de-DE'), b ? b.name : '', fmt(s.din), s.dout ? fmt(s.dout) : '', s.t ? fmt(s.t, 0) : '', s.fd ? fmt(s.fd, 0) : '', f && !f.est ? fmt(f.v, 2) : '', fmtG(s.grind), noteText(s)].map(q).join(';'); });
     download(`kaffee-shots-${dayKey(Date.now())}.csv`, '﻿' + [head.join(';'), ...rows].join('\n'), 'text/csv');
   },
   exportJson() { download(`kaffee-sicherung-${dayKey(Date.now())}.json`, JSON.stringify({ app: 'kaffee', v: 2, shots: S.shots, beans: S.beans, settings: S.settings }, null, 1), 'application/json'); },

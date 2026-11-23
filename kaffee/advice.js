@@ -108,6 +108,15 @@
     const est = c.f && c.f.est ? ` Erster Tropfen nicht eingetragen – ${fdDef(T)} s angenommen.` : '';
     const other = Math.abs(din - T.dose) >= 0.5 ? ` (bei ${fmt(din)} g: ${fmt(c.fr[0])}–${fmt(c.fr[1])} g/s)` : '';
     if (c.flow === 'hi' || c.flow === 'lo') {
+      // Ausreißer? Lag der Shot davor mit gleichem Mahlgrad und ähnlicher Dosis im Ziel,
+      // erst noch einmal gleich ziehen statt sofort zu verstellen.
+      const prev = shots.filter(x => valid(x) && x.ts < s.ts).pop();
+      if (prev && r.grind != null && +prev.grind === r.grind && Math.abs(prev.din - s.din) <= 0.5 && check(prev, T).flow === 'ok') {
+        r.status = 'warn'; r.title = 'Ausreißer? Erst nochmal gleich ziehen';
+        r.sub = `Beim Shot davor lag der Fluss mit gleichem Mahlgrad (${fmtG(r.grind)}) bei ${fmt(flow(prev, T).v)} g/s – im Ziel. Ein einzelner Ausreißer kommt meist von Verteilung oder Tampen. Zieh den nächsten Shot unverändert; ist er wieder daneben, schlägt die App eine Änderung vor.` + est;
+        r.outlier = true;
+        return r;
+      }
       const sw = sweet(shots, T, st, din), mid = (T.fMin + T.fMax) / 2, dev = c.f.n - mid, finer = dev > 0;
       let units = sw.per ? Math.abs(dev) / sw.per : (Math.abs(dev) > (T.fMax - T.fMin) ? 2 * step : step);
       units = Math.max(snap(units, step), step);
