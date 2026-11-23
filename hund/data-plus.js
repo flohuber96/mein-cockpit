@@ -131,58 +131,56 @@ HUND.ex = (HUND.ex || []).concat([
   st: ['10 Min Hundezeit an 3 Tagen', 'An 7 Tagen', 'Fester Gassi-Partner'], k: 'Die Bedürfnisse deines Hundes sind trotz Babyalltag gedeckt.', f: [], t: [], r: '' },
 ]);
 
-/* ── Tageszeiten für den Tagesplan ── */
+/* ── Tageszeiten – angepasst an euren Ablauf ── */
 HUND.slots = [
-  { id: 'morgen', n: 'Morgen', e: '🌅', from: 0, to: 10 },
-  { id: 'gassi', n: 'Bei jedem Gassi', e: '🦮', from: -1, to: -1 },
-  { id: 'tag', n: 'Tagsüber', e: '☀️', from: 10, to: 17 },
-  { id: 'abend', n: 'Abend', e: '🌙', from: 17, to: 24 },
-  { id: 'immer', n: 'Immer (24/7)', e: '✳️', from: -1, to: -1 },
+  { id: 'morgen', n: 'Morgens', sub: 'großer Spaziergang ~8 Uhr & Frühstück', e: '🌅' },
+  { id: 'gassi', n: 'Bei jedem Gassi', sub: 'gilt für jede Runde', e: '🦮' },
+  { id: 'mittag', n: 'Mittags', sub: 'Mittagessen als Suchspiel im Garten', e: '☀️' },
+  { id: 'nachmittag', n: 'Nachmittags', sub: 'kurze Löserunde', e: '🌤️' },
+  { id: 'abend', n: 'Abends', sub: 'Abendessen & Runterfahren', e: '🌙' },
+  { id: 'immer', n: 'Immer (24/7)', sub: 'Grundregeln für den ganzen Tag', e: '✳️' },
 ];
 
-/* ── Routinen: s = Tageszeit, on = standardmäßig im Plan, wd = nur an diesen Wochentagen (0 = So), fam = nur mit Baby/Kindern ── */
+/* ── Routinen: s = Tageszeit, on = standardmäßig im Plan, wd = nur an diesen Wochentagen (0 = So), fam = nur mit Baby/Kindern.
+      {g} = Gramm pro Mahlzeit (einstellbar im Steckbrief) ── */
 HUND.routines = [
-  // Morgen
-  { id: 'm-ruhig', s: 'morgen', e: '🌤️', n: 'Ruhig in den Tag starten', t: 'Erst raus zum Lösen, ruhige Begrüßung. Keine Action direkt nach dem Aufstehen – der Tag beginnt entspannt.', on: 0 },
-  { id: 'm-runde', s: 'morgen', e: '👃', n: 'Morgenrunde mit Schnüffelzeit', t: '15–30 Minuten, Nase vor Kilometern. Schnüffeln lastet geistig aus und baut Stress ab.', on: 1 },
-  { id: 'm-futter', s: 'morgen', e: '🥣', n: 'Frühstück teilweise erarbeiten', t: 'Einen Teil des Futters über Suchen oder Schnüffelteppich geben. Danach in Ruhe fressen lassen.', on: 1 },
-  { id: 'm-check', s: 'morgen', e: '🖐️', n: '30-Sekunden-Check', t: 'Augen, Ohren, Pfoten kurz ansehen und belohnen – so bleibt Handling selbstverständlich.', on: 1 },
-  { id: 'm-einheit', s: 'morgen', e: '🎯', n: 'Eine Mini-Einheit (3 Min)', t: 'Eine Fokus-Übung aus dem Plan, mit Erfolg beenden.', on: 0 },
-  { id: 'm-ruhe', s: 'morgen', e: '😴', n: 'Danach Ruhephase', t: 'Nach Runde und Frühstück auf den Ruheplatz – idealer Zeitpunkt, bevor du gehst oder arbeitest.', on: 0 },
-  // Gassi
-  { id: 'g-start', s: 'gassi', e: '🚪', n: 'Ruhiger Start an der Tür', t: 'Geschirr freiwillig anziehen, an der Tür warten bis zur Freigabe, ruhig losgehen. Aufregung an der Tür überträgt sich auf den ganzen Spaziergang.', on: 0 },
-  { id: 'g-ausr', s: 'gassi', e: '🎒', n: 'Ausrüstung komplett', t: 'Geschirr, Leine bzw. Schleppleine, Leckerli-Beutel mit Top-Belohnung, Kotbeutel, Pfeife – und im Sommer Wasser.', on: 0 },
-  { id: 'g-checkin', s: 'gassi', e: '👀', n: 'Check-ins belohnen', t: 'Jeder freiwillige Blick zu dir wird belohnt. Das ist die Basis für Leine, Rückruf und Antijagdtraining.', on: 1 },
-  { id: 'g-schnueffel', s: 'gassi', e: '🌿', n: 'Schnüffeln erlauben – und als Belohnung nutzen', t: '„Geh schnüffeln“ für lockere Leine. Zusätzlich freie Schnüffelzeit, in der der Hund bestimmt.', on: 1 },
-  { id: 'g-mgmt', s: 'gassi', e: '🛡️', n: 'Management draußen', t: 'In Wildgebieten Schleppleine am Geschirr, Dämmerung besonders sichern, bei Hunden früh ausweichen (Bogen).', on: 0 },
-  { id: 'g-rueckruf', s: 'gassi', e: '📣', n: '2–3 leichte Rückrufe mit Jackpot', t: 'Nur in Situationen, in denen er sicher kommt. Danach meistens wieder freigeben – Kommen darf nie das Ende vom Spaß sein.', on: 1 },
-  { id: 'g-ende', s: 'gassi', e: '🏡', n: 'Ruhig ankommen', t: 'Letzte 5 Minuten langsam und schnüffelnd. Zuhause: Pfoten abtrocknen, Wasser, Ruheplatz.', on: 0 },
-  { id: 'g-zecken', s: 'gassi', e: '🕷️', n: 'Nach Wald & Wiese: Zecken- und Grannen-Check', t: 'Kopf, Ohren, Achseln, Leiste, zwischen den Zehen absuchen.', on: 0 },
-  // Tagsüber
-  { id: 't-einheiten', s: 'tag', e: '🎯', n: '2–3 kurze Trainingseinheiten', t: 'Je 3–5 Minuten, verteilt über den Tag. Lieber kurz und erfolgreich als lang.', on: 0 },
-  { id: 't-ruhe', s: 'tag', e: '🛏️', n: 'Ruhephasen schützen', t: 'Der Ruheplatz ist tabu für Störungen. Kein Dauerprogramm – Ruhe ist Training.', on: 1 },
-  { id: 't-nase', s: 'tag', e: '🔎', n: '10 Minuten Nasenarbeit', t: 'Futtersuche, Kartonsuche oder Leckerli-Spur – perfekt für eine Spürnase.', on: 1 },
-  { id: 't-kauen', s: 'tag', e: '🦴', n: 'Kau- oder Schleckzeit', t: 'Ein passender Kauartikel oder eine Schleckmatte – beruhigt und befriedigt ein Grundbedürfnis.', on: 1 },
-  { id: 't-einfangen', s: 'tag', e: '⭐', n: 'Gutes Verhalten einfangen', t: 'Ruhiges Liegen, freiwilliges Kommen, entspanntes Beobachten mit dem ruhigen Marker belohnen.', on: 0 },
-  { id: 't-allein', s: 'tag', e: '🚪', n: 'Allein-Training nach Plan', t: 'Eine Einheit auf deiner aktuellen Stufe – nur unterhalb der Stressgrenze, per Kamera beobachtet.', on: 0 },
-  { id: 't-baby', s: 'tag', e: '👶', n: 'Baby da = schöne Zeit', t: 'Wenn das Baby wach ist: Ansprache, Leckerli, ruhiges Spiel für den Hund. So verknüpft er das Baby mit Gutem.', on: 1, fam: 'baby' },
-  { id: 't-hundezeit', s: 'tag', e: '❤️', n: '10 Minuten nur für den Hund', t: 'Suchspiel, Training oder Kuscheln – trotz Babyalltag.', on: 1, fam: 'baby' },
-  // Abend
-  { id: 'a-runde', s: 'abend', e: '🌙', n: 'Ruhige Abendrunde', t: 'Schnüffeln statt Action – der Hund soll runterfahren, nicht aufdrehen.', on: 1 },
-  { id: 'a-spiel', s: 'abend', e: '🎾', n: 'Gemeinsames Spiel mit klarem Ende', t: 'Zerrspiel, Suchspiel oder Tricks – mit Start- und Ende-Signal, bodennah.', on: 0 },
-  { id: 'a-runter', s: 'abend', e: '🕯️', n: 'Runterfahren vor der Nacht', t: 'Schleckmatte oder Kauartikel, Licht dimmen, kein Toben in der letzten Stunde vor dem Schlafen.', on: 1 },
-  { id: 'a-pflege', s: 'abend', e: '🪥', n: 'Pflege-Minute', t: 'Bürsten oder Zähneputzen (Zähne mindestens 3× pro Woche) – entspannt und belohnt.', on: 0 },
-  { id: 'a-reflex', s: 'abend', e: '💬', n: 'Tag kurz reflektieren', t: 'Schreib einen Kommentar zum Tag: Was lief gut, was war schwierig? Daraus entsteht deine Monatsauswertung.', on: 1 },
-  { id: 'a-schlaf', s: 'abend', e: '🌜', n: 'Letzte Lösrunde & fester Schlafplatz', t: 'Kurz raus, dann ab ins Bett – an einem festen, ruhigen Platz.', on: 0 },
-  // Wöchentlich (erscheint nur an bestimmten Tagen)
-  { id: 'w-check', s: 'abend', e: '🩺', n: 'Wochen-Gesundheitscheck', t: 'Ohren, Zähne, Krallen, Haut und Fell gründlich ansehen. Monatlich wiegen.', on: 1, wd: [0] },
-  { id: 'w-plan', s: 'abend', e: '📋', n: 'Wochenrückblick & Planung', t: 'Wochenrückblick unter „Erfolge“ lesen und 2–3 Schwerpunkte für die neue Woche wählen.', on: 1, wd: [0] },
-  { id: 'w-neu', s: 'tag', e: '🗺️', n: 'Neue Umgebung erkunden', t: 'Eine neue Strecke oder ein Ausflug – neue Gerüche sind beste Beschäftigung, und Training wird generalisiert.', on: 1, wd: [6] },
-  { id: 'w-krallen', s: 'abend', e: '✂️', n: 'Krallen prüfen', t: 'Klackern sie auf glattem Boden? Dann eine Kralle pro Tag kürzen oder feilen.', on: 1, wd: [3] },
-  // Immer (24/7) – die bisherigen Basics
-  ...HUND.basics.map(b => ({ id: b.id, s: 'immer', e: b.e, n: b.n, t: b.t, on: ['ruhe', 'management', 'ruecken', 'selbst'].includes(b.id) ? 1 : 0 })),
+  // Morgens
+  { id: 'm-runde', s: 'morgen', e: '🌲', n: 'Großer Morgenspaziergang (~8 Uhr)', t: '45–60 Minuten mit viel Schnüffelzeit. Baue 2–3 Mini-Übungen ein (Check-ins, lockere Leine, ein leichter Rückruf) – der Rest gehört der Nase.', on: 1 },
+  { id: 'm-futter', s: 'morgen', e: '🥣', n: 'Frühstück ({g} g) mit Napf-Warten', t: 'Impulskontrolle nebenbei: Napf langsam absenken – nur wenn er ruhig bleibt, geht es weiter; dann Freigabe. Eine Handvoll davon als Suchspiel streuen.', on: 1 },
+  { id: 'm-ruhe', s: 'morgen', e: '😴', n: 'Danach Ruhephase', t: 'Nach Runde und Frühstück auf den Ruheplatz. Ein ausgeruhter, satter Hund ist ideal für kurzes Allein-Training.', on: 1 },
+  { id: 'm-check', s: 'morgen', e: '🖐️', n: '30-Sekunden-Check', t: 'Augen, Ohren, Pfoten kurz ansehen und belohnen – so bleibt Handling selbstverständlich.', on: 0 },
+  // Bei jedem Gassi
+  { id: 'g-start', s: 'gassi', e: '🚪', n: 'Ruhiger Start an der Tür', t: 'Geschirr an, an der Tür warten, bis er ruhig ist – dann Freigabe „Okay“. Jede Runde ist so automatisch Impulskontroll-Training.', on: 1 },
+  { id: 'g-checkin', s: 'gassi', e: '👀', n: 'Check-ins belohnen', t: 'Jeder freiwillige Blick zu dir wird belohnt. Basis für Leine, Rückruf und Jagdkontrolle.', on: 1 },
+  { id: 'g-schnueffel', s: 'gassi', e: '🌿', n: 'Lockere Leine = es geht weiter', t: 'Zug = stehen bleiben, lockere Leine = weiter oder „Geh schnüffeln“ als Belohnung.', on: 1 },
+  { id: 'g-rueckruf', s: 'gassi', e: '📣', n: '2–3 leichte Rückrufe mit Jackpot', t: 'Nur, wenn er sicher kommt. Danach meistens wieder freigeben.', on: 0 },
+  { id: 'g-mgmt', s: 'gassi', e: '🛡️', n: 'Management draußen', t: 'In Wildgebieten Schleppleine am Geschirr, bei Hunden früh im Bogen ausweichen.', on: 0 },
+  { id: 'g-zecken', s: 'gassi', e: '🕷️', n: 'Nach Wald & Wiese: Zecken-Check', t: 'Kopf, Ohren, Achseln, Leiste, zwischen den Zehen absuchen.', on: 0 },
+  // Mittags
+  { id: 'mi-suche', s: 'mittag', e: '🔎', n: 'Mittagessen ({g} g) als Suchspiel im Garten', t: 'Futter im Gras streuen oder verstecken. 10–15 Minuten Nasenarbeit lasten mehr aus als Toben – und sie beruhigen.', on: 1 },
+  { id: 'mi-ruhe', s: 'mittag', e: '🛏️', n: 'Ruhephase nach dem Suchen', t: 'Ab auf die Decke. Nach Nasenarbeit ist er müde – guter Moment für eine kurze Allein-Einheit.', on: 1 },
+  { id: 't-kauen', s: 'mittag', e: '🦴', n: 'Kau- oder Schleckzeit', t: 'Ein passender Kauartikel – Kauen beruhigt.', on: 0 },
+  { id: 't-baby', s: 'mittag', e: '👶', n: 'Baby da = schöne Zeit', t: 'Wenn das Baby wach ist: Ansprache, Leckerli, ruhiges Spiel für den Hund.', on: 1, fam: 'baby' },
+  { id: 't-hundezeit', s: 'mittag', e: '❤️', n: '10 Minuten nur für den Hund', t: 'Suchspiel, Training oder Kuscheln – trotz Babyalltag.', on: 1, fam: 'baby' },
+  // Nachmittags
+  { id: 'n-runde', s: 'nachmittag', e: '💩', n: 'Kurze Löserunde', t: 'Ruhig und ohne Programm – Lösen hat Vorrang. Danach wieder rein, kein Aufdrehen.', on: 1 },
+  { id: 'n-tuer', s: 'nachmittag', e: '⏸️', n: 'Mini-Impulsübung vor dem Rausgehen', t: 'Geschirr in die Hand – erst bei Ruhe anziehen. Winselt er: warten, 2 Sekunden Stille abwarten, dann weiter.', on: 0 },
+  // Abends
+  { id: 'a-futter', s: 'abend', e: '🥣', n: 'Abendessen ({g} g) als Schleck- oder Futterspiel', t: 'Z. B. eingeweicht auf der Schleckmatte oder im Futterball. Schlecken und Kauen fahren runter.', on: 1 },
+  { id: 'a-runter', s: 'abend', e: '🕯️', n: 'Runterfahren vor der Nacht', t: 'Licht dimmen, kein Toben in der letzten Stunde, Ruheplatz.', on: 1 },
+  { id: 'a-reflex', s: 'abend', e: '💬', n: 'Tag kurz kommentieren', t: 'Ein Satz reicht: Was lief gut, was war schwierig (Allein, Warten, Winseln)? Daraus entsteht deine Monatsauswertung.', on: 1 },
+  { id: 'a-runde', s: 'abend', e: '🌙', n: 'Ruhige Abendrunde', t: 'Schnüffeln statt Action.', on: 0 },
+  { id: 'a-spiel', s: 'abend', e: '🎾', n: 'Gemeinsames Spiel mit klarem Ende', t: 'Mit Start- und Ende-Signal, bodennah – gut für Frusttoleranz: „Fertig“ heißt fertig.', on: 0 },
+  { id: 'a-pflege', s: 'abend', e: '🪥', n: 'Pflege-Minute', t: 'Bürsten oder Zähneputzen (Zähne mind. 3× pro Woche).', on: 0 },
+  // Wöchentlich
+  { id: 'w-check', s: 'abend', e: '🩺', n: 'Wochen-Gesundheitscheck', t: 'Ohren, Zähne, Krallen, Haut. Monatlich wiegen.', on: 1, wd: [0] },
+  { id: 'w-plan', s: 'abend', e: '📋', n: 'Wochenrückblick', t: 'Fortschritt der Baustellen ansehen: Was hat geklappt, wo einen Schritt zurück?', on: 1, wd: [0] },
+  { id: 'w-neu', s: 'mittag', e: '🗺️', n: 'Neue Umgebung erkunden', t: 'Eine neue Strecke – neue Gerüche lasten aus, Training wird generalisiert.', on: 0, wd: [6] },
+  // Immer (24/7)
+  ...HUND.basics.map(b => ({ id: b.id, s: 'immer', e: b.e, n: b.n, t: b.t, on: ['ruhe', 'management', 'belohnt', 'ruecken'].includes(b.id) ? 1 : 0 })),
   { id: 'i-aufsicht', s: 'immer', e: '👁️', n: 'Baby/Kind & Hund: aktive Aufsicht oder Trennung', t: 'Nie passiv nebenher. Kannst du nicht ausschließlich aufpassen, trennst du (Gitter, anderer Raum).', on: 1, fam: 'baby' },
 ];
+(function () { const b = HUND.routines.find(r => r.id === 'belohnt'); if (b) { b.n = 'Ruhe & Stille belohnt'; b.t = 'Liegt er ruhig, wartet er still statt zu winseln? Leise hin, ruhiger Marker, Leckerli. Was belohnt wird, kommt öfter.'; } })();
 
 /* ── Neue Lebensbereiche ── */
 HUND.dd.push(

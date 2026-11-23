@@ -66,17 +66,19 @@ const DEF_DOG = { name: '', birth: '', breed: 'Dackel-Bracke-Mix', sex: '', neut
 const defBasics = () => H.basics.filter(b => b.on).map(b => b.id);
 const defRoutines = () => H.routines.filter(r => r.on).map(r => r.id);
 const DEF_FAM = { baby: false, kids: false };
+const DEF_FOCUS = ['allein', 'impuls', 'frust', 'leine', 'mist'], DEF_FOOD = { meals: 3, g: 45 };
 function fresh() {
   return {
-    v: 2, dog: { ...DEF_DOG }, settings: { theme: 'auto', routines: defRoutines(), fam: { ...DEF_FAM } },
+    v: 2, dog: { ...DEF_DOG }, settings: { theme: 'auto', routines: defRoutines(), rv: 3, fam: { ...DEF_FAM }, focus: [...DEF_FOCUS], food: { ...DEF_FOOD } },
     skills: {}, sessions: [], walks: [], incidents: [], health: [], days: {}, checks: {}, comments: [],
     lex: null, rew: null, trig: [], read: {}, quiz: {}, seen: {},
-    ui: { view: 'heute', tseg: 'cats', rev: 30 },
+    ui: { view: 'heute', tseg: 'fokus', rev: 30 },
   };
 }
 function migrate(s) {
   const f = fresh(), st = s.settings || {};
-  const o = { ...f, ...s, dog: { ...f.dog, ...s.dog }, settings: { ...f.settings, ...st, fam: { ...DEF_FAM, ...(st.fam || {}) } }, ui: { ...f.ui, ...s.ui } };
+  const o = { ...f, ...s, dog: { ...f.dog, ...s.dog }, settings: { ...f.settings, ...st, fam: { ...DEF_FAM, ...(st.fam || {}) }, food: { ...DEF_FOOD, ...(st.food || {}) } }, ui: { ...f.ui, ...s.ui } };
+  if (!Array.isArray(o.settings.focus)) o.settings.focus = [...DEF_FOCUS];
   for (const k of ['sessions', 'walks', 'incidents', 'health', 'trig', 'comments']) if (!Array.isArray(o[k])) o[k] = [];
   for (const k of ['skills', 'days', 'read', 'quiz', 'seen', 'checks']) if (!o[k] || typeof o[k] !== 'object') o[k] = {};
   // Version 1 → 2: Basics werden zu „Immer“-Routinen, Tages-Häkchen zu einzelnen Checks (konfliktfrei auf mehreren Handys)
@@ -85,6 +87,7 @@ function migrate(s) {
     o.settings.routines = H.routines.filter(r => H.basics.some(b => b.id === r.id) ? keep.has(r.id) : r.on).map(r => r.id);
   }
   delete o.settings.basics;
+  if (st.rv !== 3) { o.settings.routines = defRoutines(); o.settings.rv = 3; } // Routinen wurden an euren Tagesablauf angepasst
   for (const [k, d] of Object.entries(o.days)) {
     if (!d || (!d.b && !d.done)) continue;
     const c = o.checks[k] = { ...(o.checks[k] || {}) };
@@ -146,6 +149,27 @@ function setCheck(k, key, on) {
   const c = { ...chk(k) };
   if (on) { c[key] = { t: Date.now() }; if (me()) c[key].by = me(); } else delete c[key];
   if (Object.keys(c).length) S.checks[k] = c; else delete S.checks[k];
+}
+const food = () => { const f = S.settings.food || DEF_FOOD; return { meals: +f.meals || 3, g: +f.g || 45, day: (+f.meals || 3) * (+f.g || 45) }; };
+const rt = txt => { const f = food(); return String(txt).replace(/\{g\}/g, f.g).replace(/\{meals\}/g, f.meals).replace(/\{day\}/g, f.day); };
+const PROG = Object.fromEntries((H.programs || []).map(p => [p.id, p]));
+const focusList = () => (S.settings.focus || []).map(id => PROG[id]).filter(Boolean);
+function progOf(p) {
+  const steps = p.ex.map(id => EX[id]).filter(Boolean);
+  const cur = steps.find(e => !isDone(e)) || null, idx = cur ? steps.indexOf(cur) : steps.length;
+  const pctv = steps.reduce((a, e) => a + exProg(e), 0) / steps.length;
+  let metric = null;
+  if (p.metric && p.metric.ex) { const v = S.sessions.filter(x => x.ex === p.metric.ex && x.ok && !isNaN(+x.val) && x.val !== '').map(x => +x.val); metric = { ...p.metric, v: v.length ? Math.max(...v) : 0 }; }
+  if (p.metric && p.metric.inc) {
+    const now = Date.now(), wk = S.incidents.filter(i => i.type === p.metric.inc && i.ts >= now - 7 * DAY).length, prev = S.incidents.filter(i => i.type === p.metric.inc && i.ts >= now - 14 * DAY && i.ts < now - 7 * DAY).length;
+    const today = S.incidents.filter(i => i.type === p.metric.inc && tkey(i.ts) === todayKey()).length;
+    metric = { ...p.metric, v: wk, prev, today };
+  }
+  if (p.metric && p.metric.walk) {
+    const avg = l => { const r = l.filter(w => w[p.metric.walk]); return r.length ? r.reduce((a, w) => a + w[p.metric.walk], 0) / r.length : null; }, now = Date.now();
+    metric = { ...p.metric, v: avg(S.walks.filter(w => w.s >= now - 7 * DAY)), prev: avg(S.walks.filter(w => w.s >= now - 14 * DAY && w.s < now - 7 * DAY)) };
+  }
+  return { steps, cur, idx, pct: pctv, metric };
 }
 const famOn = f => !f || !!(S.settings.fam && S.settings.fam[f]);
 const routineOn = (r, wd) => (S.settings.routines || []).includes(r.id) && famOn(r.fam) && (!r.wd || r.wd.includes(wd));
@@ -227,6 +251,7 @@ const BADGES = [
   { id: 'com1', e: '💬', n: 'Erster Kommentar', d: 'Ersten Kommentar geschrieben', f: s => s.com >= 1 },
   { id: 'com30', e: '📓', n: 'Tagebuchschreiber', d: '30 Kommentare geschrieben', f: s => s.com >= 30 },
   { id: 'review', e: '📊', n: 'Rückblick', d: 'Monatsauswertung angesehen', f: s => s.review },
+  { id: 'prog1', e: '🏗️', n: 'Baustelle geschafft', d: 'Alle Schritte eines Schwerpunkts gemeistert', f: s => (H.programs || []).some(p => p.ex.every(id => !EX[id] || isDone(EX[id]))) },
   { id: 'fam5', e: '👶', n: 'Familien-Team', d: '5 Einheiten Baby, Kinder & Besuch', f: s => (s.byCat.familie || 0) >= 5 },
   { id: 'read5', e: '📖', n: 'Wissbegierig', d: '5 Artikel gelesen', f: s => s.read >= 5 },
   { id: 'readall', e: '📚', n: 'Bücherwurm', d: 'Alle Artikel gelesen', f: s => s.read >= H.wissen.length },
@@ -308,7 +333,7 @@ function compute() {
 /* ───────── Tages-Challenges ───────── */
 const SLOT = [
   { n: 'Gassi', e: '🦮', plan: 'gassi', pool: c => c.c === 'gassi' },
-  { n: 'Training', e: '🎯', plan: 'tag', pool: c => c.c === 'training' },
+  { n: 'Training', e: '🎯', plan: 'mittag', pool: c => c.c === 'training' },
   { n: 'Alltag & Du', e: '❤️', plan: 'abend', pool: c => c.c === 'alltag' || c.c === 'mensch' },
 ];
 function tierFor(k) { // Erfahrung = aktive Tage VOR diesem Tag (stabil innerhalb eines Tages)
@@ -318,7 +343,8 @@ function tierFor(k) { // Erfahrung = aktive Tage VOR diesem Tag (stabil innerhal
 function challengesFor(k) {
   const d = dayRec(k), tier = tierFor(k), used = new Set();
   return SLOT.map((slot, i) => {
-    const pool = H.challenges.filter(c => slot.pool(c) && c.l <= tier && famOn(c.fam));
+    let pool = H.challenges.filter(c => slot.pool(c) && c.l <= tier && famOn(c.fam) && (!c.f || (S.settings.focus || []).includes(c.f)));
+    const fp = pool.filter(c => c.f); if (i === 1 && fp.length && hash(k + 'f') % 3) pool = fp; // Training-Challenge meist zu deinen Schwerpunkten
     const list = shuffled(pool, hash(k + '|' + i + '|' + ((d.rr && d.rr[i]) || 0)));
     const pick = list.find(c => !used.has(c.id)) || list[0];
     used.add(pick.id);
@@ -505,7 +531,7 @@ function render() {
 /* ───────── Tagesplan (Routinen + Challenges + Fokus-Übungen nach Tageszeit) ───────── */
 const SLOTS = Object.fromEntries(H.slots.map(s => [s.id, s]));
 const TYPE_N = { r: 'Routine', ch: 'Challenge', ex: 'Übung' };
-function curSlot() { const h = new Date().getHours(); return h < 10 ? 'morgen' : h < 17 ? 'tag' : 'abend'; }
+function curSlot() { const h = new Date().getHours(); return h < 11 ? 'morgen' : h < 14 ? 'mittag' : h < 18 ? 'nachmittag' : 'abend'; }
 function walkPick(exclude) {
   const ok = e => e && e.w && !exclude.includes(e.id);
   const prog = H.ex.filter(e => ok(e) && sk(e.id).status === 'arbeit');
@@ -513,24 +539,31 @@ function walkPick(exclude) {
   const pi = currentPhase(), path = pi >= 0 ? H.path[pi].ex.map(id => EX[id]).filter(e => ok(e) && sk(e.id).status !== 'sitzt' && sk(e.id).status !== 'gen') : [];
   return (path[0] || EX['g-name']).id;
 }
-function dayEx(k) { const x = dayRec(k).ex; return x && Array.isArray(x.tag) ? { tag: x.tag.filter(id => EX[id]), gassi: (x.gassi || []).filter(id => EX[id]) } : null; }
+function dayEx(k) { // [{ id, slot, p }] – ältere Tage im Format { tag, gassi } werden umgedeutet
+  const x = dayRec(k).ex; if (!x) return null;
+  if (Array.isArray(x.items)) return x.items.filter(i => EX[i.id]);
+  if (Array.isArray(x.tag)) return [...x.tag.map(id => ({ id, slot: 'mittag' })), ...(x.gassi || []).map(id => ({ id, slot: 'gassi' }))].filter(i => EX[i.id]);
+  return null;
+}
 function ensureDayPlan(k) { // Fokus-Übungen einmal pro Tag festlegen – stabil und auf allen Handys gleich
   if (dayEx(k)) return false;
-  const tag = recommend(2).map(e => e.id);
-  setDay(k, { ex: { tag, gassi: [walkPick(tag)] } });
+  const items = [];
+  for (const p of focusList()) { const pr = progOf(p); const e = pr.cur || pr.steps[pr.steps.length - 1]; if (e && !items.some(i => i.id === e.id)) items.push({ id: e.id, slot: p.slot, p: p.id }); }
+  if (!items.length) recommend(2).forEach(e => items.push({ id: e.id, slot: 'mittag' }));
+  if (!items.some(i => i.slot === 'gassi') && items.length < 4) items.push({ id: walkPick(items.map(i => i.id)), slot: 'gassi' });
+  setDay(k, { ex: { items } });
   return true;
 }
 function planFor(k) {
-  const wd = fromKey(k).getDay(), c = chk(k), dx = dayEx(k) || { tag: [], gassi: [] };
+  const wd = fromKey(k).getDay(), c = chk(k), dx = dayEx(k) || [];
   const trained = new Set(S.sessions.filter(s => tkey(s.ts) === k).map(s => s.ex));
   const exItem = id => { const e = EX[id], st = sk(id); return { key: 'ex:' + id, type: 'ex', id, e: CAT[e.c].e, n: e.n, t: `Stufe ${st.stage + 1}/${e.st.length}: ${e.st[st.stage]}` }; };
   const chs = challengesFor(k);
   return H.slots.map(sl => {
     const items = [];
-    if (sl.id === 'gassi') dx.gassi.forEach(id => items.push(exItem(id)));
-    if (sl.id === 'tag') dx.tag.forEach(id => items.push(exItem(id)));
+    dx.filter(i => (SLOTS[i.slot] ? i.slot : 'mittag') === sl.id).forEach(i => { const it = exItem(i.id); if (i.p && PROG[i.p]) it.prog = PROG[i.p]; items.push(it); });
     chs.filter(x => SLOT[x.slot].plan === sl.id).forEach(x => items.push({ key: 'ch:' + x.id, type: 'ch', id: x.id, ch: x, e: '⚡', n: x.n, t: x.t }));
-    H.routines.filter(r => r.s === sl.id && routineOn(r, wd)).forEach(r => items.push({ key: 'r:' + r.id, type: 'r', id: r.id, e: r.e, n: r.n, t: r.t }));
+    H.routines.filter(r => r.s === sl.id && routineOn(r, wd)).forEach(r => items.push({ key: 'r:' + r.id, type: 'r', id: r.id, e: r.e, n: rt(r.n), t: rt(r.t) }));
     items.forEach(it => { it.slot = sl.id; it.done = !!c[it.key] || (it.type === 'ex' && trained.has(it.id)); it.by = c[it.key] && c[it.key].by; });
     return { ...sl, items };
   });
@@ -542,7 +575,7 @@ function itemRow(it, k) {
   const rr = it.type === 'ch' && !it.done && !((d.rr && d.rr[it.ch.slot]) || 0);
   return `<div class="pitem ${it.done ? 'done' : ''}">
     <button class="pck" data-act="planCheck" data-key="${esc(it.key)}" aria-label="${it.done ? 'Nicht erledigt' : 'Erledigt'}"><i></i></button>
-    <button class="pmain" data-act="planOpen" data-key="${esc(it.key)}"><small><span class="pt t-${it.type}">${TYPE_N[it.type]}</span>${it.by && it.done ? ` · ✓ ${esc(it.by)}` : ''}</small><b>${it.e} ${esc(it.n)}</b><span class="pd">${esc(it.t)}</span></button>
+    <button class="pmain" data-act="planOpen" data-key="${esc(it.key)}"><small><span class="pt t-${it.type}">${it.prog ? it.prog.e + ' ' + esc(it.prog.n) : TYPE_N[it.type]}</span>${it.by && it.done ? ` · ✓ ${esc(it.by)}` : ''}</small><b>${it.e} ${esc(it.n)}</b><span class="pd">${esc(it.t)}</span></button>
     <span class="pacts">${it.type === 'ex' ? `<button data-act="startTrainer" data-id="${it.id}" aria-label="Mit Zähler trainieren">▶</button>` : ''}${rr ? `<button data-act="chReroll" data-slot="${it.ch.slot}" aria-label="Andere Challenge">↻</button>` : ''}${it.type === 'ex' && !it.done ? `<button data-act="exSwap" data-id="${it.id}" aria-label="Andere Übung">↻</button>` : ''}<button data-act="comAdd" data-t="${it.type}" data-id="${esc(it.id)}" aria-label="Kommentar" class="${nCom ? 'has' : ''}">💬${nCom ? `<em>${nCom}</em>` : ''}</button></span></div>`;
 }
 function planHtml(k) {
@@ -550,7 +583,7 @@ function planHtml(k) {
   return plan.filter(sl => sl.items.length).map(sl => {
     const n = sl.items.filter(i => i.done).length, open = slotOpen[sl.id] ?? (sl.id === cur || (sl.id === 'gassi' && !!WALK));
     return `<div class="card pslot ${open ? 'open' : ''} ${n === sl.items.length ? 'full' : ''}">
-      <button class="psh" data-act="slotToggle" data-id="${sl.id}"><span class="pse">${sl.e}</span><b>${esc(sl.n)}${sl.id === cur ? ' <em>jetzt</em>' : ''}</b><span class="psc">${n}/${sl.items.length}</span><i class="chev">›</i></button>
+      <button class="psh" data-act="slotToggle" data-id="${sl.id}"><span class="pse">${sl.e}</span><b>${esc(sl.n)}${sl.id === cur ? ' <em>jetzt</em>' : ''}${sl.sub ? `<small>${esc(sl.sub)}</small>` : ''}</b><span class="psc">${n}/${sl.items.length}</span><i class="chev">›</i></button>
       ${bar(n / sl.items.length, 'thin')}
       ${open ? `<div class="pitems">${sl.items.map(it => itemRow(it, k)).join('')}</div>` : ''}</div>`;
   }).join('');
@@ -569,6 +602,40 @@ function togglePlan(key, on) {
     if (ps.done === ps.total) { confetti(); celebrate('🌈 Tagesplan komplett erledigt!'); }
     else celebrate(slotFull ? `${SLOTS[it.slot].e} ${SLOTS[it.slot].n} komplett!` : xp ? `Erledigt · +${xp} XP` : 'Erledigt');
   }
+}
+
+/* ── Schwerpunkte (Baustellen) & Regelkarten ── */
+function focusCard(p) {
+  const pr = progOf(p), cur = pr.cur, st = cur ? sk(cur.id) : null, m = pr.metric;
+  let ml = '';
+  if (m && m.ex) ml = `<span class="fmet">⏱ ${esc(m.n)}: <b>${m.v ? num(m.v) + ' ' + m.u : '–'}</b>${m.goal ? ` · Ziel ${m.goal >= 60 ? m.goal / 60 + ' h' : m.goal + ' min'}` : ''}</span>${m.goal ? bar(Math.min(1, m.v / m.goal), 'thin') : ''}`;
+  if (m && m.walk) ml = `<span class="fmet">🦮 ${esc(m.n)}: <b>${m.v != null ? num(m.v) + ' ★' : '–'}</b> ${m.prev != null ? `<i class="${m.v > m.prev ? 'up' : m.v < m.prev ? 'dn' : ''}">(Vorwoche ${num(m.prev)})</i>` : ''}<br><small>Nach jedem Gassi im Gassi-Modus bewerten.</small></span>`;
+  if (m && m.inc) ml = `<span class="fmet">${m.inc === 'mist' ? '🐴' : '🥺'} ${esc(m.n)}: <b>${m.v}</b> <i class="${m.v < m.prev ? 'up' : m.v > m.prev ? 'dn' : ''}">${m.prev ? '(Vorwoche ' + m.prev + ')' : ''}</i> · heute ${m.today}</span>`;
+  return `<div class="card fcard">
+    <button class="fhead" data-act="progOpen" data-id="${p.id}"><span class="fe">${p.e}</span><span class="fm"><b>${esc(p.n)}</b></span><span class="fp">${Math.round(pr.pct * 100)} %</span><i class="chev">›</i></button>
+    <div class="fladder">${pr.steps.map((e, i) => `<i class="${isDone(e) ? 'ok' : i === pr.idx ? 'cur' : ''}" title="${esc(e.n)}"></i>`).join('')}</div>
+    ${cur ? `<div class="fnext"><small>Schritt ${pr.idx + 1} von ${pr.steps.length} · Stufe ${st.stage + 1}/${cur.st.length}</small><b>${esc(cur.n)}</b><span>${esc(cur.st[st.stage])}</span></div>` : `<div class="fnext"><b>🎉 Alle Schritte geschafft!</b><span>Jetzt an vielen Orten festigen (generalisieren).</span></div>`}
+    ${ml}
+    <div class="fbtns">${cur ? `<button class="btn primary sm" data-act="startTrainer" data-id="${cur.id}">▶ Jetzt üben</button>` : ''}${m && m.inc ? `<button class="btn soft sm" data-act="logInc" data-v="${m.inc}">${m.inc === 'mist' ? '🐴 Gefressen notieren' : '🥺 Winseln notieren'}</button>` : ''}</div></div>`;
+}
+function progSheet(id) {
+  const p = PROG[id]; if (!p) return;
+  const pr = progOf(p), on = (S.settings.focus || []).includes(id);
+  openSheet({ title: p.e + ' ' + p.n, cls: 'tall', body: `<div class="prog">
+    <p class="goal"><b>Ziel:</b> ${esc(p.goal)}</p>${bar(pr.pct)}<p class="small muted">${Math.round(pr.pct * 100)} % geschafft · ein Schritt gilt als geschafft, wenn die Übung „sitzt“.</p>
+    <div class="section-t">Dein Weg – Schritt für Schritt</div>
+    <div class="card list ladder">${pr.steps.map((e, i) => { const k = sk(e.id), d = isDone(e); return `<button class="lstep ${d ? 'ok' : i === pr.idx ? 'cur' : ''}" data-act="openEx" data-id="${e.id}"><span class="ln">${d ? '✓' : i + 1}</span><span class="lm"><b>${esc(e.n)}</b><small>${d ? 'geschafft' : k.status === 'neu' ? 'noch nicht begonnen' : `Stufe ${k.stage + 1} von ${e.st.length}: ${esc(e.st[k.stage])}`}</small>${!d && k.status !== 'neu' ? bar(exProg(e), 'thin') : ''}</span><span class="chev">›</span></button>`; }).join('')}</div>
+    <div class="section-t">Immer beachten</div><div class="card pad"><ul class="rtips ins">${p.tips.map(t => `<li>✓ ${esc(t)}</li>`).join('')}</ul></div>
+    <div class="stack" style="margin-top:12px">${pr.cur ? `<button class="btn primary" data-act="startTrainer" data-id="${pr.cur.id}">▶ ${esc(pr.cur.n)} üben</button>` : ''}
+    ${p.art && ART[p.art] ? `<button class="btn soft" data-act="art" data-id="${p.art}">📖 ${esc(ART[p.art].n)}</button>` : ''}
+    <button class="btn ${on ? 'plain' : 'soft'}" data-act="focusToggle" data-id="${id}">${on ? 'Nicht mehr als Schwerpunkt' : '⭐ Als Schwerpunkt wählen'}</button></div></div>` });
+}
+function cheatsHtml() {
+  return `<div class="cheats">${H.cheats.map(c => `<button class="card cheat" data-act="cheat" data-id="${c.id}"><span>${c.e}</span><b>${esc(c.n)}</b></button>`).join('')}</div>`;
+}
+function cheatSheet(id) {
+  const c = H.cheats.find(x => x.id === id); if (!c) return;
+  openSheet({ title: c.e + ' ' + c.n, body: `<div class="ddv"><h3 class="good">✓ So machen wir’s immer</h3><ul class="do">${c.yes.map(x => `<li>${esc(rt(x))}</li>`).join('')}</ul><h3 class="bad">✗ Lieber nicht</h3><ul class="dont">${c.no.map(x => `<li>${esc(rt(x))}</li>`).join('')}</ul></div>` });
 }
 
 /* ── HEUTE ── */
@@ -593,15 +660,16 @@ function viewToday() {
   h += `<div class="card modecard"><div class="mc-top"><div class="ring" style="--p:${ps.total ? ps.done / ps.total : 0}"><b>${ps.done}</b><small>/${ps.total}</small></div>
       <div><b>Tagesplan</b><small>${ps.done === ps.total ? 'Alles erledigt – stark! 🌈' : `Noch ${ps.total - ps.done} Aufgaben: Routinen, Challenges und Fokus-Übungen`}</small></div></div>
     <button class="btn primary" data-act="modeStart">▶ Übungsmodus starten</button></div>`;
-  h += `<div class="section-t">Heute nach Tageszeit <button data-act="openPage" data-id="routines">Anpassen</button></div>${planHtml(t)}`;
+  const fl = focusList();
+  if (fl.length) h += `<div class="section-t">Eure Baustellen <button data-act="focusEdit">Ändern</button></div><div class="fcards">${fl.map(focusCard).join('')}</div>`;
+  else h += `<button class="card setup" data-act="focusEdit"><span>⭐</span><span><b>Schwerpunkte wählen</b><small>Wähle 1–3 Baustellen – der Tagesplan bekommt dann jeden Tag den nächsten Schritt.</small></span></button>`;
+  h += `<div class="section-t">Tagesplan nach Tageszeit <button data-act="openPage" data-id="routines">Anpassen</button></div>${planHtml(t)}`;
+  h += `<div class="section-t">Unsere Regeln – immer</div>${cheatsHtml()}`;
   // Tageskommentar
   const dc = commentsOf('day', t, t);
   h += `<div class="section-t">Kommentar zum Tag</div><div class="card daycom">${dc.length ? dc.map(comRow).join('') : '<p class="small muted">Was lief heute gut, was war schwierig? Deine Kommentare landen in der Datenbank und werden in der Monatsauswertung zusammengefasst.</p>'}
     <button class="btn soft" data-act="comAdd" data-t="day" data-id="${t}">💬 ${dc.length ? 'Weiteren Kommentar' : 'Kommentar schreiben'}</button></div>`;
   h += quizOfDay();
-  const tips = [...H.rules.map(r => ({ e: r.e, n: r.n, t: r.t })), ...H.dd.flatMap(a => a.do.map(x => ({ e: a.e, n: a.n + ': Do', t: x })))];
-  const tip = tips[hash(t) % tips.length];
-  h += `<div class="section-t">Tipp des Tages</div><div class="card tip"><span>${tip.e}</span><div><b>${esc(tip.n)}</b><p>${esc(tip.t)}</p></div></div>`;
   h += `<div class="section-t">Schnell eintragen</div><div class="quick">
     <button class="card" data-act="pickEx"><span>🎯</span>Einheit</button>
     <button class="card" data-act="incAdd"><span>📝</span>Verhalten</button>
@@ -623,7 +691,8 @@ function reviewDue() {
 let M = null;
 function modeQueue() {
   const k = todayKey(), plan = planFor(k), cur = curSlot();
-  const order = [cur, 'gassi', ...['morgen', 'tag', 'abend'].filter(x => x !== cur), 'immer'];
+  const tod = ['morgen', 'mittag', 'nachmittag', 'abend'], ci = tod.indexOf(cur);
+  const order = [cur, 'gassi', ...tod.slice(ci + 1), ...tod.slice(0, ci), 'immer'];
   const slots = M.filter === 'alle' ? order : [M.filter];
   const items = slots.flatMap(id => (plan.find(s => s.id === id) || { items: [] }).items);
   return { items, open: items.filter(i => !i.done && !M.skip.has(i.key)), done: items.filter(i => i.done).length };
@@ -867,8 +936,12 @@ function viewTraining() {
   const seg = S.ui.tseg || 'cats';
   let h = `<div class="search"><input type="search" placeholder="Übung suchen … (z. B. Rückruf, Krallen)" data-search="ex" value="${esc(nav.q)}" autocomplete="off"></div>
     <div id="searchRes"></div>
-    <div id="segWrap"><div class="seg wide">${[['cats', 'Bereiche'], ['path', 'Lernpfad'], ['fav', 'Merkliste'], ['log', 'Verlauf']].map(([k, n]) => `<button class="${seg === k ? 'on' : ''}" data-act="tseg" data-seg="${k}">${n}</button>`).join('')}</div>`;
-  if (seg === 'cats') {
+    <div id="segWrap"><div class="seg wide">${[['fokus', 'Fokus'], ['cats', 'Bereiche'], ['path', 'Lernpfad'], ['fav', 'Merken'], ['log', 'Verlauf']].map(([k, n]) => `<button class="${seg === k ? 'on' : ''}" data-act="tseg" data-seg="${k}">${n}</button>`).join('')}</div>`;
+  if (seg === 'fokus') {
+    const on = new Set(S.settings.focus || []);
+    h += `<p class="small muted intro">Jeder Schwerpunkt ist ein Weg mit fester Reihenfolge. Der Tagesplan holt sich jeden Tag den nächsten Schritt. Tippe auf ⭐, um Schwerpunkte zu wählen (empfohlen: höchstens 5).</p>`;
+    h += H.programs.map(p => { const pr = progOf(p); return `<div class="card prow ${on.has(p.id) ? 'on' : ''}"><button class="pstar" data-act="focusToggle" data-id="${p.id}" aria-label="Schwerpunkt">${on.has(p.id) ? '⭐' : '☆'}</button><button class="pinfo" data-act="progOpen" data-id="${p.id}"><b>${p.e} ${esc(p.n)}</b><small>${pr.cur ? `Schritt ${pr.idx + 1}/${pr.steps.length}: ${esc(pr.cur.n)}` : 'Alle Schritte geschafft 🎉'}</small>${bar(pr.pct, 'thin')}</button><span class="cpv">${Math.round(pr.pct * 100)} %</span></div>`; }).join('');
+  } else if (seg === 'cats') {
     h += `<div class="cats">${H.cats.map(c => {
       const l = catEx(c.id), p = catProg(c.id), w = l.filter(e => sk(e.id).status === 'arbeit').length, ok = l.filter(isDone).length;
       return `<button class="card cat" data-act="openCat" data-id="${c.id}"><span class="ce">${c.e}</span><b>${esc(c.n)}</b><small>${ok}/${l.length} sitzen${w ? ` · ${w} in Arbeit` : ''}</small>${bar(p)}</button>`;
@@ -1098,6 +1171,7 @@ function viewWissen() {
   const nRead = Object.keys(S.read).filter(id => ART[id]).length, qOk = H.quiz.filter(q => S.quiz[q.id] && S.quiz[q.id].ok).length;
   h += `<div class="wtop"><button class="card wt" data-act="rules"><span>⭐</span><b>Goldene Regeln</b><small>${H.rules.length} Grundsätze, die immer gelten</small></button>
     <button class="card wt" data-act="quizStart"><span>🧠</span><b>Wissens-Quiz</b><small>${qOk}/${H.quiz.length} richtig</small>${bar(qOk / H.quiz.length)}</button></div>`;
+  h += `<div class="section-t">Regelkarten – kurz & immer anwendbar</div>${cheatsHtml()}`;
   h += `<div class="section-t">Do’s & Don’ts nach Lebensbereich</div><div class="ddgrid">${H.dd.map(a => `<button class="card dd" data-act="dd" data-id="${a.id}"><span>${a.e}</span><b>${esc(a.n)}</b></button>`).join('')}</div>`;
   h += `<div class="section-t">Artikel <span class="cnt">${nRead}/${H.wissen.length} gelesen</span></div>`;
   for (const g of H.wgroups) {
@@ -1318,7 +1392,7 @@ function viewTrig() {
 function viewRoutinesCfg() {
   const on = new Set(S.settings.routines || []), WD = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
   return `<p class="small muted intro">Wähle, welche Routinen in deinem Tagesplan erscheinen. Weniger, dafür verlässlich, ist besser als alles halbherzig. Wöchentliche Routinen erscheinen nur am angegebenen Tag.</p>` +
-    H.slots.map(sl => `<div class="section-t">${sl.e} ${esc(sl.n)}</div><div class="card">${H.routines.filter(r => r.s === sl.id).map(r => `<label class="setting ${famOn(r.fam) ? '' : 'off'}"><span><span class="lbl">${r.e} ${esc(r.n)}${r.wd ? ` <em class="wd">${r.wd.map(d => WD[d]).join(', ')}</em>` : ''}${r.fam ? ` <em class="wd">${r.fam === 'baby' ? 'mit Baby' : 'mit Kindern'}</em>` : ''}</span><br><span class="sub">${esc(r.t)}</span></span><span class="switch"><input type="checkbox" data-routinecfg="${r.id}" ${on.has(r.id) ? 'checked' : ''}><i></i></span></label>`).join('')}</div>`).join('') +
+    H.slots.map(sl => `<div class="section-t">${sl.e} ${esc(sl.n)}</div><div class="card">${H.routines.filter(r => r.s === sl.id).map(r => `<label class="setting ${famOn(r.fam) ? '' : 'off'}"><span><span class="lbl">${r.e} ${esc(rt(r.n))}${r.wd ? ` <em class="wd">${r.wd.map(d => WD[d]).join(', ')}</em>` : ''}${r.fam ? ` <em class="wd">${r.fam === 'baby' ? 'mit Baby' : 'mit Kindern'}</em>` : ''}</span><br><span class="sub">${esc(rt(r.t))}</span></span><span class="switch"><input type="checkbox" data-routinecfg="${r.id}" ${on.has(r.id) ? 'checked' : ''}><i></i></span></label>`).join('')}</div>`).join('') +
     `<button class="btn plain" style="width:100%;margin-top:14px" data-act="routinesReset">Auf Empfehlung zurücksetzen</button>`;
 }
 function viewSync() {
@@ -1348,6 +1422,7 @@ function profileSheet() {
     <div class="field"><label>Rasse / Mix</label><input type="text" name="breed" value="${esc(d.breed)}"></div>
     <div class="field"><label>Geschlecht</label>${seg('sex', ['Rüde', 'Hündin'], d.sex)}</div>
     <div class="field"><label>Kastriert</label>${seg('neutered', ['kastriert', 'unkastriert'], d.neutered)}</div>
+    <div class="field"><label>Futter: Mahlzeiten pro Tag und Gramm pro Mahlzeit</label><div class="mgrid"><label class="mini"><span>Mahlzeiten</span><input type="number" name="meals" min="1" max="6" inputmode="numeric" value="${food().meals}"></label><label class="mini"><span>Gramm je Mahlzeit</span><input type="number" name="g" min="1" inputmode="numeric" value="${food().g}"></label></div><small class="hint">Erscheint im Tagesplan, z. B. „Frühstück (45 g)“. Trainings-Leckerli aus der Tagesration abzweigen.</small></div>
     <div class="field"><label>Tierarzt / Praxis</label><input type="text" name="vet" value="${esc(d.vet)}"></div>
     <div class="field"><label>Telefon Praxis</label><input type="tel" name="vetPhone" value="${esc(d.vetPhone)}"></div>
     <div class="field"><label>Tierklinik / Notdienst (Telefon)</label><input type="tel" name="clinic" value="${esc(d.clinic)}"></div>
@@ -1404,14 +1479,29 @@ const ACT = {
   planCheckClose: el => { closeSheet(); togglePlan(el.dataset.key); render(); },
   slotToggle: el => { const id = el.dataset.id, now = el.closest('.pslot').classList.contains('open'); slotOpen[id] = !now; render(); },
   exSwap: el => {
-    const k = todayKey(), dx = dayEx(k) || { tag: [], gassi: [] }, id = el.dataset.id, inTag = dx.tag.includes(id);
-    const used = [...dx.tag, ...dx.gassi, ...((dayRec(k).exSeen) || [])];
+    const k = todayKey(), dx = dayEx(k) || [], id = el.dataset.id, it = dx.find(i => i.id === id); if (!it) return;
+    const used = [...dx.map(i => i.id), ...((dayRec(k).exSeen) || [])];
     let next;
-    if (inTag) next = recommend(12).map(e => e.id).find(x => !used.includes(x)) || H.ex.filter(e => sk(e.id).status === 'neu' && e.l === 1 && !used.includes(e.id)).map(e => e.id)[0];
-    else next = walkPick(used) !== id ? walkPick(used) : H.ex.filter(e => e.w && !used.includes(e.id)).map(e => e.id)[0];
+    if (it.p && PROG[it.p]) next = PROG[it.p].ex.find(x => EX[x] && !used.includes(x) && !isDone(EX[x]));
+    if (!next && it.slot === 'gassi') next = H.ex.filter(e => e.w && !used.includes(e.id) && !isDone(e)).map(e => e.id)[0];
+    if (!next) next = recommend(12).map(e => e.id).find(x => !used.includes(x)) || H.ex.filter(e => sk(e.id).status === 'neu' && e.l === 1 && !used.includes(e.id)).map(e => e.id)[0];
     if (!next) { toast('Keine weitere passende Übung gefunden'); return; }
-    const nx = { tag: dx.tag.map(x => x === id ? next : x), gassi: dx.gassi.map(x => x === id ? next : x) };
-    setDay(k, { ex: nx, exSeen: [...new Set([...(dayRec(k).exSeen || []), id])] }); save(); render(); toast('Neue Übung: ' + EX[next].n);
+    setDay(k, { ex: { items: dx.map(i => i.id === id ? { ...i, id: next } : i) }, exSeen: [...new Set([...(dayRec(k).exSeen || []), id])] }); save(); render(); toast('Neue Übung: ' + EX[next].n);
+  },
+  progOpen: el => progSheet(el.dataset.id),
+  focusEdit: () => { closeAllSheets(); nav.view = 'training'; nav.cat = null; nav.ex = null; nav.page = null; S.ui.tseg = 'fokus'; save(true); render(); window.scrollTo(0, 0); },
+  focusToggle: el => {
+    const id = el.dataset.id, on = new Set(S.settings.focus || []);
+    if (on.has(id)) on.delete(id); else { if (on.size >= 5) toast('Tipp: höchstens 5 Schwerpunkte gleichzeitig – sonst verzettelt man sich'); on.add(id); }
+    S.settings.focus = H.programs.map(p => p.id).filter(x => on.has(x));
+    const k = todayKey(), d = { ...dayRec(k) }; delete d.ex; delete d.exSeen; S.days[k] = d; setDay(k, {}); // heutigen Plan neu zusammenstellen
+    save(); if (sheetStack.length) { closeSheet(); setTimeout(() => progSheet(id), 340); } render();
+  },
+  cheat: el => cheatSheet(el.dataset.id),
+  logInc: el => {
+    const it = { id: uid(), type: el.dataset.v, ts: Date.now(), int: 0, trig: '', dist: '', note: '' }; if (me()) it.by = me();
+    S.incidents.push(it); save(); render(); vib(8);
+    toast('Notiert – Ursache dazuschreiben?', { label: 'Details', fn: () => openSheet({ title: 'Eintrag', body: incForm(it, false) }) });
   },
   comAdd: el => commentSheet({ t: el.dataset.t, id: el.dataset.id }),
   comEdit: el => { const c = S.comments.find(x => x.id === el.dataset.id); if (c) commentSheet(c.ref || { t: 'gen', id: '' }, c); },
@@ -1532,6 +1622,7 @@ const FORMS = {
   profile: f => {
     const d = Object.fromEntries(new FormData(f));
     for (const k of Object.keys(DEF_DOG)) if (k in d || ['sex', 'neutered'].includes(k)) S.dog[k] = String(d[k] ?? S.dog[k] ?? '').trim();
+    if (d.meals || d.g) S.settings.food = { meals: Math.max(1, Math.min(6, parseInt(d.meals, 10) || 3)), g: Math.max(1, parseInt(d.g, 10) || 45) };
     save(); closeSheet(); render(); celebrate('Steckbrief gespeichert');
   },
   walk: f => {
@@ -1673,7 +1764,8 @@ if (window.Cloud) Cloud.init({
     for (const [k, c] of Object.entries(S.checks)) for (const [key, v] of Object.entries(c)) m['c:' + k + '|' + key] = { kind: 'check', data: v }; // jedes Häkchen einzeln → kein Überschreiben zwischen Handys
     m.dog = { kind: 'dog', data: S.dog, soft: Object.keys(DEF_DOG).every(k => (S.dog[k] || '') === DEF_DOG[k]) };
     const rt = S.settings.routines || [], fam = S.settings.fam || DEF_FAM;
-    m.settings = { kind: 'settings', data: { routines: rt, fam }, soft: rt.join() === defRoutines().join() && !fam.baby && !fam.kids };
+    const foc = S.settings.focus || [], fd = S.settings.food || DEF_FOOD;
+    m.settings = { kind: 'settings', data: { routines: rt, fam, focus: foc, food: fd }, soft: rt.join() === defRoutines().join() && !fam.baby && !fam.kids && foc.join() === DEF_FOCUS.join() && fd.meals === DEF_FOOD.meals && fd.g === DEF_FOOD.g };
     if (S.lex) m.lex = { kind: 'lex', data: { items: S.lex } };
     if (S.rew) m.rew = { kind: 'rew', data: { items: S.rew } };
     m.trig = { kind: 'trig', data: { items: S.trig }, soft: !S.trig.length };
@@ -1698,6 +1790,8 @@ if (window.Cloud) Cloud.init({
     else if (r.kind === 'settings') {
       if (!del && d && Array.isArray(d.routines)) S.settings.routines = d.routines;
       if (!del && d && d.fam) S.settings.fam = { ...DEF_FAM, ...d.fam };
+      if (!del && d && Array.isArray(d.focus)) S.settings.focus = d.focus;
+      if (!del && d && d.food) S.settings.food = { ...DEF_FOOD, ...d.food };
     }
     else if (r.kind === 'lex') S.lex = del || !d ? null : d.items;
     else if (r.kind === 'rew') S.rew = del || !d ? null : d.items;
