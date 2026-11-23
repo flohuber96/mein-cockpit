@@ -55,8 +55,25 @@ const Moves = (function () {
     for (const k in J) if (k !== 'B' && k !== 'U') { J[k][0] += dx; J[k][1] += dy; }
     return J;
   }
+  // Winkel immer auf dem kürzesten Weg überblenden (340° → 20° dreht 40°, nicht 320° rückwärts herum)
+  const wrapD = d => ((d % 360) + 540) % 360 - 180;
+  // Seitenansicht: Knie beugen nur nach hinten; Unterschenkel/Unterarm werden
+  // relativ zum Oberschenkel/Oberarm überblendet, damit Gelenke nie „falsch herum" durchschlagen
+  const inWin = (x, lo) => { x = ((x - lo) % 360 + 360) % 360; return lo + (x === 0 ? 360 : x); };
+  function limb(a, b, k, s, lo) {
+    const p = s(a[0], b[0]), ra = lo == null ? wrapD(a[1][0] - a[0][0]) : inWin(a[1][0] - a[0][0], lo);
+    const rb = lo == null ? ra + wrapD(b[1][0] - b[0][0] - ra) : inWin(b[1][0] - b[0][0], lo);
+    const c = [p, [p[0] + lerp(ra, rb, k), lerp(a[1][1], b[1][1], k)]];
+    if (a[2]) { const fa = wrapD(a[2][0] - a[1][0]), fb = wrapD(b[2][0] - b[1][0]); c.push([c[1][0] + lerp(fa, fb, k), lerp(a[2][1], b[2][1], k)]); }
+    return c;
+  }
   function mix(a, b, k) {
-    const s = (x, y) => [lerp(x[0], y[0], k), lerp(x[1], y[1], k)];
+    const s = (x, y) => [x[0] + wrapD(y[0] - x[0]) * k, lerp(x[1], y[1], k)];
+    if (a.v !== 'front') return {
+      v: a.v, at: [a.at[0], lerp(a.at[1], b.at[1], k), lerp(a.at[2], b.at[2], k)],
+      t: s(a.t, b.t), h: s(a.h, b.h), tc: lerp(a.tc, b.tc, k), se: lerp(a.se, b.se, k), sw: lerp(a.sw, b.sw, k), hw: lerp(a.hw, b.hw, k),
+      a1: limb(a.a1, b.a1, k, s, null), a2: limb(a.a2, b.a2, k, s, null), l1: limb(a.l1, b.l1, k, s, -200), l2: limb(a.l2, b.l2, k, s, -200)
+    };
     return {
       v: a.v, at: [a.at[0], lerp(a.at[1], b.at[1], k), lerp(a.at[2], b.at[2], k)],
       t: s(a.t, b.t), h: s(a.h, b.h), tc: lerp(a.tc, b.tc, k), se: lerp(a.se, b.se, k), sw: lerp(a.sw, b.sw, k), hw: lerp(a.hw, b.hw, k),
@@ -66,26 +83,29 @@ const Moves = (function () {
   }
   // Zwei-Glieder-Kinematik: Arm/Bein so beugen, dass Hand bzw. Knöchel ein Ziel erreicht.
   // ik: [[glied, ziel, beugung]] · glied 'a1'|'a2'|'l1'|'l2' · ziel [x, y] absolut oder
-  // ['K2', dx, dy] (Gelenk derselben Pose) · beugung: mittleres Gelenk 'f' vorn, 'b' hinten, 'u' oben, 'd' unten
+  // ['K2', dx, dy] (Gelenk derselben Pose; dy 'g' = Bodenhöhe) · beugung: mittleres Gelenk 'f' vorn, 'b' hinten, 'u' oben, 'd' unten
   const ROOT = { a1: ['S1', 'ua', 'fa'], a2: ['S2', 'ua', 'fa'], l1: ['H1', 'th', 'sh'], l2: ['H2', 'th', 'sh'] };
   const deg = (dx, dy) => Math.atan2(dx, dy) / R;
   const near = (a, ref) => { while (a - ref > 180) a -= 360; while (ref - a > 180) a += 360; return a; };
-  function applyIK(p, list) {
+  // Ohne eigene Angabe folgt die andere Körperseite (a2/l2) dem berechneten Glied
+  function applyIK(p, list, src) {
     (list || []).forEach(([lb, tg, bend]) => {
       const J = fk(p), [rk, k1, k2] = ROOT[lb], r = J[rk], L1 = LEN[k1], L2 = LEN[k2];
-      const t = typeof tg[0] === 'string' ? [J[tg[0]][0] + (tg[1] || 0), J[tg[0]][1] + (tg[2] || 0)] : tg;
+      const t = typeof tg[0] === 'string' ? [J[tg[0]][0] + (tg[1] || 0), tg[2] === 'g' ? GY - 4 : J[tg[0]][1] + (tg[2] || 0)] : tg;
       const dx = t[0] - r[0], dy = t[1] - r[1], d = Math.max(Math.abs(L1 - L2) + 0.01, Math.min(L1 + L2 - 0.01, Math.hypot(dx, dy)));
       const base = deg(dx, dy), al = Math.acos((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d)) / R;
       const cand = [base + al, base - al].map(a1 => { const m = [r[0] + Math.sin(a1 * R) * L1, r[1] + Math.cos(a1 * R) * L1]; return { a1, m, a2: deg(t[0] - m[0], t[1] - m[1]) }; });
       const score = c => bend === 'f' ? c.m[0] : bend === 'b' ? -c.m[0] : bend === 'u' ? -c.m[1] : c.m[1];
       const c = score(cand[0]) >= score(cand[1]) ? cand[0] : cand[1];
       p[lb][0] = [near(c.a1, p[lb][0][0]), 1]; p[lb][1] = [near(c.a2, p[lb][1][0]), 1];
+      const tw = lb[1] === '1' ? lb[0] + '2' : null;
+      if (tw && src && src[tw] == null && !list.some(x => x[0] === tw)) p[tw] = p[lb].map(x => x.slice());
     });
     return p;
   }
   // Pose mit Zwangsbedingung: Parameter so wählen, dass ein Gelenk eine Höhe/Position erreicht
   function solve(fr, v) {
-    if (!fr.fn) return fr.ik ? applyIK(norm(fr, v), fr.ik) : norm(fr, v);
+    if (!fr.fn) return fr.ik ? applyIK(norm(fr, v), fr.ik, fr) : norm(fr, v);
     const [j, ax, val, lo, hi] = fr.fit, i = ax === 'x' ? 0 : 1;
     const g = x => fk(norm(fr.fn(x), v))[j][i] - val;
     let a = lo, b = hi, ga = g(a), gb = g(b), x;
@@ -93,7 +113,52 @@ const Moves = (function () {
     else { for (let n = 0; n < 40; n++) { const m = (a + b) / 2, gm = g(m); if (ga * gm <= 0) { b = m; gb = gm; } else { a = m; ga = gm; } } x = (a + b) / 2; }
     const p = norm(fr.fn(x), v);
     if (fr.hd != null) p.hd = fr.hd; if (fr.mv != null) p.mv = fr.mv;
-    return fr.ik ? applyIK(p, fr.ik) : p;
+    return fr.ik ? applyIK(p, fr.ik, fr.fn(x)) : p;
+  }
+
+  /* ── Fixpunkte ──
+     Hand, Knöchel oder Zehen, die in allen Schlüsselposen an derselben Stelle liegen (Boden, Bank,
+     Stange, Wand), bleiben auch in jedem Zwischenbild exakt dort: Arm bzw. Bein wird per Kinematik
+     nachgeführt, statt nur die Winkel zu überblenden (sonst rutschen Füße oder tauchen in den Boden).
+     spec.pin: false = aus, ['A2'] = diesen Punkt immer festhalten · spec.free: ['A2'] = nicht festhalten */
+  const PIN_LIMB = { W1: 'a1', W2: 'a2', A1: 'l1', A2: 'l2', T1: 'l1', T2: 'l2' };
+  const ANC_LIMB = { W1: 'a1', E1: 'a1', W2: 'a2', E2: 'a2', A1: 'l1', K1: 'l1', T1: 'l1', A2: 'l2', K2: 'l2', T2: 'l2' };
+  const LJ = { a1: ['S1', 'E1', 'W1', 'ua', 'fa'], a2: ['S2', 'E2', 'W2', 'ua', 'fa'], l1: ['H1', 'K1', 'A1', 'th', 'sh'], l2: ['H2', 'K2', 'A2', 'th', 'sh'] };
+  const cross = (r, m, e) => (m[0] - r[0]) * (e[1] - r[1]) - (m[1] - r[1]) * (e[0] - r[0]);
+  function findPins(spec, F) {
+    if (spec.pin === false || F.length < 2) return [];
+    const Js = F.map(fk), anc = ANC_LIMB[F[0].at[0]], free = spec.free || [], out = [];
+    ['a1', 'a2', 'l1', 'l2'].forEach(lb => {
+      if (lb === anc) return;
+      if (F.some(p => p[lb].slice(0, 2).some(sg => Math.abs(Math.abs(sg[1]) - 1) > 0.01))) return; // verkürzt dargestellt
+      const ends = lb[0] === 'a' ? ['W' + lb[1]] : ['A' + lb[1], 'T' + lb[1]];
+      // Automatisch nur echte Bodenkontakte (Hand bzw. Fuß in jeder Pose am Boden); Bank, Wand, Stange per spec.pin
+      const force = Array.isArray(spec.pin) ? spec.pin : [], n = lb[1];
+      const onGround = J => lb[0] === 'a' ? J['W' + n][1] >= 120.5 : Math.max(J['A' + n][1], J['T' + n][1]) >= 120.5;
+      const j = ends.find(e => force.includes(e)) || (!spec.ng && Js.every(onGround) ? ends.find(e => !free.includes(e) &&
+        Js.every(J => Math.hypot(J[e][0] - Js[0][e][0], J[e][1] - Js[0][e][1]) <= 10)) : null);
+      if (!j) return;
+      const [r, m, e] = LJ[lb], sgn = Math.sign(Math.round(cross(Js[0][r], Js[0][m], Js[0][e]) * 10));
+      out.push({ lb, j, tgt: Js[0][j].slice(), sgn });
+    });
+    return out;
+  }
+  function constrain(c, p) {
+    if (!c.pins || !c.pins.length) return p;
+    const q = Object.assign({}, p); ['a1', 'a2', 'l1', 'l2'].forEach(k => { q[k] = p[k].map(x => x.slice()); });
+    c.pins.forEach(pn => {
+      const J = fk(q), [rk, , , k1, k2] = LJ[pn.lb], r = J[rk], L1 = LEN[k1], L2 = LEN[k2];
+      let t = pn.tgt;
+      if (pn.j[0] === 'T') { const f = q[pn.lb][2], v = vec(f[0], LEN.ft * f[1]); t = [t[0] - v[0], t[1] - v[1]]; }
+      const dx = t[0] - r[0], dy = t[1] - r[1], d = Math.max(Math.abs(L1 - L2) + 0.01, Math.min(L1 + L2 - 0.01, Math.hypot(dx, dy)));
+      const base = deg(dx, dy), al = Math.acos((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d)) / R;
+      const cands = [base + al, base - al].map(a1 => { const m = [r[0] + Math.sin(a1 * R) * L1, r[1] + Math.cos(a1 * R) * L1]; return { a1, m, a2: deg(t[0] - m[0], t[1] - m[1]) }; });
+      const cur = q[pn.lb][0][0];
+      const pick = pn.sgn ? cands.find(cd => Math.sign(cross(r, cd.m, t)) === pn.sgn) || cands[0]
+        : Math.abs(near(cands[0].a1, cur) - cur) <= Math.abs(near(cands[1].a1, cur) - cur) ? cands[0] : cands[1];
+      q[pn.lb][0] = [near(pick.a1, cur), 1]; q[pn.lb][1] = [near(pick.a2, q[pn.lb][1][0]), 1];
+    });
+    return q;
   }
 
   /* ── Ablauf ── */
@@ -114,15 +179,34 @@ const Moves = (function () {
     });
     const key = spec.key != null ? spec.key : n - 1;
     const c = { spec, F, steps, T: Math.max(T, 0.01), key };
+    c.pins = findPins(spec, F);
+    for (let i = 0; i < n; i++) F[i] = constrain(c, F[i]);
+    // Kontakte am eigenen Körper (Hand am Knie, Knöchel auf dem Knie): gelten auch zwischen den Posen
+    c.links = spec.f.map(fr => ((fr && fr.ik) || []).filter(e => typeof e[1][0] === 'string'));
     c.props = (spec.pr || []).map(pr => resolveProp(pr, F));
     c.box = bbox(c);
     cache[id] = c;
     return c;
   }
+  function between(c, a, b, k) {
+    let q = mix(c.F[a], c.F[b], k);
+    const la = c.links[a] || [], lb = c.links[b] || [], list = [];
+    la.forEach(ea => {
+      const eb = lb.find(x => x[0] === ea[0] && x[1][0] === ea[1][0]); if (!eb) return;
+      const o = n => typeof ea[1][n] === 'number' && typeof eb[1][n] === 'number' ? lerp(ea[1][n], eb[1][n], k) : eb[1][n];
+      list.push([ea[0], [ea[1][0], o(1) || 0, o(2) == null ? 0 : o(2)], eb[2]]);
+    });
+    if (list.length) {
+      const same = (f, x, y) => f[x].every((v, i) => Math.abs(v[0] - f[y][i][0]) < 0.01);
+      const src = {}; ['a', 'l'].forEach(t => { if (!(same(c.F[a], t + '1', t + '2') && same(c.F[b], t + '1', t + '2'))) src[t + '2'] = 1; });
+      q = applyIK(q, list, src);
+    }
+    return constrain(c, q);
+  }
   function poseAt(c, t) {
     t = t % c.T;
     for (const s of c.steps) {
-      if (t < s.t0 + s.mv) return s.mv <= 0.002 ? c.F[s.b] : mix(c.F[s.a], c.F[s.b], ease(Math.max(0, (t - s.t0) / s.mv)));
+      if (t < s.t0 + s.mv) return s.mv <= 0.002 ? c.F[s.b] : between(c, s.a, s.b, ease(Math.max(0, (t - s.t0) / s.mv)));
       if (t < s.t0 + s.mv + s.hd) return c.F[s.b];
     }
     return c.F[c.steps[c.steps.length - 1].b];
@@ -299,6 +383,6 @@ const Moves = (function () {
   }
   let pend = false;
   if ('MutationObserver' in window) new MutationObserver(() => { if (pend) return; pend = true; requestAnimationFrame(() => { pend = false; scan(document); }); }).observe(document.documentElement, { childList: true, subtree: true });
-  return { has, thumb, scan, prep, fk, poseAt, _cache: cache, _frame: frameSVG };
+  return { has, thumb, scan, prep, fk, poseAt, _cache: cache, _frame: frameSVG, LEN, GY };
 })();
 if (typeof module !== 'undefined') module.exports = Moves;
