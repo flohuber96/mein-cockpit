@@ -58,7 +58,7 @@ const KEY = 'baby.v1';
 function fresh() {
   return {
     v: 1, sid: uid(), log: [], todos: [], growth: [], vitd: {},
-    settings: { name: '', birth: '', theme: 'auto', vitd: true, feedInt: 180, feedFrom: 'start', nightOn: false, nightInt: 240, scoops: 3, water: 90, stufe: 7 },
+    settings: { name: '', birth: '', theme: 'auto', vitd: true, feedInt: 180, feedFrom: 'start', nightOn: false, nightInt: 240, scoops: 3, water: 90, stufe: 7, how: 'auto' },
     ui: { view: 'today' },
   };
 }
@@ -107,7 +107,8 @@ applyTheme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 
 /* ───────── Auswertung ───────── */
-const sorted = () => [...S.log].sort((a, b) => b.s - a.s);
+// Neueste zuerst; bei gleicher Uhrzeit der zuletzt angelegte Eintrag (IDs beginnen mit dem Zeitstempel)
+const sorted = () => [...S.log].sort((a, b) => b.s - a.s || (b.id > a.id ? 1 : b.id < a.id ? -1 : 0));
 const endOf = x => x.e || (x.run ? Date.now() : x.s);
 const lastWhere = fn => sorted().find(fn);
 
@@ -192,25 +193,31 @@ function confirmSheet(text, okLabel, onOk) {
 function newDraft(day) {
   const main = !day, s = main ? nextSide() : null;
   return { id: null, day: day || dkey(new Date()), von: '', vonSet: !main, feed: true, side: s ? [s] : [], ml: 0,
-    pu: null, wa: null, st: null, poo: false, pee: false, note: '', mix: false, e: null, old: [], pristine: main };
+    how: null, pu: null, wa: null, st: null, poo: false, pee: false, note: '', mix: false, e: null, old: [], pristine: main };
 }
 let F = newDraft(), E = null;
 const formOf = fid => fid === 'edit' ? E : F;
+// Zubereitung: „auto“ = Milchautomat (Stufe + Wasser), „hand“ = per Hand (Löffel + Wasser).
+// Ältere Einträge ohne Angabe mit Löffeln gelten als „per Hand“.
+const entryHow = x => x.how || (x.st ? 'auto' : x.pu ? 'hand' : 'auto');
+// Vorgewählt ist die zuletzt genutzte Zubereitung (beim ersten Mal der Automat)
+const lastHow = () => { const x = lastWhere(e => isFeed(e) && e.how); return x ? x.how : S.settings.how; };
 // Rezept des Eintrags (ohne eigene Werte = Standard aus den Einstellungen)
-const rec = f => ({ st: f.st ?? S.settings.stufe, pu: f.pu ?? S.settings.scoops, wa: f.wa ?? S.settings.water });
+const rec = f => ({ how: f.how ?? lastHow(), st: f.st ?? S.settings.stufe, pu: f.pu ?? S.settings.scoops, wa: f.wa ?? S.settings.water });
 const recChanged = f => f.st != null || f.pu != null || f.wa != null;
+const recText = r => r.how === 'hand' ? `${num(r.pu)} Löffel · ${r.wa} ml` : `Stufe ${num(r.st)} · ${r.wa} ml`;
 
 function draftFromEntry(x) {
   return {
     id: x.id, day: dkey(new Date(x.s)), von: hm(x.s), vonSet: true, feed: isFeed(x), side: [...x.side], ml: x.ml || 0,
-    pu: x.pu ?? null, wa: x.wa ?? null, st: x.st ?? null, poo: !!x.poo, pee: !!x.pee, note: x.note || '',
+    how: isFeed(x) ? entryHow(x) : null, pu: x.pu ?? null, wa: x.wa ?? null, st: x.st ?? null, poo: !!x.poo, pee: !!x.pee, note: x.note || '',
     mix: false, e: x.e || null, old: [...x.kinds], pristine: false,
   };
 }
 
 // Mischverhältnis prüfen: der Standard (z. B. 3 Löffel : 90 ml) gibt das Verhältnis vor
 function mixHint(f) {
-  if (!f.feed) return '';
+  if (!f.feed || rec(f).how !== 'hand') return '';
   const { pu, wa } = rec(f), per = S.settings.water / S.settings.scoops;
   if (Math.abs(pu * per - wa) < per / 2) return '';
   return `<div class="mixhint">⚠︎ Verhältnis prüfen: für ${wa} ml üblich ${num(Math.round(wa / per * 2) / 2)} Löffel (1 Löffel je ${num(per)} ml)</div>`;
@@ -231,8 +238,10 @@ function formHTML(f, fid) {
       ${f.feed ? `<div class="sides"><small>Seite</small>${sideBtn('L')}${sideBtn('R')}</div>` : ''}
     </div>
     ${f.feed ? `<div class="recipe ${f.mix ? 'open' : ''}">
-      <button type="button" class="rc-head" data-act="mixTg" aria-expanded="${f.mix}"><span class="lbl">Rezept</span><b>Stufe ${num(r.st)}</b><span class="rc-sub">${num(r.pu)} Löffel · ${r.wa} ml</span><span class="rc-edit">${f.mix ? 'Fertig' : 'Anpassen'}</span></button>
-      ${f.mix ? `<div class="rc-body">${miniStep('Stufe', 'st', num(r.st), '', 1)}${miniStep('Löffel', 'pu', num(r.pu), '', 1)}${miniStep('Wasser ml', 'wa', r.wa, '', 10)}
+      <button type="button" class="rc-head" data-act="mixTg" aria-expanded="${f.mix}"><span class="lbl">Rezept</span><b>${r.how === 'hand' ? '✋ Per Hand' : '🤖 Automat'}</b><span class="rc-sub">${recText(r)}</span><span class="rc-edit">${f.mix ? 'Fertig' : 'Anpassen'}</span></button>
+      ${f.mix ? `<div class="rc-body">
+        <div class="seg rc-how"><button type="button" data-act="howSet" data-v="auto" class="${r.how !== 'hand' ? 'on' : ''}">🤖 Milchautomat</button><button type="button" data-act="howSet" data-v="hand" class="${r.how === 'hand' ? 'on' : ''}">✋ Per Hand</button></div>
+        ${r.how === 'hand' ? miniStep('Löffel', 'pu', num(r.pu), '', 1) : miniStep('Stufe', 'st', num(r.st), '', 1)}${miniStep('Wasser ml', 'wa', r.wa, '', 10)}
         ${recChanged(f) ? '<button type="button" class="rc-reset" data-act="mixReset">↺ Standard</button>' : ''}</div>` : ''}
     </div>
     ${mixHint(f)}
@@ -275,7 +284,7 @@ function draftToEntry(f, main) {
   return {
     id: f.id || uid(), s, e: f.e && f.e > s ? f.e : null, kinds: KINDS.map(k => k.k).filter(k => kinds.includes(k)),
     side: f.feed ? [...f.side] : [], ml: f.feed && f.ml > 0 ? f.ml : null, poo: f.poo, pee: f.pee, note: f.note.trim(), run: false,
-    ...(f.feed ? { st: r.st, pu: r.pu, wa: r.wa } : {}),
+    ...(f.feed ? (r.how === 'hand' ? { how: 'hand', pu: r.pu, wa: r.wa } : { how: 'auto', st: r.st, wa: r.wa }) : {}),
   };
 }
 const hasContent = x => x.kinds.length || x.poo || x.pee || x.ml || x.note;
@@ -400,13 +409,14 @@ function logHTML() {
 }
 function rowHTML(x) {
   const feed = isFeed(x);
-  const custom = x.pu && (x.pu !== S.settings.scoops || x.wa !== S.settings.water || (x.st ?? S.settings.stufe) !== S.settings.stufe);
+  const how = entryHow(x);
+  const custom = feed && (x.pu || x.st) && (how === 'hand' ? (x.pu !== S.settings.scoops || x.wa !== S.settings.water) : ((x.st ?? S.settings.stufe) !== S.settings.stufe || (x.wa ?? S.settings.water) !== S.settings.water));
   const icon = feed ? '🍼' : isSleep(x) ? '😴' : x.poo || x.pee ? '🧷' : '📝';
   // Fläschchen ist der Normalfall: nur das Symbol. Text nur bei Windel/Notiz und alten Arten (Brust, Zusatz, Schlaf)
   const label = feed ? (x.kinds.some(k => k !== 'flasche' && FEED.includes(k)) ? kindNames(x) : '') : isSleep(x) ? 'Schlaf' : x.poo || x.pee ? 'Windel' : 'Notiz';
   return `<button class="lrow" data-act="edit" data-id="${x.id}">
     <span class="lt">${hm(x.s)}</span>
-    <span class="lk"><i>${icon}</i><span>${esc(label)}${custom ? `<small class="mix">Stufe ${num(x.st ?? S.settings.stufe)} · ${num(x.pu)} Lö. · ${x.wa} ml</small>` : ''}</span></span>
+    <span class="lk"><i>${icon}</i><span>${esc(label)}${feed && (x.pu || x.st) && (custom || how === 'hand') ? `<small class="mix ${custom ? '' : 'std'}">${how === 'hand' ? `Hand · ${num(x.pu)} Lö.` : `Stufe ${num(x.st ?? S.settings.stufe)}`} · ${x.wa ?? S.settings.water} ml</small>` : ''}</span></span>
     <span class="ls">${x.side.map(sd => `<i>${sd}</i>`).join('')}</span>
     <span class="lm">${x.ml ? `${x.ml}<small> ml</small>` : ''}</span>
     <span class="ld">${x.poo ? '💩' : ''}${x.pee ? '💧' : ''}</span>
@@ -501,9 +511,9 @@ function viewMore() {
   </div>
   <div class="section-t">Fläschchen-Rezept (Standard)</div>
   <div class="card">
-    <div class="setting"><span class="lbl">Stufe</span><span class="mini"><button data-act="defStep" data-k="stufe" data-n="-1" aria-label="weniger">−</button><b>${num(st.stufe)}</b><small></small><button data-act="defStep" data-k="stufe" data-n="1" aria-label="mehr">+</button></span></div>
-    <div class="setting"><span class="lbl">Pulver</span><span class="mini"><button data-act="defStep" data-k="scoops" data-n="-1" aria-label="weniger">−</button><b>${num(st.scoops)}</b><small>Löffel</small><button data-act="defStep" data-k="scoops" data-n="1" aria-label="mehr">+</button></span></div>
-    <div class="setting"><span class="lbl">Wasser</span><span class="mini"><button data-act="defStep" data-k="water" data-n="-10" aria-label="weniger">−</button><b>${st.water}</b><small>ml</small><button data-act="defStep" data-k="water" data-n="10" aria-label="mehr">+</button></span></div>
+    <div class="setting"><span><span class="lbl">🤖 Automat: Stufe</span></span><span class="mini"><button data-act="defStep" data-k="stufe" data-n="-1" aria-label="weniger">−</button><b>${num(st.stufe)}</b><small></small><button data-act="defStep" data-k="stufe" data-n="1" aria-label="mehr">+</button></span></div>
+    <div class="setting"><span class="lbl">✋ Per Hand: Löffel</span><span class="mini"><button data-act="defStep" data-k="scoops" data-n="-1" aria-label="weniger">−</button><b>${num(st.scoops)}</b><small>Löffel</small><button data-act="defStep" data-k="scoops" data-n="1" aria-label="mehr">+</button></span></div>
+    <div class="setting"><span><span class="lbl">Wasser</span><br><span class="sub">für Automat und per Hand</span></span><span class="mini"><button data-act="defStep" data-k="water" data-n="-10" aria-label="weniger">−</button><b>${st.water}</b><small>ml</small><button data-act="defStep" data-k="water" data-n="10" aria-label="mehr">+</button></span></div>
   </div>
   <div class="section-t">Anzeige</div>
   <div class="card">
@@ -531,11 +541,11 @@ function viewMore() {
   <div class="card" style="padding:14px 16px;font-size:14px;line-height:1.55;color:var(--t2)">
     • <b>Fläschchen</b> ist beim neuen Eintrag schon an, das Rezept steht auf dem Standard (oben änderbar). Nur eine Windel? Fläschchen antippen zum Ausschalten.<br>
     • <b>L/R</b> = wie das Baby beim Füttern liegt. Die andere Seite ist schon vorgewählt.<br>
-    • <b>Rezept → Anpassen</b> ändert Stufe, Pulver und Wasser nur für diesen Eintrag.<br>
+    • <b>Rezept → Anpassen</b>: Milchautomat (Stufe) oder per Hand (Löffel) wählen und die Menge nur für diesen Eintrag ändern. Die zuletzt genutzte Zubereitung ist beim nächsten Mal vorgewählt.<br>
     • Eintrag antippen zum Bearbeiten oder Löschen.<br>
     • Uhrzeit nach Mitternacht? Eine spätere Uhrzeit als jetzt wird automatisch auf gestern gelegt.
   </div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v2.0</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v2.1</p>`;
 }
 
 /* ───────── Aktionen ───────── */
@@ -603,6 +613,7 @@ const ACT = {
     const k = el.dataset.k, lim = { st: [1, 20], pu: [1, 12], wa: [10, 300] }[k];
     f[k] = Math.max(lim[0], Math.min(lim[1], rec(f)[k] + +el.dataset.n)); vib(); rerenderForm(fid);
   },
+  howSet(el, f, fid) { f.how = el.dataset.v; vib(); rerenderForm(fid); },
   mixReset(el, f, fid) { f.st = f.pu = f.wa = null; vib(); rerenderForm(fid); },
   defStep(el) {
     const k = el.dataset.k, lim = { stufe: [1, 20], scoops: [1, 12], water: [10, 300] }[k];
@@ -678,10 +689,10 @@ const ACT = {
   importData() { $('#importFile').click(); },
   exportCsv() {
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['Datum', 'Von', 'Bis', 'Dauer (min)', 'Art', 'Seite', 'Getrunken (ml)', 'Stufe', 'Pulver (Löffel)', 'Wasser (ml)', 'Groß', 'Klein', 'Notiz']];
+    const rows = [['Datum', 'Von', 'Bis', 'Dauer (min)', 'Art', 'Seite', 'Getrunken (ml)', 'Zubereitung', 'Stufe', 'Pulver (Löffel)', 'Wasser (ml)', 'Groß', 'Klein', 'Notiz']];
     for (const x of [...S.log].sort((a, b) => a.s - b.s)) {
       const d = new Date(x.s);
-      rows.push([`${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`, hm(x.s), x.e ? hm(x.e) : '', x.e ? Math.round((x.e - x.s) / MIN) : '', kindNames(x), x.side.join('+'), x.ml || '', x.st || '', x.pu || '', x.wa || '', x.poo ? 'x' : '', x.pee ? 'x' : '', x.note]);
+      rows.push([`${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`, hm(x.s), x.e ? hm(x.e) : '', x.e ? Math.round((x.e - x.s) / MIN) : '', kindNames(x), x.side.join('+'), x.ml || '', isFeed(x) && (x.pu || x.st) ? (entryHow(x) === 'hand' ? 'per Hand' : 'Automat') : '', x.st || '', x.pu || '', x.wa || '', x.poo ? 'x' : '', x.pee ? 'x' : '', x.note]);
     }
     const csv = '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n');
     exportFile(csv, `baby-protokoll-${dkey(new Date())}.csv`, 'text/csv', 'Baby-Protokoll');
@@ -791,7 +802,7 @@ if (window.Cloud) Cloud.init({
     for (const [k, [p, arr]] of Object.entries(CLOUD_ARR)) for (const x of S[arr]) m[p + x.id] = { kind: k, data: x };
     for (const d of Object.keys(S.vitd)) if (S.vitd[d]) m['v:' + d] = { kind: 'vitd', data: true };
     const st = {}, def = fresh().settings;
-    for (const k of ['name', 'birth', 'vitd', 'feedInt', 'nightOn', 'nightInt', 'scoops', 'water', 'stufe']) st[k] = S.settings[k];
+    for (const k of ['name', 'birth', 'vitd', 'feedInt', 'nightOn', 'nightInt', 'scoops', 'water', 'stufe', 'how']) st[k] = S.settings[k];
     m.settings = { kind: 'settings', data: st, soft: Object.keys(st).every(k => st[k] === def[k]) };
     return m;
   },
