@@ -3,21 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Essensplaner</title>
-<meta name="description" content="Wochenplan, Einkaufsliste und Rezepte – alles in einer App.">
+<title>Haushalt – Essen, Einkauf & Aufgaben</title>
+<meta name="description" content="Essensplan, Rezepte, Einkaufsliste, Haushalts-Routinen und To-dos – alles in einer App.">
 <meta name="theme-color" content="#f6f4f1" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Essen">
+<meta name="apple-mobile-web-app-title" content="Haushalt">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<noscript><p style="padding:24px;font:16px sans-serif">Der Essensplaner braucht JavaScript. Bitte im Browser aktivieren.</p></noscript>
+<noscript><p style="padding:24px;font:16px sans-serif">Die Haushalts-App braucht JavaScript. Bitte im Browser aktivieren.</p></noscript>
 <header class="top">
   <h1 id="title">Wochenplan</h1>
   <div id="hact" class="hact"></div>
@@ -26,7 +26,7 @@
 <main id="main" aria-live="off"></main>
 
 <nav class="tabbar" id="tabbar" aria-label="Bereiche">
-  <div class="brand"><img src="icon-192.png" alt="" width="34" height="34"><b>Essensplaner</b></div>
+  <div class="brand"><img src="icon-192.png" alt="" width="34" height="34"><b>Haushalt</b></div>
   <button data-act="tab" data-view="plan">
     <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>
     <span>Plan</span>
@@ -35,13 +35,17 @@
     <svg viewBox="0 0 24 24"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3M9 7.5h6"/></svg>
     <span>Rezepte</span>
   </button>
-  <button data-act="tab" data-view="swipe">
-    <svg viewBox="0 0 24 24"><path d="M12 22c4 0 7-2.7 7-7 0-4-3-6.5-4-10-2 1.5-3 3.5-3 5.5C11 9 10 8 9.5 6.5 7 8.5 5 11.5 5 15c0 4.3 3 7 7 7z"/></svg>
-    <span>Tindern</span>
-  </button>
   <button data-act="tab" data-view="shop">
     <svg viewBox="0 0 24 24"><path d="M2.5 3.5h2.6l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h8.7a1.5 1.5 0 0 0 1.5-1.1L21 7.5H6"/><circle cx="9.5" cy="20" r="1.3"/><circle cx="17.5" cy="20" r="1.3"/></svg>
     <span>Einkauf</span><i class="badge" id="shopBadge" hidden></i>
+  </button>
+  <button data-act="tab" data-view="home">
+    <svg viewBox="0 0 24 24"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/></svg>
+    <span>Haushalt</span><i class="badge" id="homeBadge" hidden></i>
+  </button>
+  <button data-act="tab" data-view="todo">
+    <svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="m8 9 1.6 1.6L12.5 7.8M8 15l1.6 1.6 2.9-2.8M14.5 9.5H17M14.5 15.5H17"/></svg>
+    <span>To-dos</span><i class="badge" id="todoBadge" hidden></i>
   </button>
   <button data-act="tab" data-view="more">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -69,5 +73,7 @@
 <script src="tinder.js"></script>
 <script src="photos.js"></script>
 <script src="extras.js"></script>
+<script src="haushalt-data.js"></script>
+<script src="haushalt.js"></script>
 </body>
 </html>

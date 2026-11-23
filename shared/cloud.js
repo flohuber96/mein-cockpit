@@ -20,6 +20,11 @@
      guardDeletes(l, n)   → true = diese Löschungen (l = [{id, kind}], n = Anzahl bekannter Zeilen)
                             sind verdächtig. Sie werden erst nach Rückfrage hochgeladen.
                             Gewollte Massenlöschungen vorher mit Cloud.allowBulkDelete() ankündigen.
+     kinds                → Liste der Datensatz-Arten, die diese App kennt. Zeilen anderer Arten (z. B. von einer
+                            neueren App-Version) werden ignoriert statt gelöscht.
+     protect              → Arten, deren Löschung nur gilt, wenn sie von einer aktuellen App-Version stammt.
+                            Ältere Versionen kennen diese Arten nicht und würden sie sonst versehentlich löschen –
+                            solche Löschungen werden rückgängig gemacht (der eigene Stand wird neu hochgeladen).
 */
 (function () {
   const AUTH_KEY = 'cloud.auth';
@@ -178,7 +183,10 @@ create trigger app_items_touch before insert or update on public.app_items
         for (const r of rows) {
           if (!r || typeof r.id !== 'string') continue;
           const t = Date.parse(r.updated_at); if (t > top) { top = t; topStr = r.updated_at; }
+          if (C.kinds && !C.kinds.includes(r.kind)) continue; // unbekannte Art: nicht anfassen, nie löschen
           const local = cur0[r.id] && cur0[r.id].j, snap = p.snap[r.id] && p.snap[r.id].j;
+          // Löschung ohne Kennzeichen einer aktuellen Version → stammt von einer alten App: ignorieren und neu hochladen
+          if (r.deleted && !(r.data && r.data._del) && C.protect && C.protect.includes(r.kind) && local !== undefined) { delete p.snap[r.id]; continue; }
           if (!p.adopt && local !== snap) continue; // hier geändert → wird gleich hochgeladen und gewinnt
           const remote = r.deleted ? undefined : canon(r.data);
           if (remote !== local) {
@@ -204,7 +212,7 @@ create trigger app_items_touch before insert or update on public.app_items
         const part = up.slice(i, i + 500);
         await rest(a, 'app_items?on_conflict=owner,app,id', {
           method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-          body: JSON.stringify(part.map(r => ({ owner: a.session.uid, app: C.app, id: r.id, kind: r.kind, data: r.data, deleted: r.deleted }))),
+          body: JSON.stringify(part.map(r => ({ owner: a.session.uid, app: C.app, id: r.id, kind: r.kind, data: r.deleted ? { _del: 1 } : r.data, deleted: r.deleted }))),
         });
         for (const r of part) { if (r.deleted) delete p.snap[r.id]; else p.snap[r.id] = { k: r.kind, j: r._j }; }
         pushed += part.length;
@@ -438,6 +446,13 @@ create trigger app_items_touch before insert or update on public.app_items
 .cloud-hold{padding:14px;margin-top:10px;border:2px solid #e8590c}.cloud-hold p{font-size:14px;line-height:1.5;color:var(--t2);margin:6px 0 10px}`;
   document.head.appendChild(css);
 
+  async function peek(app, kind) {
+    if (!isOn()) return [];
+    const a = auth();
+    const rows = await rest(a, `app_items?select=id,kind,data,deleted&app=eq.${encodeURIComponent(app)}&kind=eq.${encodeURIComponent(kind)}&deleted=eq.false&limit=1000`);
+    return (Array.isArray(rows) ? rows : []).filter(r => r && r.kind === kind && !r.deleted && r.data && typeof r.data === 'object').map(r => r.data);
+  }
+
   window.Cloud = {
     init(cfg) {
       C = cfg; P = null;
@@ -445,6 +460,6 @@ create trigger app_items_touch before insert or update on public.app_items
       if (cfg.rebuilt) { const p = state(); if (Object.keys(p.snap).length || p.cursor) { p.snap = {}; p.cursor = null; p.adopt = true; delete p.allow; saveState(); } }
       ui(); syncNow(); setTimeout(takeLink, 60);
     },
-    soon, now: syncNow, isOn, badge, section, status, allowBulkDelete,
+    soon, now: syncNow, isOn, badge, section, status, allowBulkDelete, peek,
   };
 })();
