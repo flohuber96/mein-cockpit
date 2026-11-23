@@ -15,7 +15,7 @@ HUND.ex = (HUND.ex || []).concat([
   st: ['Reiz in großem Abstand (z. B. 50 m)', 'Ruhiger Reiz, 30 m', 'Ruhiger Reiz, 15 m', 'Bewegter Reiz, 30 m', 'Bewegter Reiz, 15 m', 'Im Alltag spontan'],
   k: 'Er schaut zum Reiz und dreht sich danach sofort und locker zu dir – 8 von 10 Mal.',
   f: ['Zu nah', 'Zu spät markern (erst, wenn er fixiert)', 'Den Hund zwingen, wegzusehen'],
-  t: ['Gut kombinierbar mit Engage–Disengage: erst Hinschauen markern, später das selbstständige Wegschauen.', 'Schreib dir in der Trigger-Liste (unter „Mehr“) die Wohlfühlabstände auf.'],
+  t: ['Gut kombinierbar mit dem „Engage–Disengage“-Spiel: erst das Hinschauen markern, später das selbstständige Wegschauen.', 'Ehrlich: Für LAT, BAT (Grisha Stewart) und Engage–Disengage gibt es keine direkten Vergleichsstudien. Das Grundprinzip – Gegenkonditionierung unterhalb der Reizschwelle – ist in der Verhaltensmedizin aber gut etabliert. Wähle, was bei deinem Hund funktioniert.', 'Schreib dir in der Trigger-Liste (unter „Mehr“) die Wohlfühlabstände auf.'],
   r: 'Auch bei Wild an der Schleppleine einsetzbar: „Schau mal“ statt hetzen.' },
 
 { id: 'so-bogen', c: 'sozial', n: 'Begegnungen im Bogen & mit Abstand', l: 1, d: 'beim Gassi', w: 1,
@@ -70,7 +70,7 @@ HUND.ex = (HUND.ex || []).concat([
   t: ['Leinenkontakte sind generell heikel, weil die Hunde nicht ausweichen können. Weniger ist hier oft mehr.'],
   r: '' },
 
-{ id: 'so-besuch', c: 'sozial', n: 'Besuch entspannt begrüßen', l: 2, d: '10 Min',
+{ id: 'so-besuch', c: 'familie', n: 'Besuch entspannt begrüßen', l: 2, d: '10 Min',
   g: 'Klingeln und Besuch sind kein Anlass mehr für Bellen, Anspringen oder Chaos. Dein Hund begrüßt freundlich oder bleibt auf seiner Decke.',
   m: ['Decke', 'Leckerli', 'Helfer zum Üben', 'Türgitter'],
   s: ['Management zuerst: Bevor die Tür aufgeht, ist dein Hund hinter einem Türgitter oder an der Leine.',
@@ -97,8 +97,8 @@ HUND.ex = (HUND.ex || []).concat([
   t: ['Signale für Unsicherheit: Ohren zurück, Rute tief, Lecken der Lippen, Gähnen, Wegdrehen, Ausweichen.'],
   r: '' },
 
-{ id: 'so-kinder', c: 'sozial', n: 'Kinder & Hund – sichere Regeln', l: 2, d: 'Konzept',
-  g: 'Kinder und Hund begegnen sich sicher. Die meisten Beißunfälle mit Kindern passieren mit dem eigenen oder einem bekannten Hund, oft im häuslichen Umfeld.',
+{ id: 'so-kinder', c: 'familie', n: 'Kinder & Hund – sichere Regeln', l: 2, d: 'Konzept',
+  g: 'Kinder und Hund begegnen sich sicher. Die meisten Beißunfälle mit Kindern passieren mit dem eigenen oder einem bekannten Hund zu Hause – laut Untersuchungen der Verhaltensmedizinerin Ilana Reisner bei über zwei Dritteln sogar, während ein Erwachsener im Raum war. Bei Kindern unter 6 Jahren war Verteidigen von Ressourcen (Futter, Kauartikel, Liegeplatz) der häufigste Auslöser.',
   m: ['Türgitter', 'Ruheplatz'],
   s: ['Erwachsene beaufsichtigen jeden Kontakt aktiv. Wenn das gerade nicht geht: Hund und Kind trennen (Gitter, Tür).',
     'Regeln für Kinder: Hund nicht umarmen, nicht küssen, nicht am Ruheplatz stören, nicht beim Fressen, nicht hinterherlaufen, nicht anstarren.',

@@ -61,22 +61,39 @@ const fmtVal = v => (v !== '' && v != null && !isNaN(+v)) ? num(+v) : String(v ?
 const inl = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 
 /* ───────── State ───────── */
-const KEY = 'hund.v1', WALK_KEY = 'hund.walk';
+const KEY = 'hund.v1', WALK_KEY = 'hund.walk', LOCAL_KEY = 'hund.local';
 const DEF_DOG = { name: '', birth: '', breed: 'Dackel-Bracke-Mix', sex: '', neutered: '', vet: '', vetPhone: '', clinic: '', chip: '', notes: '' };
 const defBasics = () => H.basics.filter(b => b.on).map(b => b.id);
+const defRoutines = () => H.routines.filter(r => r.on).map(r => r.id);
+const DEF_FAM = { baby: false, kids: false };
 function fresh() {
   return {
-    v: 1, dog: { ...DEF_DOG }, settings: { theme: 'auto', basics: defBasics() },
-    skills: {}, sessions: [], walks: [], incidents: [], health: [], days: {},
+    v: 2, dog: { ...DEF_DOG }, settings: { theme: 'auto', routines: defRoutines(), fam: { ...DEF_FAM } },
+    skills: {}, sessions: [], walks: [], incidents: [], health: [], days: {}, checks: {}, comments: [],
     lex: null, rew: null, trig: [], read: {}, quiz: {}, seen: {},
-    ui: { view: 'heute', tseg: 'cats' },
+    ui: { view: 'heute', tseg: 'cats', rev: 30 },
   };
 }
 function migrate(s) {
-  const f = fresh();
-  const o = { ...f, ...s, dog: { ...f.dog, ...s.dog }, settings: { ...f.settings, ...s.settings }, ui: { ...f.ui, ...s.ui } };
-  for (const k of ['sessions', 'walks', 'incidents', 'health', 'trig']) if (!Array.isArray(o[k])) o[k] = [];
-  for (const k of ['skills', 'days', 'read', 'quiz', 'seen']) if (!o[k] || typeof o[k] !== 'object') o[k] = {};
+  const f = fresh(), st = s.settings || {};
+  const o = { ...f, ...s, dog: { ...f.dog, ...s.dog }, settings: { ...f.settings, ...st, fam: { ...DEF_FAM, ...(st.fam || {}) } }, ui: { ...f.ui, ...s.ui } };
+  for (const k of ['sessions', 'walks', 'incidents', 'health', 'trig', 'comments']) if (!Array.isArray(o[k])) o[k] = [];
+  for (const k of ['skills', 'days', 'read', 'quiz', 'seen', 'checks']) if (!o[k] || typeof o[k] !== 'object') o[k] = {};
+  // Version 1 → 2: Basics werden zu „Immer“-Routinen, Tages-Häkchen zu einzelnen Checks (konfliktfrei auf mehreren Handys)
+  if (!Array.isArray(st.routines)) {
+    const keep = new Set(Array.isArray(st.basics) ? st.basics : defBasics());
+    o.settings.routines = H.routines.filter(r => H.basics.some(b => b.id === r.id) ? keep.has(r.id) : r.on).map(r => r.id);
+  }
+  delete o.settings.basics;
+  for (const [k, d] of Object.entries(o.days)) {
+    if (!d || (!d.b && !d.done)) continue;
+    const c = o.checks[k] = { ...(o.checks[k] || {}) };
+    for (const id of Object.keys(d.b || {})) if (d.b[id] && !c['r:' + id]) c['r:' + id] = { t: fromKey(k).getTime() + 12 * 36e5 };
+    for (const id of d.done || []) if (!c['ch:' + id]) c['ch:' + id] = { t: fromKey(k).getTime() + 12 * 36e5 };
+    const { b, done, ...rest } = d;
+    if (Object.keys(rest).length) o.days[k] = rest; else delete o.days[k];
+  }
+  o.v = 2;
   return o;
 }
 let rebuilt = false;
@@ -94,6 +111,9 @@ function save(fromServer) {
 }
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
+let LOCAL = (() => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || {}; } catch (e) { return {}; } })(); // nur dieses Gerät
+const saveLocal = () => { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(LOCAL)); } catch (e) { /* voll */ } };
+const me = () => String(LOCAL.me || '').trim();
 let WALK = (() => { try { return JSON.parse(localStorage.getItem(WALK_KEY)); } catch (e) { return null; } })();
 const saveWalk = () => { try { if (WALK) localStorage.setItem(WALK_KEY, JSON.stringify(WALK)); else localStorage.removeItem(WALK_KEY); } catch (e) { /* voll */ } };
 
@@ -118,9 +138,18 @@ const rewList = () => S.rew || H.rewDefault;
 const dayRec = k => S.days[k] || {};
 function setDay(k, patch) {
   const d = { ...dayRec(k), ...patch };
-  const empty = !(d.done && d.done.length) && !(d.b && Object.keys(d.b).length) && !(d.rr && Object.keys(d.rr).length);
+  const empty = !(d.rr && Object.keys(d.rr).length) && !d.ex;
   if (empty) delete S.days[k]; else S.days[k] = d;
 }
+const chk = k => S.checks[k] || {};
+function setCheck(k, key, on) {
+  const c = { ...chk(k) };
+  if (on) { c[key] = { t: Date.now() }; if (me()) c[key].by = me(); } else delete c[key];
+  if (Object.keys(c).length) S.checks[k] = c; else delete S.checks[k];
+}
+const famOn = f => !f || !!(S.settings.fam && S.settings.fam[f]);
+const routineOn = (r, wd) => (S.settings.routines || []).includes(r.id) && famOn(r.fam) && (!r.wd || r.wd.includes(wd));
+const commentsOf = (t, id, day) => S.comments.filter(c => c.ref && c.ref.t === t && (id == null || c.ref.id === id) && (!day || c.day === day)).sort((a, b) => b.ts - a.ts);
 const STATUS = { neu: 'Neu', arbeit: 'In Arbeit', sitzt: 'Sitzt', gen: 'Generalisiert' };
 function exProg(e) {
   const k = sk(e.id);
@@ -134,6 +163,7 @@ const catProg = id => { const l = catEx(id); return l.length ? l.reduce((a, e) =
 const isDone = e => ['sitzt', 'gen'].includes(sk(e.id).status);
 function currentPhase() {
   for (let i = 0; i < H.path.length; i++) {
+    if (H.path[i].fam) continue; // Extra-Phasen zählen nicht zum Hauptpfad
     const ph = H.path[i], list = ph.ex.map(id => EX[id]).filter(Boolean);
     if (list.filter(isDone).length / list.length < 0.7) return i;
   }
@@ -182,7 +212,7 @@ const BADGES = [
   { id: 'sk15', e: '🧰', n: 'Allrounder', d: '15 Übungen sitzen', f: s => s.sitzt >= 15 },
   { id: 'gen1', e: '🌍', n: 'Überall', d: 'Erste Übung generalisiert', f: s => s.gen >= 1 },
   { id: 'gen5', e: '🛰️', n: 'Generalist', d: '5 Übungen generalisiert', f: s => s.gen >= 5 },
-  { id: 'cats', e: '🧭', n: 'Entdecker', d: 'In allen 14 Bereichen trainiert', f: s => s.cats >= H.cats.length },
+  { id: 'cats', e: '🧭', n: 'Entdecker', d: `In allen ${H.cats.length} Bereichen trainiert`, f: s => s.cats >= H.cats.length },
   { id: 'nase', e: '👃', n: 'Super-Spürnase', d: '15 Einheiten Nasenarbeit', f: s => (s.byCat.nase || 0) >= 15 },
   { id: 'jagd', e: '🦌', n: 'Jagd-Manager', d: '15 Einheiten Jagdverhalten', f: s => (s.byCat.jagd || 0) >= 15 },
   { id: 'ruhe', e: '😌', n: 'Zen-Hund', d: '15 Einheiten Ruhe & Entspannung', f: s => (s.byCat.ruhe || 0) >= 15 },
@@ -191,7 +221,13 @@ const BADGES = [
   { id: 'al30', e: '🏠', n: 'Kurz allein', d: '30 Min entspannt allein', f: s => s.alleinMax >= 30 },
   { id: 'al120', e: '🛋️', n: 'Allein-Profi', d: '2 Stunden entspannt allein', f: s => s.alleinMax >= 120 },
   { id: 'leash', e: '🪢', n: 'Lockere Leine', d: '5 Spaziergänge mit Leinen-Note ab 4', f: s => s.leashGood >= 5 },
-  { id: 'basics7', e: '🧱', n: 'Fundament-Woche', d: 'An 7 Tagen alle Basics erfüllt', f: s => s.basicsPerfect >= 7 },
+  { id: 'basics7', e: '🧱', n: 'Fundament-Woche', d: 'An 7 Tagen alle 24/7-Routinen erfüllt', f: s => s.basicsPerfect >= 7 },
+  { id: 'slot10', e: '🗓️', n: 'Routinen-Profi', d: '10 Tageszeiten komplett abgehakt', f: s => s.slotsFull >= 10 },
+  { id: 'dayfull', e: '🌈', n: 'Voller Tag', d: 'Alle Routinen und alle 3 Challenges an einem Tag', f: s => s.daysFull >= 1 },
+  { id: 'com1', e: '💬', n: 'Erster Kommentar', d: 'Ersten Kommentar geschrieben', f: s => s.com >= 1 },
+  { id: 'com30', e: '📓', n: 'Tagebuchschreiber', d: '30 Kommentare geschrieben', f: s => s.com >= 30 },
+  { id: 'review', e: '📊', n: 'Rückblick', d: 'Monatsauswertung angesehen', f: s => s.review },
+  { id: 'fam5', e: '👶', n: 'Familien-Team', d: '5 Einheiten Baby, Kinder & Besuch', f: s => (s.byCat.familie || 0) >= 5 },
   { id: 'read5', e: '📖', n: 'Wissbegierig', d: '5 Artikel gelesen', f: s => s.read >= 5 },
   { id: 'readall', e: '📚', n: 'Bücherwurm', d: 'Alle Artikel gelesen', f: s => s.read >= H.wissen.length },
   { id: 'q10', e: '🧠', n: 'Quiz-Kopf', d: '10 Quizfragen richtig', f: s => s.quizOk >= 10 },
@@ -214,16 +250,25 @@ function compute() {
   let early = false;
   for (const s of S.sessions) { const k = tkey(s.ts); act.add(k); addMin(k, s.dur || 0); if (new Date(s.ts).getHours() < 7) early = true; }
   for (const w of S.walks) { const k = tkey(w.s); act.add(k); addMin(k, walkDur(w)); if (new Date(w.s).getHours() < 7) early = true; }
-  const tracked = S.settings.basics || [];
-  let chTotal = 0, perfect = 0, basicsCnt = 0, basicsPerfect = 0, chXp = 0;
-  for (const [k, d] of Object.entries(S.days)) {
-    const done = (d.done || []).length, b = Object.keys(d.b || {}).filter(id => d.b[id]);
-    if (done || b.length >= 3) act.add(k);
-    chTotal += done; if (done >= 3) perfect++;
-    chXp += done * 20 + (done >= 3 ? 30 : 0);
-    basicsCnt += b.length;
-    if (tracked.length && tracked.every(id => d.b && d.b[id])) { basicsPerfect++; basicsCnt += 7.5; } // +15 XP Bonus
+  let chTotal = 0, perfect = 0, rCnt = 0, basicsPerfect = 0, chXp = 0, slotsFull = 0, daysFull = 0;
+  for (const [k, c] of Object.entries(S.checks)) {
+    const keys = Object.keys(c), chDone = keys.filter(x => x.startsWith('ch:')).length, rDone = keys.filter(x => x.startsWith('r:')).length;
+    if (chDone || rDone >= 3 || keys.some(x => x.startsWith('ex:'))) act.add(k);
+    chTotal += chDone; if (chDone >= 3) perfect++;
+    chXp += chDone * 20 + (chDone >= 3 ? 30 : 0);
+    rCnt += rDone;
+    const wd = fromKey(k).getDay(); let all = true;
+    for (const sl of H.slots) {
+      const rs = H.routines.filter(r => r.s === sl.id && routineOn(r, wd));
+      const full = rs.length > 0 && rs.every(r => c['r:' + r.id]);
+      if (full) { slotsFull++; if (sl.id === 'immer') basicsPerfect++; }
+      if (rs.length && !full) all = false;
+    }
+    if (all && chDone >= 3) daysFull++;
   }
+  const comDays = {};
+  for (const m of S.comments) { act.add(m.day); comDays[m.day] = (comDays[m.day] || 0) + 1; }
+  const comXp = Object.values(comDays).reduce((a, n) => a + Math.min(5, n) * 2, 0);
   // Serie
   const t = new Date(); let d = act.has(dkey(t)) ? t : addDays(t, -1), cur = 0;
   while (act.has(dkey(d))) { cur++; d = addDays(d, -1); }
@@ -246,13 +291,14 @@ function compute() {
   const st = {
     nSess: nonMetaSess, nWalks: S.walks.length, chTotal, perfect, cur, best, rkOk, wildOk, sitzt, gen, cats: catsSet.size, byCat,
     alleinMax, leashGood, basicsPerfect, read, quizOk, inc: S.incidents.length, profile: !!(S.dog.name && S.dog.birth), early, phase: currentPhase(),
+    slotsFull, daysFull, com: S.comments.length, review: !!S.seen._review,
   };
   const badges = BADGES.filter(b => { try { return b.f(st); } catch (e) { return false; } });
   const xp = {
     train: S.sessions.reduce((a, s) => a + sessXp(s), 0),
     walk: S.walks.reduce((a, w) => a + walkXp(w), 0),
-    ch: chXp, basics: Math.round(basicsCnt * 2), skill: skillXp,
-    know: read * 10 + quizOk * 10, diary: S.incidents.length * 3, badge: badges.length * 25,
+    ch: chXp, basics: rCnt * 3 + slotsFull * 10, skill: skillXp,
+    know: read * 10 + quizOk * 10, diary: S.incidents.length * 3 + comXp, badge: badges.length * 25,
   };
   const total = Object.values(xp).reduce((a, b) => a + b, 0);
   const level = lvlOf(total);
@@ -261,9 +307,9 @@ function compute() {
 
 /* ───────── Tages-Challenges ───────── */
 const SLOT = [
-  { n: 'Gassi', e: '🦮', pool: c => c.c === 'gassi' },
-  { n: 'Training', e: '🎯', pool: c => c.c === 'training' },
-  { n: 'Alltag & Du', e: '❤️', pool: c => c.c === 'alltag' || c.c === 'mensch' },
+  { n: 'Gassi', e: '🦮', plan: 'gassi', pool: c => c.c === 'gassi' },
+  { n: 'Training', e: '🎯', plan: 'tag', pool: c => c.c === 'training' },
+  { n: 'Alltag & Du', e: '❤️', plan: 'abend', pool: c => c.c === 'alltag' || c.c === 'mensch' },
 ];
 function tierFor(k) { // Erfahrung = aktive Tage VOR diesem Tag (stabil innerhalb eines Tages)
   let n = 0; for (const x of C().act) if (x < k) n++;
@@ -272,7 +318,7 @@ function tierFor(k) { // Erfahrung = aktive Tage VOR diesem Tag (stabil innerhal
 function challengesFor(k) {
   const d = dayRec(k), tier = tierFor(k), used = new Set();
   return SLOT.map((slot, i) => {
-    const pool = H.challenges.filter(c => slot.pool(c) && c.l <= tier);
+    const pool = H.challenges.filter(c => slot.pool(c) && c.l <= tier && famOn(c.fam));
     const list = shuffled(pool, hash(k + '|' + i + '|' + ((d.rr && d.rr[i]) || 0)));
     const pick = list.find(c => !used.has(c.id)) || list[0];
     used.add(pick.id);
@@ -287,7 +333,8 @@ function recommend(n = 3) {
   const last = id => (sessOf(id)[0] || {}).ts || 0;
   const prog = H.ex.filter(e => sk(e.id).status === 'arbeit' && !today.has(e.id)).sort((a, b) => last(a.id) - last(b.id));
   const pi = currentPhase();
-  const path = pi >= 0 ? H.path[pi].ex.map(id => EX[id]).filter(e => e && sk(e.id).status === 'neu') : [];
+  const fam = H.path.filter(p => p.fam && famOn(p.fam)).flatMap(p => p.ex);
+  const path = [...(pi >= 0 ? H.path[pi].ex : []), ...fam].map(id => EX[id]).filter(e => e && sk(e.id).status === 'neu');
   const out = [];
   for (const e of prog) { if (out.length >= 2) break; out.push(e); }
   for (const e of path) { if (out.length >= n) break; if (!out.includes(e)) out.push(e); }
@@ -455,57 +502,353 @@ function render() {
   tick();
 }
 
+/* ───────── Tagesplan (Routinen + Challenges + Fokus-Übungen nach Tageszeit) ───────── */
+const SLOTS = Object.fromEntries(H.slots.map(s => [s.id, s]));
+const TYPE_N = { r: 'Routine', ch: 'Challenge', ex: 'Übung' };
+function curSlot() { const h = new Date().getHours(); return h < 10 ? 'morgen' : h < 17 ? 'tag' : 'abend'; }
+function walkPick(exclude) {
+  const ok = e => e && e.w && !exclude.includes(e.id);
+  const prog = H.ex.filter(e => ok(e) && sk(e.id).status === 'arbeit');
+  if (prog.length) return prog[hash(todayKey()) % prog.length].id;
+  const pi = currentPhase(), path = pi >= 0 ? H.path[pi].ex.map(id => EX[id]).filter(e => ok(e) && sk(e.id).status !== 'sitzt' && sk(e.id).status !== 'gen') : [];
+  return (path[0] || EX['g-name']).id;
+}
+function dayEx(k) { const x = dayRec(k).ex; return x && Array.isArray(x.tag) ? { tag: x.tag.filter(id => EX[id]), gassi: (x.gassi || []).filter(id => EX[id]) } : null; }
+function ensureDayPlan(k) { // Fokus-Übungen einmal pro Tag festlegen – stabil und auf allen Handys gleich
+  if (dayEx(k)) return false;
+  const tag = recommend(2).map(e => e.id);
+  setDay(k, { ex: { tag, gassi: [walkPick(tag)] } });
+  return true;
+}
+function planFor(k) {
+  const wd = fromKey(k).getDay(), c = chk(k), dx = dayEx(k) || { tag: [], gassi: [] };
+  const trained = new Set(S.sessions.filter(s => tkey(s.ts) === k).map(s => s.ex));
+  const exItem = id => { const e = EX[id], st = sk(id); return { key: 'ex:' + id, type: 'ex', id, e: CAT[e.c].e, n: e.n, t: `Stufe ${st.stage + 1}/${e.st.length}: ${e.st[st.stage]}` }; };
+  const chs = challengesFor(k);
+  return H.slots.map(sl => {
+    const items = [];
+    if (sl.id === 'gassi') dx.gassi.forEach(id => items.push(exItem(id)));
+    if (sl.id === 'tag') dx.tag.forEach(id => items.push(exItem(id)));
+    chs.filter(x => SLOT[x.slot].plan === sl.id).forEach(x => items.push({ key: 'ch:' + x.id, type: 'ch', id: x.id, ch: x, e: '⚡', n: x.n, t: x.t }));
+    H.routines.filter(r => r.s === sl.id && routineOn(r, wd)).forEach(r => items.push({ key: 'r:' + r.id, type: 'r', id: r.id, e: r.e, n: r.n, t: r.t }));
+    items.forEach(it => { it.slot = sl.id; it.done = !!c[it.key] || (it.type === 'ex' && trained.has(it.id)); it.by = c[it.key] && c[it.key].by; });
+    return { ...sl, items };
+  });
+}
+const planStats = plan => { const all = plan.flatMap(s => s.items); return { all, done: all.filter(i => i.done).length, total: all.length }; };
+const slotOpen = {};
+function itemRow(it, k) {
+  const nCom = commentsOf(it.type, it.id, k).length, d = dayRec(k);
+  const rr = it.type === 'ch' && !it.done && !((d.rr && d.rr[it.ch.slot]) || 0);
+  return `<div class="pitem ${it.done ? 'done' : ''}">
+    <button class="pck" data-act="planCheck" data-key="${esc(it.key)}" aria-label="${it.done ? 'Nicht erledigt' : 'Erledigt'}"><i></i></button>
+    <button class="pmain" data-act="planOpen" data-key="${esc(it.key)}"><small><span class="pt t-${it.type}">${TYPE_N[it.type]}</span>${it.by && it.done ? ` · ✓ ${esc(it.by)}` : ''}</small><b>${it.e} ${esc(it.n)}</b><span class="pd">${esc(it.t)}</span></button>
+    <span class="pacts">${it.type === 'ex' ? `<button data-act="startTrainer" data-id="${it.id}" aria-label="Mit Zähler trainieren">▶</button>` : ''}${rr ? `<button data-act="chReroll" data-slot="${it.ch.slot}" aria-label="Andere Challenge">↻</button>` : ''}${it.type === 'ex' && !it.done ? `<button data-act="exSwap" data-id="${it.id}" aria-label="Andere Übung">↻</button>` : ''}<button data-act="comAdd" data-t="${it.type}" data-id="${esc(it.id)}" aria-label="Kommentar" class="${nCom ? 'has' : ''}">💬${nCom ? `<em>${nCom}</em>` : ''}</button></span></div>`;
+}
+function planHtml(k) {
+  const plan = planFor(k), cur = curSlot();
+  return plan.filter(sl => sl.items.length).map(sl => {
+    const n = sl.items.filter(i => i.done).length, open = slotOpen[sl.id] ?? (sl.id === cur || (sl.id === 'gassi' && !!WALK));
+    return `<div class="card pslot ${open ? 'open' : ''} ${n === sl.items.length ? 'full' : ''}">
+      <button class="psh" data-act="slotToggle" data-id="${sl.id}"><span class="pse">${sl.e}</span><b>${esc(sl.n)}${sl.id === cur ? ' <em>jetzt</em>' : ''}</b><span class="psc">${n}/${sl.items.length}</span><i class="chev">›</i></button>
+      ${bar(n / sl.items.length, 'thin')}
+      ${open ? `<div class="pitems">${sl.items.map(it => itemRow(it, k)).join('')}</div>` : ''}</div>`;
+  }).join('');
+}
+function findItem(key, k = todayKey()) { return planFor(k).flatMap(s => s.items).find(i => i.key === key); }
+function togglePlan(key, on) {
+  const k = todayKey(), it = findItem(key);
+  if (!it) return;
+  const now = on == null ? !it.done : on;
+  if (it.type === 'ex' && !now && S.sessions.some(s => s.ex === it.id && tkey(s.ts) === k)) { toast('Heute schon trainiert – Einheit im Verlauf löschen, um das zu ändern'); return; }
+  setCheck(k, key, now); save();
+  if (now) {
+    vib(10);
+    const xp = it.type === 'ch' ? 20 : it.type === 'r' ? 3 : 0, sl = planFor(k).find(s => s.id === it.slot);
+    const slotFull = sl && sl.items.every(i => i.done), ps = planStats(planFor(k));
+    if (ps.done === ps.total) { confetti(); celebrate('🌈 Tagesplan komplett erledigt!'); }
+    else celebrate(slotFull ? `${SLOTS[it.slot].e} ${SLOTS[it.slot].n} komplett!` : xp ? `Erledigt · +${xp} XP` : 'Erledigt');
+  }
+}
+
 /* ── HEUTE ── */
 function viewToday() {
-  const c = C(), t = todayKey(), d = dayRec(t);
+  const c = C(), t = todayKey();
+  if (ensureDayPlan(t)) save();
   const L = c.level, need0 = LVL_NEED(L), need1 = LVL_NEED(L + 1);
   let h = '';
   if (!S.dog.name) h += `<button class="card setup" data-act="profile"><span>🐶</span><span><b>Steckbrief anlegen</b><small>Name, Geburtstag und Tierarzt deines Hundes – für persönliche Tipps.</small></span></button>`;
+  const baby = babyHint();
+  if (baby) h += `<div class="card setup"><span>👶</span><span><b>Baby im Haushalt?</b><small>Im Baby-Tagebuch ist ein Baby eingetragen. Sollen Baby-Themen (Vorbereitung, Aufsicht, Routinen) in deinen Plan?</small><span class="row2"><button class="btn primary sm" data-act="famOn" data-v="baby">Ja, aktivieren</button><button class="btn plain sm" data-act="famNo">Nein danke</button></span></span></div>`;
   h += `<div class="card hero">
     <div class="hero-top"><div class="avatar">🐕</div><div class="hero-m"><b>${esc(S.dog.name || 'Dein Hund')}</b><small>${esc([S.dog.breed, fmtAge(S.dog.birth)].filter(Boolean).join(' · '))}</small></div>
       <div class="streak ${c.st.cur ? 'on' : ''}"><span>🔥</span><b>${c.st.cur}</b><small>${c.st.cur === 1 ? 'Tag' : 'Tage'}</small></div></div>
     <div class="hero-lvl"><span class="lv">Lv ${L}</span><span class="lt">${esc(lvlTitle(L))}</span><span class="lx">${c.total - need0} / ${need1 - need0} XP</span></div>
     ${bar((c.total - need0) / (need1 - need0), 'xp')}</div>`;
-  // Laufender Spaziergang / Fälligkeiten
   if (WALK) h += `<button class="card running" data-act="tab" data-view="gassi"><span class="re">🦮</span><span class="ri"><small>Gassi läuft</small><b data-clock="walk">${fmtClock(Date.now() - WALK.s)}</b></span><span class="go">Öffnen ›</span></button>`;
   for (const x of dueHealth()) h += `<button class="card due ${x.over ? 'over' : ''}" data-act="openPage" data-id="health"><span>${x.ty.e}</span><span><b>${esc(x.ty.n)} ${x.over ? 'überfällig' : 'bald fällig'}</b><small>geplant: ${fmtDate(fromKey(x.h.next))}</small></span></button>`;
-  // Challenges
-  const ch = challengesFor(t), done = new Set(d.done || []);
-  const nDone = ch.filter(x => done.has(x.id)).length;
-  h += `<div class="section-t">Tages-Challenges <span class="cnt ${nDone === 3 ? 'full' : ''}">${nDone}/3${nDone === 3 ? ' · +30 Bonus' : ''}</span></div><div class="chs">`;
-  for (const x of ch) {
-    const ok = done.has(x.id), rr = (d.rr && d.rr[x.slot]) || 0;
-    h += `<div class="card ch ${ok ? 'done' : ''}">
-      <div class="ch-h"><span class="ch-k">${SLOT[x.slot].e} ${SLOT[x.slot].n}</span>${!ok && rr < 1 ? `<button class="ch-rr" data-act="chReroll" data-slot="${x.slot}" aria-label="Andere Challenge">↻</button>` : ''}</div>
-      <b>${esc(x.n)}</b><p>${esc(x.t)}</p>
-      <div class="ch-a">${x.c === 'gassi' && !ok && !WALK ? `<button class="btn soft sm" data-act="walkStart">Gassi starten</button>` : ''}
-      <button class="btn ${ok ? 'plain' : 'primary'} sm" data-act="chToggle" data-id="${x.id}">${ok ? '✓ Geschafft' : 'Geschafft · +20 XP'}</button></div></div>`;
-  }
-  h += '</div>';
-  // Empfehlungen
-  const rec = recommend(3);
-  if (rec.length) {
-    h += `<div class="section-t">Heute üben <button data-act="tab" data-view="training">Alle Übungen</button></div><div class="card list">`;
-    for (const e of rec) h += `<div class="recrow">${exRow(e)}<button class="play" data-act="startTrainer" data-id="${e.id}" aria-label="Training starten">▶</button></div>`;
-    h += '</div>';
-  }
-  // Basics
-  const tracked = H.basics.filter(b => (S.settings.basics || []).includes(b.id)), bd = d.b || {};
-  const bn = tracked.filter(b => bd[b.id]).length;
-  h += `<div class="section-t">Basics 24/7 <span class="cnt ${bn === tracked.length && bn ? 'full' : ''}">${bn}/${tracked.length}</span></div>
-    <div class="card basics">${bar(tracked.length ? bn / tracked.length : 0)}<div class="bgrid">${tracked.map(b => `<button class="bas ${bd[b.id] ? 'on' : ''}" data-act="basic" data-id="${b.id}"><span class="be">${b.e}</span><span class="bt"><b>${esc(b.n)}</b><small>${esc(b.t)}</small></span><i class="ck"></i></button>`).join('')}</div></div>`;
-  // Frage des Tages
+  if (reviewDue()) h += `<button class="card due review" data-act="openPage" data-id="review"><span>📊</span><span><b>Deine Monatsauswertung ist bereit</b><small>Was hat sich in 30 Tagen verändert? Kommentare, Erfolge und Tipps.</small></span></button>`;
+  // Tagesplan
+  const ps = planStats(planFor(t));
+  h += `<div class="card modecard"><div class="mc-top"><div class="ring" style="--p:${ps.total ? ps.done / ps.total : 0}"><b>${ps.done}</b><small>/${ps.total}</small></div>
+      <div><b>Tagesplan</b><small>${ps.done === ps.total ? 'Alles erledigt – stark! 🌈' : `Noch ${ps.total - ps.done} Aufgaben: Routinen, Challenges und Fokus-Übungen`}</small></div></div>
+    <button class="btn primary" data-act="modeStart">▶ Übungsmodus starten</button></div>`;
+  h += `<div class="section-t">Heute nach Tageszeit <button data-act="openPage" data-id="routines">Anpassen</button></div>${planHtml(t)}`;
+  // Tageskommentar
+  const dc = commentsOf('day', t, t);
+  h += `<div class="section-t">Kommentar zum Tag</div><div class="card daycom">${dc.length ? dc.map(comRow).join('') : '<p class="small muted">Was lief heute gut, was war schwierig? Deine Kommentare landen in der Datenbank und werden in der Monatsauswertung zusammengefasst.</p>'}
+    <button class="btn soft" data-act="comAdd" data-t="day" data-id="${t}">💬 ${dc.length ? 'Weiteren Kommentar' : 'Kommentar schreiben'}</button></div>`;
   h += quizOfDay();
-  // Tipp
   const tips = [...H.rules.map(r => ({ e: r.e, n: r.n, t: r.t })), ...H.dd.flatMap(a => a.do.map(x => ({ e: a.e, n: a.n + ': Do', t: x })))];
   const tip = tips[hash(t) % tips.length];
   h += `<div class="section-t">Tipp des Tages</div><div class="card tip"><span>${tip.e}</span><div><b>${esc(tip.n)}</b><p>${esc(tip.t)}</p></div></div>`;
-  // Schnell eintragen
   h += `<div class="section-t">Schnell eintragen</div><div class="quick">
     <button class="card" data-act="pickEx"><span>🎯</span>Einheit</button>
     <button class="card" data-act="incAdd"><span>📝</span>Verhalten</button>
     <button class="card" data-act="${WALK ? 'tab" data-view="gassi' : 'walkStart'}"><span>🦮</span>${WALK ? 'Gassi läuft' : 'Gassi'}</button></div>`;
   return h;
+}
+function babyHint() {
+  if (S.settings.fam.baby || S.seen._babyAsk) return false;
+  try { const b = JSON.parse(localStorage.getItem('baby.v1') || 'null'); return !!(b && b.settings && b.settings.birth); } catch (e) { return false; }
+}
+function firstActive() { let f = null; for (const k of C().act) if (!f || k < f) f = k; return f; }
+function reviewDue() {
+  const f = firstActive(); if (!f) return false;
+  const since = k => Math.round((fromKey(todayKey()) - fromKey(k)) / DAY);
+  return since(f) >= 30 && (!S.seen._review || since(S.seen._review) >= 30);
+}
+
+/* ── Übungsmodus: Aufgabe für Aufgabe ── */
+let M = null;
+function modeQueue() {
+  const k = todayKey(), plan = planFor(k), cur = curSlot();
+  const order = [cur, 'gassi', ...['morgen', 'tag', 'abend'].filter(x => x !== cur), 'immer'];
+  const slots = M.filter === 'alle' ? order : [M.filter];
+  const items = slots.flatMap(id => (plan.find(s => s.id === id) || { items: [] }).items);
+  return { items, open: items.filter(i => !i.done && !M.skip.has(i.key)), done: items.filter(i => i.done).length };
+}
+function modeBody() {
+  const q = modeQueue(), it = q.open[0];
+  let h = `<div class="mode"><div class="chiprow wrap mfilter">${[['alle', 'Alle'], ...H.slots.map(s => [s.id, s.e + ' ' + s.n.replace('Bei jedem ', '')])].map(([v, n]) => `<button class="chip ${M.filter === v ? 'on' : ''}" data-act="modeFilter" data-v="${v}">${esc(n)}</button>`).join('')}</div>
+    <div class="mprog"><span>${q.done} von ${q.items.length} erledigt</span>${M.skip.size ? `<button class="lnk" data-act="modeUnskip">${M.skip.size} übersprungen – zurückholen</button>` : ''}</div>${bar(q.items.length ? q.done / q.items.length : 1)}`;
+  if (!it) {
+    const all = planStats(planFor(todayKey()));
+    return h + `<div class="mdone"><div class="big">${all.done === all.total ? '🌈' : '✅'}</div><b>${all.done === all.total ? 'Tagesplan komplett!' : q.items.length ? 'Hier ist alles erledigt' : 'Keine Aufgaben in diesem Abschnitt'}</b>
+      <p class="small muted">${all.done === all.total ? 'Großartige Arbeit für euch beide. Gönn deinem Hund jetzt Ruhe – Gelerntes festigt sich im Schlaf.' : `Insgesamt ${all.done} von ${all.total} erledigt. Wähle oben einen anderen Abschnitt.`}</p>
+      <div class="stack"><button class="btn soft" data-act="comAdd" data-t="day" data-id="${todayKey()}">💬 Kommentar zum Tag</button><button class="btn plain" data-act="closeSheet">Fertig</button></div></div></div>`;
+  }
+  const sl = SLOTS[it.slot];
+  h += `<div class="mcard"><div class="mk">${sl.e} ${esc(sl.n)} · <span class="pt t-${it.type}">${TYPE_N[it.type]}</span></div><h2>${it.e} ${esc(it.n)}</h2>`;
+  if (it.type === 'ex') {
+    const e = EX[it.id], st = sk(it.id);
+    h += `<p class="goal">${esc(e.g)}</p><div class="mstage"><small>Stufe ${st.stage + 1} von ${e.st.length}</small><b>${esc(e.st[st.stage])}</b></div>
+      <details class="tr-help"><summary>Anleitung (${e.s.length} Schritte)</summary><ol>${e.s.map(x => `<li>${inl(x)}</li>`).join('')}</ol><p class="small muted">🎯 ${esc(e.k)}</p></details>
+      ${e.r ? `<div class="callout breed">🐕 ${esc(e.r)}</div>` : ''}
+      <button class="btn soft" style="width:100%;margin-top:10px" data-act="startTrainer" data-id="${e.id}">▶ Mit Zähler trainieren</button>`;
+  } else {
+    h += `<p class="goal">${esc(it.t)}</p>`;
+    if (it.type === 'ch' && it.ch.c === 'gassi' && !WALK) h += `<button class="btn soft" style="width:100%" data-act="walkStart">🦮 Gassi starten</button>`;
+  }
+  h += `<div class="mcom"><label>Wie lief es? (optional)</label>
+      <div class="chiprow">${MOODS.map((m, i) => `<button class="chip mood ${M.mood === i + 1 ? 'on' : ''}" data-act="modeMood" data-v="${i + 1}">${m}</button>`).join('')}</div>
+      <div class="chiprow wrap tagrow">${H.tags.map(tg => `<button class="chip sm ${M.tags.includes(tg) ? 'on' : ''}" data-act="modeTag" data-v="${esc(tg)}">${esc(tg)}</button>`).join('')}</div>
+      <textarea rows="2" data-mode="text" placeholder="Kommentar – landet in deiner Auswertung">${esc(M.text)}</textarea></div>
+    </div><div class="mbtns"><button class="btn plain" data-act="modeSkip">Später</button><button class="btn primary" data-act="modeDone">✓ Erledigt</button></div></div>`;
+  return h;
+}
+function openMode(filter) {
+  M = { filter: filter || 'alle', skip: new Set(), mood: 0, tags: [], text: '' };
+  openSheet({ title: 'Übungsmodus', cls: 'tall', body: modeBody(), onClose: () => { M = null; render(); } });
+}
+function refreshMode() {
+  if (!M) return;
+  const sh = sheetStack.find(e => $('.mode', e.sh)); if (!sh) return;
+  const b = $('.sheet-body', sh.sh); b.innerHTML = modeBody(); b.scrollTop = 0;
+}
+function modeDone() {
+  const it = modeQueue().open[0]; if (!it) return;
+  const text = M.text.trim();
+  if (text || M.mood || M.tags.length) addComment({ t: it.type, id: it.id }, text, M.mood, M.tags);
+  M.mood = 0; M.tags = []; M.text = '';
+  togglePlan(it.key, true);
+  refreshMode();
+}
+
+/* ── Kommentare ── */
+const MOODS = ['😣', '😕', '😐', '🙂', '😄'];
+function addComment(ref, text, mood, tags, ts) {
+  const c = { id: uid(), ts: ts || Date.now(), day: tkey(ts || Date.now()), ref, text: text || '', mood: mood || 0, tags: tags || [] };
+  if (me()) c.by = me();
+  S.comments.push(c); save();
+  return c;
+}
+function refTitle(ref) {
+  if (!ref) return 'Kommentar';
+  if (ref.t === 'day') return 'Tag: ' + dayLabel(ref.id);
+  if (ref.t === 'ex') return EX[ref.id] ? CAT[EX[ref.id].c].e + ' ' + EX[ref.id].n : 'Übung';
+  if (ref.t === 'ch') { const c = H.challenges.find(x => x.id === ref.id); return '⚡ ' + (c ? c.n : 'Challenge'); }
+  if (ref.t === 'r') { const r = H.routines.find(x => x.id === ref.id); return r ? r.e + ' ' + r.n : 'Routine'; }
+  return 'Allgemein';
+}
+function comRow(c, withRef) {
+  return `<button class="comrow" data-act="comEdit" data-id="${c.id}"><span class="cm">${c.mood ? MOODS[c.mood - 1] : '💬'}</span><span class="ct">${withRef ? `<small class="cref">${esc(refTitle(c.ref))}</small>` : ''}${c.text ? `<span>${esc(c.text)}</span>` : ''}${c.tags && c.tags.length ? `<span class="ctags">${c.tags.map(t => `<i>${esc(t)}</i>`).join('')}</span>` : ''}<small>${esc(dayLabel(c.day))}, ${hm(c.ts)}${c.by ? ' · ' + esc(c.by) : ''}</small></span></button>`;
+}
+function commentSheet(ref, edit) {
+  const c = edit || { mood: 0, tags: [], text: '' };
+  const prev = commentsOf(ref.t, ref.id).filter(x => !edit || x.id !== edit.id).slice(0, 15);
+  openSheet({ title: edit ? 'Kommentar bearbeiten' : 'Kommentar', body: `<form data-form="comment" data-id="${edit ? edit.id : ''}" data-t="${esc(ref.t)}" data-ref="${esc(ref.id)}" class="stack">
+    <p class="small muted cfor">${esc(refTitle(ref))}</p>
+    <div class="field"><label>Wie lief es?</label><div class="chiprow">${MOODS.map((m, i) => `<label class="chip rad mood"><input type="radio" name="mood" value="${i + 1}" ${c.mood === i + 1 ? 'checked' : ''}><span>${m}</span></label>`).join('')}</div></div>
+    <div class="field"><label>Schlagworte</label><div class="chiprow wrap">${H.tags.map(t => `<label class="chip rad sm"><input type="checkbox" name="tags" value="${esc(t)}" ${c.tags && c.tags.includes(t) ? 'checked' : ''}><span>${esc(t)}</span></label>`).join('')}</div></div>
+    <div class="field"><label>Kommentar</label><textarea name="text" rows="4" placeholder="Was ist passiert? Was hat geholfen? Was willst du ändern?">${esc(c.text)}</textarea></div>
+    <button class="btn primary">Speichern</button>
+    ${edit ? `<button type="button" class="btn danger" data-act="comDel" data-id="${edit.id}">Kommentar löschen</button>` : ''}
+    ${prev.length ? `<div class="section-t">Frühere Kommentare</div><div class="card list">${prev.map(x => comRow(x)).join('')}</div>` : ''}</form>` });
+}
+
+/* ── Auswertung ── */
+const STOP = new Set('und oder aber der die das den dem des ein eine einen einem einer eines nicht ist war waren hat hatte haben mit auf bei beim sich sie er es ich wir ihr ihm ihn zu zum zur im in an am als auch noch sehr dann wenn wie was so nur schon mal heute gut gar kein keine keinen mehr weil dass da hier vom von für nach vor über unter aus um bis durch ohne gegen wieder immer etwas viel wurde wird sind kann konnte ganz bisschen gleich doch jetzt erst mich mir uns euch dich dir man hund bruno lief geht ging gehen'.split(' '));
+function reviewData(days) {
+  const now = new Date(), endK = todayKey(), startK = dkey(addDays(now, -(days - 1))), pStartK = dkey(addDays(now, -(2 * days - 1)));
+  const inP = k => k >= startK && k <= endK, inPrev = k => k >= pStartK && k < startK;
+  const R = { days, startK };
+  const sess = S.sessions.filter(s => inP(tkey(s.ts))), sessP = S.sessions.filter(s => inPrev(tkey(s.ts)));
+  const walks = S.walks.filter(w => inP(tkey(w.s))), walksP = S.walks.filter(w => inPrev(tkey(w.s)));
+  const coms = S.comments.filter(c => inP(c.day)).sort((a, b) => b.ts - a.ts), comsP = S.comments.filter(c => inPrev(c.day));
+  const rate = l => { const r = l.reduce((a, s) => a + (s.reps || 0), 0); return r ? l.reduce((a, s) => a + (s.ok || 0), 0) / r : null; };
+  const wsum = (l, k) => l.reduce((a, w) => a + cnt(w, k), 0);
+  const q = (o, n) => o + n ? o / (o + n) : null;
+  R.active = [...C().act].filter(inP).length;
+  R.sess = sess.length; R.sessP = sessP.length; R.min = sess.reduce((a, s) => a + (s.dur || 0), 0); R.rate = rate(sess); R.rateP = rate(sessP);
+  R.walks = walks.length; R.walksP = walksP.length;
+  R.rk = q(wsum(walks, 'rk_ok'), wsum(walks, 'rk_no')); R.rkP = q(wsum(walksP, 'rk_ok'), wsum(walksP, 'rk_no'));
+  R.wild = q(wsum(walks, 'wild_ok'), wsum(walks, 'wild_no')); R.enc = q(wsum(walks, 'enc_ok'), wsum(walks, 'enc_no'));
+  const ls = walks.filter(w => w.leash), lsP = walksP.filter(w => w.leash);
+  R.leash = ls.length ? ls.reduce((a, w) => a + w.leash, 0) / ls.length : null; R.leashP = lsP.length ? lsP.reduce((a, w) => a + w.leash, 0) / lsP.length : null;
+  R.inc = S.incidents.filter(i => inP(tkey(i.ts)) && i.type !== 'gut').length; R.incP = S.incidents.filter(i => inPrev(tkey(i.ts)) && i.type !== 'gut').length;
+  R.good = S.incidents.filter(i => inP(tkey(i.ts)) && i.type === 'gut').length;
+  // Routinen je Tageszeit (geplant = aktive Routinen; erledigt = Häkchen)
+  R.slots = H.slots.map(sl => ({ ...sl, plan: 0, done: 0 }));
+  let chDone = 0;
+  for (let i = 0; i < days; i++) {
+    const k = dkey(addDays(now, -i)), wd = fromKey(k).getDay(), c = chk(k);
+    if (k < (firstActive() || endK)) continue;
+    R.slots.forEach(x => { H.routines.filter(r => r.s === x.id && routineOn(r, wd)).forEach(r => { x.plan++; if (c['r:' + r.id]) x.done++; }); });
+    chDone += Object.keys(c).filter(x => x.startsWith('ch:')).length;
+  }
+  R.chDone = chDone;
+  // Bereiche & Übungen
+  const byCat = {};
+  sess.forEach(s => { const e = EX[s.ex]; if (!e) return; const b = byCat[e.c] = byCat[e.c] || { n: 0, ok: 0, reps: 0 }; b.n++; b.ok += s.ok || 0; b.reps += s.reps || 0; });
+  R.cats = Object.entries(byCat).sort((a, b) => b[1].n - a[1].n);
+  const byEx = {};
+  sess.filter(s => s.reps).forEach(s => (byEx[s.ex] = byEx[s.ex] || []).push(s));
+  R.better = []; R.hard = [];
+  for (const [id, l] of Object.entries(byEx)) {
+    if (!EX[id]) continue;
+    l.sort((a, b) => a.ts - b.ts);
+    const avg = rate(l);
+    if (l.length >= 2) { const h1 = rate(l.slice(0, Math.floor(l.length / 2))), h2 = rate(l.slice(Math.floor(l.length / 2))); if (h1 != null && h2 != null && h2 - h1 >= 0.1) R.better.push({ id, from: h1, to: h2 }); }
+    if (avg != null && avg < 0.5 && l.length >= 2) R.hard.push({ id, avg });
+  }
+  R.better.sort((a, b) => (b.to - b.from) - (a.to - a.from));
+  // Kommentare
+  R.coms = coms; R.comsP = comsP.length;
+  const moods = coms.filter(c => c.mood).map(c => c.mood).concat(walks.filter(w => w.mood).map(w => w.mood));
+  const moodsP = comsP.filter(c => c.mood).map(c => c.mood).concat(walksP.filter(w => w.mood).map(w => w.mood));
+  R.mood = moods.length ? moods.reduce((a, b) => a + b, 0) / moods.length : null; R.moodP = moodsP.length ? moodsP.reduce((a, b) => a + b, 0) / moodsP.length : null;
+  const weeks = Math.max(1, Math.ceil(days / 7)); R.moodW = [];
+  for (let w = weeks - 1; w >= 0; w--) {
+    const a = dkey(addDays(now, -(w * 7 + 6))), b = dkey(addDays(now, -w * 7));
+    const m = coms.filter(c => c.mood && c.day >= a && c.day <= b).map(c => c.mood);
+    R.moodW.push({ l: fmtDate(fromKey(a)).replace(/\.\s.*$/, '.'), v: m.length ? m.reduce((x, y) => x + y, 0) / m.length : 0 });
+  }
+  const tags = {}; coms.forEach(c => (c.tags || []).forEach(t => { tags[t] = (tags[t] || 0) + 1; }));
+  R.tags = Object.entries(tags).sort((a, b) => b[1] - a[1]);
+  const words = {};
+  coms.concat(sess.filter(s => s.note).map(s => ({ text: s.note }))).forEach(c => String(c.text || '').toLowerCase().split(/[^a-zäöüß]+/).forEach(w => { if (w.length > 3 && !STOP.has(w)) words[w] = (words[w] || 0) + 1; }));
+  R.words = Object.entries(words).filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  // Erkenntnisse
+  const I = [], pc = x => Math.round(x * 100) + ' %';
+  const sl = R.slots.filter(x => x.plan);
+  if (sl.length) {
+    const best = [...sl].sort((a, b) => b.done / b.plan - a.done / a.plan)[0], worst = [...sl].sort((a, b) => a.done / a.plan - b.done / b.plan)[0];
+    if (best && best.done / best.plan >= 0.5) I.push(`✅ Am verlässlichsten klappen die Routinen „${best.n}“ (${pc(best.done / best.plan)}).`);
+    if (worst && worst !== best && worst.done / worst.plan < 0.6) I.push(`🎯 Ausbaufähig: „${worst.n}“ mit ${pc(worst.done / worst.plan)} – vielleicht weniger, dafür feste Routinen wählen (Mehr → Routinen anpassen).`);
+  }
+  if (R.rate != null && R.rateP != null) I.push(R.rate >= R.rateP ? `📈 Die Erfolgsquote im Training stieg von ${pc(R.rateP)} auf ${pc(R.rate)}.` : `📉 Die Erfolgsquote im Training sank von ${pc(R.rateP)} auf ${pc(R.rate)} – Stufen evtl. zu schnell gesteigert?`);
+  if (R.rk != null && R.rkP != null) I.push(`📣 Rückrufquote draußen: ${pc(R.rkP)} → ${pc(R.rk)}.`);
+  else if (R.rk != null) I.push(`📣 Rückrufquote draußen: ${pc(R.rk)}.`);
+  if (R.better.length) I.push(`🚀 Größter Fortschritt: ${R.better.slice(0, 2).map(b => `${EX[b.id].n} (${pc(b.from)} → ${pc(b.to)})`).join(', ')}.`);
+  if (R.hard.length) I.push(`🪜 Noch schwierig: ${R.hard.slice(0, 2).map(b => `${EX[b.id].n} (Ø ${pc(b.avg)})`).join(', ')} – eine Stufe zurück und Belohnung erhöhen.`);
+  const prog = new Set(H.ex.filter(e => sk(e.id).status === 'arbeit').map(e => e.c)), neg = [...prog].filter(c => !byCat[c]);
+  if (neg.length) I.push(`💤 In Arbeit, aber nicht geübt: ${neg.map(c => CAT[c].n).join(', ')}.`);
+  if (R.inc > R.incP && R.inc >= 3) I.push(`⚠️ Mehr schwierige Situationen als im Zeitraum davor (${R.incP} → ${R.inc}) – Stress, Schlaf und Management prüfen.`);
+  else if (R.incP > R.inc) I.push(`👍 Weniger schwierige Situationen als davor (${R.incP} → ${R.inc}).`);
+  if (R.tags.length) I.push(`🏷️ Häufigstes Schlagwort in deinen Kommentaren: „${R.tags[0][0]}“ (${R.tags[0][1]}×).`);
+  if (R.mood != null && R.moodP != null && Math.abs(R.mood - R.moodP) >= 0.3) I.push(R.mood > R.moodP ? `😊 Die Stimmung in deinen Kommentaren wurde besser (${num(R.moodP)} → ${num(R.mood)} von 5).` : `😕 Die Stimmung in deinen Kommentaren sank (${num(R.moodP)} → ${num(R.mood)} von 5). Rückschritte sind normal – kleinere Schritte helfen.`);
+  if (!coms.length) I.push('💬 Noch keine Kommentare in diesem Zeitraum. Ein Satz pro Tag reicht – nach einem Monat siehst du hier Muster.');
+  R.insights = I;
+  return R;
+}
+function viewReview() {
+  const days = S.ui.rev || 30, R = reviewData(days), pc = x => x == null ? '–' : Math.round(x * 100) + ' %';
+  const tr = (a, b, hi = true) => a == null || b == null || a === b ? '' : `<i class="${(a > b) === hi ? 'up' : 'dn'}">${a > b ? '▲' : '▼'}</i>`;
+  let h = `<div class="seg">${[[7, '7 Tage'], [30, '30 Tage'], [90, '90 Tage'], [365, '1 Jahr']].map(([v, n]) => `<button class="${days === v ? 'on' : ''}" data-act="revDays" data-v="${v}">${n}</button>`).join('')}</div>
+    <p class="small muted intro">Zeitraum: ab ${fmtDate(fromKey(R.startK))} – die Pfeile vergleichen mit den ${days} Tagen davor.</p>`;
+  h += `<div class="section-t">Erkenntnisse</div><div class="card pad"><ul class="rtips ins">${R.insights.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
+  h += `<div class="stats">
+    <div class="card st"><small>Aktive Tage</small><b>${R.active}</b><span>von ${days}</span></div>
+    <div class="card st"><small>Einheiten</small><b>${R.sess} ${tr(R.sess, R.sessP)}</b><span>${fmtDur(R.min)}</span></div>
+    <div class="card st"><small>Erfolgsquote</small><b>${pc(R.rate)} ${tr(R.rate, R.rateP)}</b><span>vorher ${pc(R.rateP)}</span></div>
+    <div class="card st"><small>Rückruf draußen</small><b>${pc(R.rk)} ${tr(R.rk, R.rkP)}</b><span>vorher ${pc(R.rkP)}</span></div>
+    <div class="card st"><small>Spaziergänge</small><b>${R.walks} ${tr(R.walks, R.walksP)}</b><span>Ø Leine ${R.leash != null ? num(R.leash) + ' ★' : '–'}</span></div>
+    <div class="card st"><small>Challenges</small><b>${R.chDone}</b><span>erledigt</span></div>
+    <div class="card st"><small>Schwierige Momente</small><b>${R.inc} ${tr(R.inc, R.incP, false)}</b><span>${R.good} Erfolgsmomente</span></div>
+    <div class="card st"><small>Stimmung</small><b>${R.mood != null ? MOODS[Math.round(R.mood) - 1] + ' ' + num(R.mood) : '–'}</b><span>${R.coms.length} Kommentare</span></div></div>`;
+  const sl = R.slots.filter(x => x.plan);
+  if (sl.length) h += `<div class="section-t">Routinen je Tageszeit</div><div class="card pad">${sl.map(x => `<div class="hbar"><span>${x.e} ${esc(x.n)}</span><i style="width:${x.done / x.plan * 100}%" class="good"></i><b>${Math.round(x.done / x.plan * 100)}%</b></div>`).join('')}</div>`;
+  if (R.moodW.some(w => w.v)) h += `<div class="section-t">Stimmung pro Woche</div><div class="card chart">${chartBars(R.moodW.map(w => Math.round(w.v * 10) / 10), R.moodW.map(w => w.l), { fmt: v => v + ' / 5', h: 70 })}</div>`;
+  if (R.cats.length) h += `<div class="section-t">Training nach Bereich</div><div class="card list">${R.cats.map(([c, b]) => `<button class="cprow" data-act="goCat" data-id="${c}"><span>${CAT[c].e}</span><span class="cpm"><b>${esc(CAT[c].n)}</b>${bar(b.reps ? b.ok / b.reps : 0)}</span><span class="cpv">${b.n}× ${b.reps ? Math.round(b.ok / b.reps * 100) + '%' : ''}</span></button>`).join('')}</div>`;
+  if (R.tags.length || R.words.length) h += `<div class="section-t">Schlagworte & häufige Begriffe</div><div class="card pad"><div class="tags cloud">${R.tags.map(([t, n]) => `<span class="tg">🏷️ ${esc(t)} <b>${n}</b></span>`).join('')}${R.words.map(([w, n]) => `<span>${esc(w)} <b>${n}</b></span>`).join('')}</div></div>`;
+  h += `<div class="section-t">Alle Kommentare <span class="cnt">${R.coms.length}</span></div>`;
+  h += R.coms.length ? `<div class="card list">${R.coms.slice(0, 300).map(c => comRow(c, true)).join('')}</div>` : `<div class="empty"><div class="big">💬</div><b>Noch keine Kommentare</b>Kommentiere Aufgaben im Tagesplan, im Übungsmodus oder bei Übungen.</div>`;
+  h += `<div class="section-t">Export</div><div class="stack"><button class="btn soft" data-act="revShare">📄 Bericht als Text teilen</button><button class="btn soft" data-act="revCsv">📊 Alle Daten als CSV (Tabelle)</button></div>
+    <p class="small muted" style="margin:10px 4px 0">Der Text-Bericht eignet sich, um ihn deiner Hundetrainerin oder deinem Hundetrainer zu schicken.</p>`;
+  return h;
+}
+function reviewText(days) {
+  const R = reviewData(days), pc = x => x == null ? '–' : Math.round(x * 100) + ' %';
+  const L = [`Hunde-Coach – Auswertung ${S.dog.name || ''}`.trim(), `Zeitraum: ${fmtDate(fromKey(R.startK))} bis heute (${days} Tage)`, '',
+    'KENNZAHLEN', `Aktive Tage: ${R.active}/${days}`, `Trainingseinheiten: ${R.sess} (${fmtDur(R.min)}), Erfolgsquote ${pc(R.rate)} (davor ${pc(R.rateP)})`,
+    `Spaziergänge: ${R.walks}, Rückrufquote ${pc(R.rk)} (davor ${pc(R.rkP)}), Ø Leine ${R.leash != null ? num(R.leash) : '–'}/5`,
+    `Schwierige Situationen: ${R.inc} (davor ${R.incP}), Erfolgsmomente: ${R.good}`, `Stimmung Ø: ${R.mood != null ? num(R.mood) + '/5' : '–'}`, '',
+    'ROUTINEN', ...R.slots.filter(x => x.plan).map(x => `${x.n}: ${Math.round(x.done / x.plan * 100)} %`), '',
+    'ERKENNTNISSE', ...R.insights.map(x => '- ' + x), '',
+    'TRAINING NACH BEREICH', ...R.cats.map(([c, b]) => `${CAT[c].n}: ${b.n} Einheiten${b.reps ? ', ' + Math.round(b.ok / b.reps * 100) + ' % Erfolg' : ''}`), '',
+    `KOMMENTARE (${R.coms.length})`, ...R.coms.slice().reverse().map(c => `${dayLabel(c.day)} ${hm(c.ts)} | ${refTitle(c.ref)}${c.mood ? ' | ' + MOODS[c.mood - 1] : ''}${c.tags && c.tags.length ? ' | ' + c.tags.join(', ') : ''}${c.by ? ' | ' + c.by : ''}${c.text ? '\n  ' + c.text : ''}`)];
+  return L.join('\n');
+}
+function exportCsv() {
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`, d = ts => { const x = new Date(ts); return `${pad(x.getDate())}.${pad(x.getMonth() + 1)}.${x.getFullYear()}`; };
+  const rows = [['Art', 'Datum', 'Uhrzeit', 'Bezug', 'Stimmung (1-5)', 'Schlagworte', 'Wert', 'Erfolg', 'Text', 'Person']];
+  for (const c of [...S.comments].sort((a, b) => a.ts - b.ts)) rows.push(['Kommentar', d(c.ts), hm(c.ts), refTitle(c.ref), c.mood || '', (c.tags || []).join(', '), '', '', c.text, c.by || '']);
+  for (const s of [...S.sessions].sort((a, b) => a.ts - b.ts)) rows.push(['Einheit', d(s.ts), hm(s.ts), EX[s.ex] ? EX[s.ex].n : s.ex, '', '', 'Stufe ' + ((s.stage || 0) + 1) + (s.val ? ' / ' + s.val : ''), s.reps ? `${s.ok}/${s.reps}` : '', s.note || '', s.by || '']);
+  for (const w of [...S.walks].sort((a, b) => a.s - b.s)) rows.push(['Gassi', d(w.s), hm(w.s), w.place || '', w.mood || '', '', Math.round(walkDur(w) / MIN) + ' min', `Rückruf ${cnt(w, 'rk_ok')}/${cnt(w, 'rk_ok') + cnt(w, 'rk_no')}`, w.note || '', w.by || '']);
+  for (const i of [...S.incidents].sort((a, b) => a.ts - b.ts)) { const ty = H.incTypes.find(x => x.id === i.type); rows.push(['Verhalten', d(i.ts), hm(i.ts), ty ? ty.n : i.type, '', '', i.dist ? i.dist + ' m' : '', i.int ? i.int + '/5' : '', [i.trig, i.note].filter(Boolean).join(' – '), i.by || '']); }
+  for (const [k, c] of Object.entries(S.checks).sort()) for (const [key, v] of Object.entries(c)) {
+    const [t, id] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+    rows.push(['Erledigt', d(fromKey(k).getTime()), v.t ? hm(v.t) : '', refTitle({ t, id }), '', '', '', '', '', v.by || '']);
+  }
+  const csv = '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n');
+  shareFile(csv, `hunde-coach-daten-${todayKey()}.csv`, 'text/csv');
+}
+function shareFile(data, name, type) {
+  const blob = new Blob([data], { type });
+  const file = typeof File === 'function' ? new File([blob], name, { type }) : null;
+  if (file && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: name }).catch(() => {}); return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 function quizOfDay() {
   const t = todayKey(), open = H.quiz.filter(q => !S.quiz[q.id]);
@@ -534,8 +877,9 @@ function viewTraining() {
     const cur = currentPhase();
     h += `<p class="small muted intro">Empfohlene Reihenfolge für einen 1,5-jährigen Dackel-Bracke-Mix. Eine Phase gilt als geschafft, wenn 70 % ihrer Übungen „sitzen“. Du kannst jederzeit auch andere Übungen machen.</p>`;
     H.path.forEach((ph, i) => {
+      if (ph.fam && !famOn(ph.fam)) return;
       const list = ph.ex.map(id => EX[id]).filter(Boolean), ok = list.filter(isDone).length;
-      const state = cur === -1 || i < cur ? 'done' : i === cur ? 'cur' : 'next';
+      const state = ph.fam ? (ok / list.length >= 0.7 ? 'done' : 'cur') : cur === -1 || i < cur ? 'done' : i === cur ? 'cur' : 'next';
       h += `<div class="card phase ${state}"><div class="ph-h"><span class="ph-n">${state === 'done' ? '✓' : i + 1}</span><div><b>${esc(ph.n)}</b><small>${esc(ph.w)} · ${ok}/${list.length} sitzen</small></div></div>
         <p class="small muted">${esc(ph.d)}</p>${bar(list.reduce((a, e) => a + exProg(e), 0) / list.length)}
         <div class="list">${list.map(e => exRow(e)).join('')}</div></div>`;
@@ -600,6 +944,10 @@ function viewEx(e) {
   if (e.f && e.f.length) h += `<div class="section-t">Häufige Fehler</div><div class="card pad lst bad"><ul>${e.f.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
   if (e.t && e.t.length) h += `<div class="section-t">Tipps</div><div class="card pad lst tipl"><ul>${e.t.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
   if (e.r) h += `<div class="callout breed">🐕 <b>Dackel × Bracke:</b> ${esc(e.r)}</div>`;
+  // Kommentare
+  const coms = commentsOf('ex', e.id);
+  h += `<div class="section-t">Kommentare <button data-act="comAdd" data-t="ex" data-id="${e.id}">＋ Kommentar</button></div>`;
+  h += coms.length ? `<div class="card list">${coms.slice(0, 10).map(c => comRow(c)).join('')}</div>` : `<div class="card pad small muted">Halte fest, was dir auffällt – z. B. „klappt nur ohne andere Hunde“. Kommentare fließen in die Monatsauswertung.</div>`;
   // Verlauf
   h += `<div class="section-t">Verlauf <span class="cnt">${ss.length} Einheiten · ${fmtDur(tot)}</span></div>`;
   if (!ss.length) h += `<div class="card pad small muted">Noch keine Einheit. Starte mit „Training starten“ – zähle dabei jede gelungene und nicht gelungene Wiederholung.</div>`;
@@ -674,10 +1022,11 @@ function saveTrainer() {
   const dur = T.manual ? Math.max(0, +T.dmin || 0) * MIN : T.acc + (T.run ? Date.now() - T.t0 : 0);
   if (!reps && !T.val && !T.note && dur < 20000) { toast('Zähle mindestens eine Wiederholung oder schreib eine Notiz'); return; }
   const s = { id: uid(), ts, ex: T.ex, stage: T.stage, reps, ok: T.ok, dur, dist: T.dist, place: T.place, val: T.val === '' ? '' : T.val, note: T.note.trim() };
+  if (me()) s.by = me();
   S.sessions.push(s);
   const k = sk(T.ex);
   setSkill(T.ex, { status: k.status === 'neu' ? 'arbeit' : k.status, stage: T.stage });
-  T = null; save(); closeSheet(); render();
+  T = null; save(); closeSheet(); render(); refreshMode();
   const adv = stageAdvice(e.id);
   celebrate(`Einheit gespeichert · +${sessXp(s)} XP`);
   if (adv === 'up') setTimeout(() => toast(`🚀 Bereit für Stufe ${sk(e.id).stage + 2}?`, { label: 'Stufe hoch', fn: () => { setSkill(e.id, { stage: sk(e.id).stage + 1 }); save(); render(); celebrate('+15 XP · neue Stufe'); } }), 2600);
@@ -687,7 +1036,7 @@ function saveTrainer() {
 /* ── GASSI ── */
 function viewGassi() {
   let h = '';
-  const t = todayKey(), d = dayRec(t), done = new Set(d.done || []);
+  const t = todayKey(), done = new Set(Object.keys(chk(t)).filter(x => x.startsWith('ch:')).map(x => x.slice(3)));
   const gch = challengesFor(t).filter(x => x.c === 'gassi');
   if (WALK) {
     h += `<div class="card walk-live"><small>Spaziergang läuft seit ${hm(WALK.s)}</small><b data-clock="walk">${fmtClock(Date.now() - WALK.s)}</b>
@@ -695,6 +1044,8 @@ function viewGassi() {
       <div class="wgrid">${WCNT.map(c => `<div class="wc ${c.cls || ''}"><button class="wc-b" data-act="walkCnt" data-k="${c.k}"><span>${c.e}</span><b>${cnt(WALK, c.k)}</b><small>${esc(c.n)}</small></button>${cnt(WALK, c.k) ? `<button class="wc-m" data-act="walkDec" data-k="${c.k}" aria-label="Eins weniger">−</button>` : ''}</div>`).join('')}</div>`;
     const rk = cnt(WALK, 'rk_ok') + cnt(WALK, 'rk_no');
     if (rk) h += `<p class="small muted center">Rückrufquote heute: <b>${pct(cnt(WALK, 'rk_ok'), rk)} %</b></p>`;
+    const gs = planFor(t).find(x => x.id === 'gassi');
+    if (gs && gs.items.length) h += `<div class="section-t">Gassi-Routine <span class="cnt">${gs.items.filter(i => i.done).length}/${gs.items.length}</span></div><div class="card pslot open"><div class="pitems">${gs.items.map(it => itemRow(it, t)).join('')}</div></div>`;
   } else {
     h += `<button class="card walk-start" data-act="walkStart"><span>🦮</span><b>Gassi starten</b><small>Zeit läuft mit, Rückrufe, Check-ins, Begegnungen und Wild per Fingertipp zählen</small></button>`;
   }
@@ -796,9 +1147,9 @@ function answerQuiz(qid, i) {
 function viewErfolge() {
   const c = C(), L = c.level, n0 = LVL_NEED(L), n1 = LVL_NEED(L + 1);
   let h = `<div class="card hero lvlcard"><div class="lvl-big"><span>Level</span><b>${L}</b></div><div class="hero-m"><b>${esc(lvlTitle(L))}</b><small>${c.total} XP gesamt · noch ${n1 - c.total} bis Level ${L + 1}</small>${bar((c.total - n0) / (n1 - n0), 'xp')}</div></div>`;
-  const names = { train: '🎯 Training', walk: '🦮 Gassi', ch: '⚡ Challenges', basics: '🧱 Basics', skill: '📈 Stufen & Status', know: '📖 Wissen & Quiz', diary: '📝 Tagebuch', badge: '🏅 Abzeichen' };
+  const names = { train: '🎯 Training', walk: '🦮 Gassi', ch: '⚡ Challenges', basics: '🗓️ Routinen', skill: '📈 Stufen & Status', know: '📖 Wissen & Quiz', diary: '💬 Tagebuch & Kommentare', badge: '🏅 Abzeichen' };
   h += `<details class="card xpd"><summary>Woher kommen deine XP?</summary>${Object.entries(c.xp).map(([k, v]) => `<div class="kv"><span>${names[k]}</span><b>${v}</b></div>`).join('')}
-    <p class="small muted">Einheit 10 XP (+1 je Erfolg, max. +15) · Gassi 15 XP (+ Rückrufe, Wild, Check-ins) · Challenge 20 XP (+30 für alle drei) · Basic 2 XP (+15 für alle) · neue Stufe 15 XP · „sitzt“ 40 XP · „generalisiert“ 120 XP · Artikel/Quizfrage 10 XP · Abzeichen 25 XP</p></details>`;
+    <p class="small muted">Einheit 10 XP (+1 je Erfolg, max. +15) · Gassi 15 XP (+ Rückrufe, Wild, Check-ins) · Challenge 20 XP (+30 für alle drei) · Routine 3 XP (+10 je komplette Tageszeit) · Kommentar 2 XP (max. 10 pro Tag) · neue Stufe 15 XP · „sitzt“ 40 XP · „generalisiert“ 120 XP · Artikel/Quizfrage 10 XP · Abzeichen 25 XP</p></details>`;
   // Serie + 14 Tage
   const days = [...Array(14)].map((_, i) => addDays(new Date(), i - 13));
   h += `<div class="section-t">Serie</div><div class="card pad streakc"><div class="sc-n"><div><b>🔥 ${c.st.cur}</b><small>aktuell</small></div><div><b>🏆 ${c.st.best}</b><small>Rekord</small></div></div>
@@ -813,6 +1164,7 @@ function viewErfolge() {
     <div class="card st"><small>Übungen sitzen</small><b>${c.st.sitzt}</b><span>${c.st.gen} generalisiert</span></div>
     <div class="card st"><small>Rückrufe ✓</small><b>${c.st.rkOk}</b><span>draußen gezählt</span></div>
     <div class="card st"><small>Abzeichen</small><b>${c.badges.length}/${BADGES.length}</b><span>gesammelt</span></div></div>`;
+  h += `<button class="card due review" data-act="openPage" data-id="review"><span>📊</span><span><b>Auswertung & Kommentare</b><small>7, 30 oder 90 Tage: Fortschritt, Routinen, Stimmung, Erkenntnisse – und Export für deine Trainerin.</small></span></button>`;
   h += weekReview();
   // Diagramme
   const mins = days.map(d => Math.round((c.mins[dkey(d)] || 0) / MIN));
@@ -865,6 +1217,11 @@ function viewMore() {
   const d = S.dog;
   let h = `<button class="card prof" data-act="profile"><span class="avatar">🐕</span><span><b>${esc(d.name || 'Steckbrief anlegen')}</b><small>${esc([d.breed, fmtAge(d.birth), d.sex, d.neutered].filter(Boolean).join(' · ') || 'Name, Geburtstag, Tierarzt …')}</small></span><span class="chev">›</span></button>`;
   if (d.vetPhone || d.clinic) h += `<div class="card list">${d.vetPhone ? `<a class="arow" href="tel:${esc(d.vetPhone.replace(/[^\d+]/g, ''))}"><span>🩺</span><span><b>${esc(d.vet || 'Tierarzt')}</b><small>${esc(d.vetPhone)}</small></span><span class="chev">📞</span></a>` : ''}${d.clinic ? `<a class="arow" href="tel:${esc(d.clinic.replace(/[^\d+]/g, ''))}"><span>🚨</span><span><b>Tierklinik / Notdienst</b><small>${esc(d.clinic)}</small></span><span class="chev">📞</span></a>` : ''}</div>`;
+  const fam = S.settings.fam;
+  h += `<div class="section-t">Familie & Gerät</div><div class="card">
+    <label class="setting"><span><span class="lbl">👶 Baby/Kleinkind im Haushalt</span><br><span class="sub">Baby-Routinen, Übungen und Challenges im Plan</span></span><span class="switch"><input type="checkbox" data-fam="baby" ${fam.baby ? 'checked' : ''}><i></i></span></label>
+    <label class="setting"><span><span class="lbl">🧒 Oft Kinder zu Besuch</span><br><span class="sub">Kinder-Regeln und passende Challenges</span></span><span class="switch"><input type="checkbox" data-fam="kids" ${fam.kids ? 'checked' : ''}><i></i></span></label>
+    <label class="setting"><span><span class="lbl">📱 Wer nutzt dieses Handy?</span><br><span class="sub">Name erscheint bei Häkchen und Kommentaren</span></span><input type="text" data-local="me" value="${esc(me())}" placeholder="z. B. Flo" maxlength="30" autocomplete="off"></label></div>`;
   h += `<div class="section-t">Werkzeuge</div><div class="card menu">
     ${Object.entries(PAGES).map(([id, p]) => `<button data-act="openPage" data-id="${id}"><span class="ico">${p.e}</span><span class="mt">${esc(p.t)}<small>${esc(p.sub())}</small></span><span class="chev">›</span></button>`).join('')}</div>`;
   h += `<div class="section-t">Darstellung</div><div class="card pad"><div class="seg">${[['auto', 'Automatisch'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([v, n]) => `<button class="${S.settings.theme === v ? 'on' : ''}" data-act="theme" data-v="${v}">${n}</button>`).join('')}</div></div>`;
@@ -881,12 +1238,14 @@ function viewMore() {
   return h;
 }
 const PAGES = {
+  review: { e: '📊', t: 'Auswertung', sub: () => `${pl(S.comments.length, 'Kommentar', 'Kommentare')} · Monatsrückblick & Export`, v: viewReview },
+  routines: { e: '🗓️', t: 'Routinen anpassen', sub: () => `${(S.settings.routines || []).length} von ${H.routines.length} aktiv`, v: viewRoutinesCfg },
+  sync: { e: '📲', t: 'Auf mehreren Handys nutzen', sub: () => window.Cloud && Cloud.isOn() ? 'Online-Abgleich ist aktiv ✓' : 'Einrichten in 3 Schritten', v: viewSync },
   diary: { e: '📝', t: 'Verhaltens-Tagebuch', sub: () => pl(S.incidents.length, 'Eintrag', 'Einträge'), v: viewDiary },
   health: { e: '🩺', t: 'Gesundheit', sub: () => { const w = S.health.filter(h => h.type === 'gewicht').sort((a, b) => b.date.localeCompare(a.date))[0]; return (w ? `${num(+w.value)} kg · ` : '') + pl(S.health.length, 'Eintrag', 'Einträge'); }, v: viewHealth },
   lex: { e: '🗣️', t: 'Signal-Lexikon', sub: () => `${lexList().length} Signale – für alle im Haushalt`, v: viewLex },
   rew: { e: '🍖', t: 'Belohnungs-Hitliste', sub: () => `${rewList().length} Belohnungen`, v: viewRew },
   trig: { e: '📏', t: 'Auslöser & Abstände', sub: () => pl(S.trig.length, 'Auslöser', 'Auslöser'), v: viewTrig },
-  basics: { e: '🧱', t: 'Basics anpassen', sub: () => `${(S.settings.basics || []).length} von ${H.basics.length} aktiv`, v: viewBasicsCfg },
 };
 function viewDiary() {
   const since = Date.now() - 30 * DAY, l30 = S.incidents.filter(i => i.ts >= since), by = {};
@@ -956,10 +1315,25 @@ function viewTrig() {
     <button class="btn soft" style="width:100%;margin-top:12px" data-act="trigEdit" data-i="-1">＋ Auslöser hinzufügen</button>
     <div class="card list" style="margin-top:12px">${['so-lat', 'so-bogen', 'pr-reaktiv'].map(id => exRow(EX[id])).join('')}</div>`;
 }
-function viewBasicsCfg() {
-  const on = new Set(S.settings.basics || []);
-  return `<p class="small muted intro">Wähle, welche täglichen Grundlagen du auf dem Heute-Bildschirm abhaken möchtest.</p><div class="card">${H.basics.map(b => `<label class="setting"><span><span class="lbl">${b.e} ${esc(b.n)}</span><br><span class="sub">${esc(b.t)}</span></span><span class="switch"><input type="checkbox" data-basiccfg="${b.id}" ${on.has(b.id) ? 'checked' : ''}><i></i></span></label>`).join('')}</div>`;
+function viewRoutinesCfg() {
+  const on = new Set(S.settings.routines || []), WD = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  return `<p class="small muted intro">Wähle, welche Routinen in deinem Tagesplan erscheinen. Weniger, dafür verlässlich, ist besser als alles halbherzig. Wöchentliche Routinen erscheinen nur am angegebenen Tag.</p>` +
+    H.slots.map(sl => `<div class="section-t">${sl.e} ${esc(sl.n)}</div><div class="card">${H.routines.filter(r => r.s === sl.id).map(r => `<label class="setting ${famOn(r.fam) ? '' : 'off'}"><span><span class="lbl">${r.e} ${esc(r.n)}${r.wd ? ` <em class="wd">${r.wd.map(d => WD[d]).join(', ')}</em>` : ''}${r.fam ? ` <em class="wd">${r.fam === 'baby' ? 'mit Baby' : 'mit Kindern'}</em>` : ''}</span><br><span class="sub">${esc(r.t)}</span></span><span class="switch"><input type="checkbox" data-routinecfg="${r.id}" ${on.has(r.id) ? 'checked' : ''}><i></i></span></label>`).join('')}</div>`).join('') +
+    `<button class="btn plain" style="width:100%;margin-top:14px" data-act="routinesReset">Auf Empfehlung zurücksetzen</button>`;
 }
+function viewSync() {
+  const on = window.Cloud && Cloud.isOn();
+  return `<div class="card pad sync"><p><b>${on ? '✓ Dieses Handy ist mit der Online-Datenbank verbunden.' : 'So nutzt ihr die App auf mehreren iPhones (z. B. iPhone 15 und 16) mit denselben Daten:'}</b></p>
+    <ol>
+      <li><b>Online-Datenbank einrichten:</b> unten anmelden bzw. Konto erstellen. Es ist dasselbe Konto wie bei euren anderen Apps (Baby, Essen …).</li>
+      <li><b>Zweites iPhone:</b> diese Seite in Safari öffnen → Teilen → „Zum Home-Bildschirm“. Dann in der App unter Mehr mit <b>demselben Konto</b> anmelden – oder unten „Weiteres Gerät verbinden“ nutzen und den Link aufs andere Handy schicken.</li>
+      <li><b>Fertig:</b> Übungen, Häkchen, Gassi, Kommentare und Einstellungen gleichen sich beim Öffnen und alle 20 Sekunden ab. Ohne Netz wird gespeichert und später nachgeholt.</li>
+    </ol>
+    <p class="small muted">Tipp: Tragt unter „Mehr → Wer nutzt dieses Handy?“ euren Namen ein – dann seht ihr bei Häkchen und Kommentaren, wer was gemacht hat. Häkchen werden einzeln gespeichert, deshalb könnt ihr gleichzeitig abhaken, ohne euch zu überschreiben.</p>
+    <p class="small muted">Wichtig: Beide Handys müssen mit demselben Konto angemeldet sein. Mit zwei verschiedenen Konten hat jeder seine eigenen Daten.</p></div>
+    ${window.Cloud ? Cloud.section() : ''}`;
+}
+
 function editSheet(title, fields, onSave, onDel) {
   openSheet({ title, body: `<form data-form="generic" class="stack">${fields.map(f => `<div class="field"><label>${esc(f.l)}</label>${f.type === 'stars' ? `<div class="stars">${[5, 4, 3, 2, 1].map(i => `<label><input type="radio" name="${f.k}" value="${i}" ${+f.v === i ? 'checked' : ''}><span>★</span></label>`).join('')}</div>` : `<input type="${f.type || 'text'}" name="${f.k}" value="${esc(f.v ?? '')}" ${f.req ? 'required' : ''} ${f.type === 'number' ? 'inputmode="decimal" step="any"' : ''} placeholder="${esc(f.ph || '')}">`}</div>`).join('')}
     <button class="btn primary">Speichern</button>${onDel ? '<button type="button" class="btn danger" data-act="genDel">Löschen</button>' : ''}</form>` });
@@ -993,13 +1367,7 @@ function back() {
   render(); window.scrollTo(0, scrollMem[nav.view + (nav.cat || '') + (nav.page || '')] || 0);
 }
 function openEx(id) { scrollMem[nav.view + (nav.cat || '') + (nav.page || '')] = window.scrollY; nav.ex = id; closeAllSheets(); render(); window.scrollTo(0, 0); }
-function toggleCh(id) {
-  const t = todayKey(), d = dayRec(t), done = new Set(d.done || []);
-  const was = done.has(id);
-  if (was) done.delete(id); else done.add(id);
-  setDay(t, { done: [...done] }); save(); render();
-  if (!was) { vib(12); celebrate(done.size === 3 ? '🌟 Alle 3 geschafft! +50 XP' : 'Challenge geschafft · +20 XP'); }
-}
+function toggleCh(id) { togglePlan('ch:' + id); render(); }
 function walkStart() { if (WALK) { go('gassi'); return; } WALK = { s: Date.now(), cnt: {} }; saveWalk(); vib(15); go('gassi'); toast('Gassi läuft – viel Spaß! 🦮'); }
 function walkFinish() {
   if (!WALK) return;
@@ -1014,16 +1382,57 @@ const ACT = {
   openCat: el => { scrollMem[nav.view] = window.scrollY; nav.cat = el.dataset.id; render(); window.scrollTo(0, 0); },
   goCat: el => { closeAllSheets(); nav.view = 'training'; nav.ex = null; nav.page = null; nav.cat = el.dataset.id; render(); window.scrollTo(0, 0); },
   openEx: el => openEx(el.dataset.id),
-  openPage: el => { closeAllSheets(); scrollMem.mehr = window.scrollY; nav.view = 'mehr'; nav.ex = null; nav.cat = null; nav.page = el.dataset.id; render(); window.scrollTo(0, 0); },
+  openPage: el => {
+    closeAllSheets(); scrollMem.mehr = window.scrollY; nav.view = 'mehr'; nav.ex = null; nav.cat = null; nav.page = el.dataset.id;
+    if (nav.page === 'review' && S.seen._review !== todayKey()) { S.seen._review = todayKey(); save(); }
+    render(); window.scrollTo(0, 0); if (nav.page === 'review') celebrate();
+  },
   tseg: el => { S.ui.tseg = el.dataset.seg; save(true); render(); },
   chToggle: el => toggleCh(el.dataset.id),
   chReroll: el => { const t = todayKey(), d = dayRec(t), rr = { ...(d.rr || {}) }; rr[el.dataset.slot] = (rr[el.dataset.slot] || 0) + 1; setDay(t, { rr }); save(); render(); },
-  basic: el => {
-    const t = todayKey(), d = dayRec(t), b = { ...(d.b || {}) }, id = el.dataset.id;
-    if (b[id]) delete b[id]; else b[id] = 1;
-    setDay(t, { b }); save(); render();
-    if (b[id]) { vib(8); const tr = S.settings.basics || []; celebrate(tr.every(x => b[x]) ? '🧱 Alle Basics erfüllt! +15 XP' : ''); }
+  planCheck: el => { togglePlan(el.dataset.key); render(); },
+  planOpen: el => {
+    const it = findItem(el.dataset.key); if (!it) return;
+    if (it.type === 'ex') { openEx(it.id); return; }
+    const sl = SLOTS[it.slot], coms = commentsOf(it.type, it.id).slice(0, 10);
+    openSheet({ title: TYPE_N[it.type], body: `<div class="mcard flat"><div class="mk">${sl.e} ${esc(sl.n)}</div><h2>${it.e} ${esc(it.n)}</h2><p class="goal">${esc(it.t)}</p>
+      <div class="stack">${it.type === 'ch' && it.ch.c === 'gassi' && !WALK ? '<button class="btn soft" data-act="walkStart">🦮 Gassi starten</button>' : ''}
+      <button class="btn ${it.done ? 'plain' : 'primary'}" data-act="planCheckClose" data-key="${esc(it.key)}">${it.done ? 'Als nicht erledigt markieren' : '✓ Erledigt'}</button>
+      <button class="btn soft" data-act="comAdd" data-t="${it.type}" data-id="${esc(it.id)}">💬 Kommentar</button></div>
+      ${coms.length ? `<div class="section-t">Kommentare</div><div class="card list">${coms.map(c => comRow(c)).join('')}</div>` : ''}</div>` });
   },
+  planCheckClose: el => { closeSheet(); togglePlan(el.dataset.key); render(); },
+  slotToggle: el => { const id = el.dataset.id, now = el.closest('.pslot').classList.contains('open'); slotOpen[id] = !now; render(); },
+  exSwap: el => {
+    const k = todayKey(), dx = dayEx(k) || { tag: [], gassi: [] }, id = el.dataset.id, inTag = dx.tag.includes(id);
+    const used = [...dx.tag, ...dx.gassi, ...((dayRec(k).exSeen) || [])];
+    let next;
+    if (inTag) next = recommend(12).map(e => e.id).find(x => !used.includes(x)) || H.ex.filter(e => sk(e.id).status === 'neu' && e.l === 1 && !used.includes(e.id)).map(e => e.id)[0];
+    else next = walkPick(used) !== id ? walkPick(used) : H.ex.filter(e => e.w && !used.includes(e.id)).map(e => e.id)[0];
+    if (!next) { toast('Keine weitere passende Übung gefunden'); return; }
+    const nx = { tag: dx.tag.map(x => x === id ? next : x), gassi: dx.gassi.map(x => x === id ? next : x) };
+    setDay(k, { ex: nx, exSeen: [...new Set([...(dayRec(k).exSeen || []), id])] }); save(); render(); toast('Neue Übung: ' + EX[next].n);
+  },
+  comAdd: el => commentSheet({ t: el.dataset.t, id: el.dataset.id }),
+  comEdit: el => { const c = S.comments.find(x => x.id === el.dataset.id); if (c) commentSheet(c.ref || { t: 'gen', id: '' }, c); },
+  comDel: el => confirmSheet('Diesen Kommentar löschen?', 'Löschen', () => { S.comments = S.comments.filter(x => x.id !== el.dataset.id); save(); closeAllSheets(); render(); refreshMode(); }),
+  modeStart: () => openMode(),
+  modeFilter: el => { M.filter = el.dataset.v; refreshMode(); },
+  modeUnskip: () => { M.skip.clear(); refreshMode(); },
+  modeMood: el => { const v = +el.dataset.v; M.mood = M.mood === v ? 0 : v; refreshMode(); },
+  modeTag: el => { const v = el.dataset.v; M.tags = M.tags.includes(v) ? M.tags.filter(x => x !== v) : [...M.tags, v]; refreshMode(); },
+  modeSkip: () => { const it = modeQueue().open[0]; if (it) M.skip.add(it.key); M.mood = 0; M.tags = []; M.text = ''; refreshMode(); },
+  modeDone,
+  famOn: el => { S.settings.fam[el.dataset.v] = true; S.seen._babyAsk = Date.now(); const k = todayKey(); const d = { ...dayRec(k) }; delete d.ex; S.days[k] = d; setDay(k, {}); save(); render(); toast('Baby-Themen sind jetzt in deinem Plan'); },
+  famNo: () => { S.seen._babyAsk = Date.now(); save(); render(); },
+  revDays: el => { S.ui.rev = +el.dataset.v; save(true); render(); },
+  revShare: () => {
+    const txt = reviewText(S.ui.rev || 30);
+    if (navigator.share) navigator.share({ title: 'Hunde-Coach Auswertung', text: txt }).catch(() => {});
+    else if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('Bericht in die Zwischenablage kopiert'), () => shareFile(txt, `hunde-coach-bericht-${todayKey()}.txt`, 'text/plain'));
+    else shareFile(txt, `hunde-coach-bericht-${todayKey()}.txt`, 'text/plain');
+  },
+  revCsv: exportCsv,
   startTrainer: el => startTrainer(el.dataset.id, !!el.dataset.manual),
   trOk: () => { T.ok++; T.fails = 0; T.last = 'ok'; vib(10); refreshTrainer(); },
   trNo: () => { T.no++; T.fails++; T.last = 'no'; vib([5, 30, 5]); refreshTrainer(); },
@@ -1093,6 +1502,7 @@ const ACT = {
       f => { const l = rewList().slice(); const it = { n: f.n.trim(), v: Math.max(1, +f.v || 3), t: f.t.trim() }; if (i >= 0) l[i] = it; else l.push(it); S.rew = l; },
       i >= 0 ? () => { const l = rewList().slice(); l.splice(i, 1); S.rew = l; } : null);
   },
+  routinesReset: () => confirmSheet('Routinen auf die Empfehlung zurücksetzen?', 'Zurücksetzen', () => { S.settings.routines = defRoutines(); save(); render(); }),
   rewReset: () => confirmSheet('Belohnungsliste auf den Vorschlag zurücksetzen?', 'Zurücksetzen', () => { S.rew = null; save(); render(); }),
   trigEdit: el => {
     const i = +el.dataset.i, x = i >= 0 ? S.trig[i] : { n: '', d: '', note: '' };
@@ -1132,6 +1542,7 @@ const FORMS = {
     if (d.s) { const s = fromLocalInput(d.s), dm = Math.max(1, +d.dmin || 1); w.s = s; w.e = s + dm * MIN; }
     if (Object.keys(d).some(k => k.startsWith('c_'))) { w.cnt = {}; for (const c of WCNT) { const v = Math.max(0, parseInt(d['c_' + c.k], 10) || 0); if (v) w.cnt[c.k] = v; } }
     w.leash = +d.leash || 0; w.mood = +d.mood || 0; w.place = d.place || ''; w.note = (d.note || '').trim();
+    if (isNew && me()) w.by = me();
     if (isNew) { S.walks.push(w); if (WALK && pending.walkNew && pending.walkNew.s === WALK.s) { WALK = null; saveWalk(); } }
     pending.walkNew = null;
     save(); closeAllSheets(); render();
@@ -1147,6 +1558,7 @@ const FORMS = {
   inc: f => {
     const d = Object.fromEntries(new FormData(f)), id = f.dataset.id;
     const it = { id: id || uid(), type: d.type, ts: fromLocalInput(d.ts), int: +d.int || 0, trig: (d.trig || '').trim(), dist: d.dist ? +d.dist : '', note: (d.note || '').trim() };
+    const old = S.incidents.find(x => x.id === id); if (old && old.by) it.by = old.by; else if (!old && me()) it.by = me();
     const i = S.incidents.findIndex(x => x.id === id);
     if (i >= 0) S.incidents[i] = it; else S.incidents.push(it);
     save(); closeSheet(); render(); celebrate(i >= 0 ? 'Gespeichert' : (it.type === 'gut' ? '🌟 Erfolgsmoment notiert · +3 XP' : 'Notiert · +3 XP'));
@@ -1157,6 +1569,14 @@ const FORMS = {
     const i = S.health.findIndex(x => x.id === id);
     if (i >= 0) S.health[i] = it; else S.health.push(it);
     save(); closeSheet(); render(); toast('Gespeichert');
+  },
+  comment: f => {
+    const fd = new FormData(f), text = String(fd.get('text') || '').trim(), mood = +fd.get('mood') || 0, tags = fd.getAll('tags').map(String);
+    if (!text && !mood && !tags.length) { toast('Schreib etwas oder wähle eine Stimmung'); return; }
+    const id = f.dataset.id;
+    if (id) { const c = S.comments.find(x => x.id === id); if (c) Object.assign(c, { text, mood, tags }); save(); }
+    else addComment({ t: f.dataset.t, id: f.dataset.ref }, text, mood, tags);
+    closeSheet(); render(); refreshMode(); celebrate(id ? 'Gespeichert' : '💬 Kommentar gespeichert');
   },
   generic: f => { const d = Object.fromEntries(new FormData(f)); pending.gen && pending.gen(d); save(); closeSheet(); render(); },
 };
@@ -1175,6 +1595,8 @@ document.addEventListener('submit', e => {
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.dataset.tr && T) { T[el.dataset.tr] = el.value; return; }
+  if (el.dataset.mode === 'text' && M) { M.text = el.value; return; }
+  if (el.dataset.local === 'me') { LOCAL.me = el.value.slice(0, 30); saveLocal(); return; }
   if (el.dataset.search) {
     const v = el.value; nav.q = el.dataset.search === 'pick' ? nav.q : v;
     if (el.dataset.search === 'pick') {
@@ -1190,9 +1612,15 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target;
-  if (el.dataset.basiccfg) {
-    const on = new Set(S.settings.basics || []); if (el.checked) on.add(el.dataset.basiccfg); else on.delete(el.dataset.basiccfg);
-    S.settings.basics = H.basics.map(b => b.id).filter(id => on.has(id)); save();
+  if (el.dataset.routinecfg) {
+    const on = new Set(S.settings.routines || []); if (el.checked) on.add(el.dataset.routinecfg); else on.delete(el.dataset.routinecfg);
+    S.settings.routines = H.routines.map(r => r.id).filter(id => on.has(id)); save();
+    return;
+  }
+  if (el.dataset.fam) {
+    S.settings.fam = { ...S.settings.fam, [el.dataset.fam]: el.checked }; S.seen._babyAsk = S.seen._babyAsk || Date.now();
+    const k = todayKey(), d = { ...dayRec(k) }; delete d.ex; delete d.exSeen; S.days[k] = d; setDay(k, {}); // Plan für heute neu zusammenstellen
+    save(); toast(el.checked ? 'Familien-Themen sind jetzt im Plan' : 'Familien-Themen ausgeblendet');
     return;
   }
   if (el.name === 'type' && el.dataset.interval !== undefined) { // Gesundheit: nächsten Termin vorschlagen
@@ -1233,7 +1661,7 @@ quietSeen() && save(true);
 render();
 
 /* ───────── Online-Datenbank (../shared/cloud.js) ───────── */
-const ARR = { sess: ['s:', 'sessions'], walk: ['w:', 'walks'], inc: ['i:', 'incidents'], health: ['h:', 'health'] };
+const ARR = { sess: ['s:', 'sessions'], walk: ['w:', 'walks'], inc: ['i:', 'incidents'], health: ['h:', 'health'], comment: ['m:', 'comments'] };
 if (window.Cloud) Cloud.init({
   app: 'hund',
   rebuilt,
@@ -1242,9 +1670,10 @@ if (window.Cloud) Cloud.init({
     for (const [k, [p, arr]] of Object.entries(ARR)) for (const x of S[arr]) m[p + x.id] = { kind: k, data: x };
     for (const [id, x] of Object.entries(S.skills)) m['k:' + id] = { kind: 'skill', data: x };
     for (const [k, x] of Object.entries(S.days)) m['d:' + k] = { kind: 'day', data: x };
+    for (const [k, c] of Object.entries(S.checks)) for (const [key, v] of Object.entries(c)) m['c:' + k + '|' + key] = { kind: 'check', data: v }; // jedes Häkchen einzeln → kein Überschreiben zwischen Handys
     m.dog = { kind: 'dog', data: S.dog, soft: Object.keys(DEF_DOG).every(k => (S.dog[k] || '') === DEF_DOG[k]) };
-    const b = S.settings.basics || [], db = defBasics();
-    m.settings = { kind: 'settings', data: { basics: b }, soft: b.join() === db.join() };
+    const rt = S.settings.routines || [], fam = S.settings.fam || DEF_FAM;
+    m.settings = { kind: 'settings', data: { routines: rt, fam }, soft: rt.join() === defRoutines().join() && !fam.baby && !fam.kids };
     if (S.lex) m.lex = { kind: 'lex', data: { items: S.lex } };
     if (S.rew) m.rew = { kind: 'rew', data: { items: S.rew } };
     m.trig = { kind: 'trig', data: { items: S.trig }, soft: !S.trig.length };
@@ -1259,9 +1688,17 @@ if (window.Cloud) Cloud.init({
       const arr = S[ARR[r.kind][1]], i = arr.findIndex(x => x.id === rid);
       if (del) { if (i >= 0) arr.splice(i, 1); } else if (i >= 0) arr[i] = d; else arr.push(d);
     } else if (r.kind === 'skill') { if (del) delete S.skills[rid]; else S.skills[rid] = d; }
-    else if (r.kind === 'day') { if (del) delete S.days[rid]; else S.days[rid] = d; }
+    else if (r.kind === 'day') { if (del) delete S.days[rid]; else { const { b, done, ...rest } = d || {}; S.days[rid] = rest; } }
+    else if (r.kind === 'check') {
+      const i = rid.indexOf('|'), k = rid.slice(0, i), key = rid.slice(i + 1), c = { ...chk(k) };
+      if (del) delete c[key]; else c[key] = d || { t: Date.now() };
+      if (Object.keys(c).length) S.checks[k] = c; else delete S.checks[k];
+    }
     else if (r.kind === 'dog') { if (!del && d) S.dog = { ...DEF_DOG, ...d }; }
-    else if (r.kind === 'settings') { if (!del && d && Array.isArray(d.basics)) S.settings.basics = d.basics; }
+    else if (r.kind === 'settings') {
+      if (!del && d && Array.isArray(d.routines)) S.settings.routines = d.routines;
+      if (!del && d && d.fam) S.settings.fam = { ...DEF_FAM, ...d.fam };
+    }
     else if (r.kind === 'lex') S.lex = del || !d ? null : d.items;
     else if (r.kind === 'rew') S.rew = del || !d ? null : d.items;
     else if (r.kind === 'trig') S.trig = del || !d ? [] : (d.items || []);
