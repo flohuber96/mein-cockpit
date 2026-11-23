@@ -296,3 +296,131 @@ main{padding:4px 14px calc(96px + var(--bot));max-width:1100px;margin:0 auto}
 .setting .mini small{margin-right:4px}
 @media (max-width:380px){.bottle .mini span{display:none}.bottle .mini{justify-content:space-between;padding-left:2px}}
 @media (max-width:360px){.running{gap:6px;padding-left:12px}.running .re{display:none}.running .rs .tg{width:34px}.running .stop{padding:0 9px}}
+
+/* Optimierungen v1.6 */
+.mixhint{font-size:13px;font-weight:700;color:#e67700;background:rgba(240,140,0,.1);border-radius:10px;padding:7px 10px;margin-top:-3px}
+.chip.all{border:1.5px dashed var(--acc);background:transparent;color:var(--acc-t)}
+.chip.all.on{background:var(--acc);color:var(--on-acc);border-style:solid}
+.feed .fclock small{font-size:15px;font-weight:700;color:var(--t2);margin-left:2px;letter-spacing:0}
+.feed.due .fclock small{color:var(--red-t)}
+.lk small.mix{color:#e67700;font-weight:600}
+.drunk{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.drunk .btn.primary{grid-column:1/-1}
+.drunk .btn{min-height:48px;font-size:16px}
+body.locked .toast{top:calc(var(--top) + 10px);bottom:auto;transform:translate(-50%,-20px)}
+body.locked .toast.show{transform:translate(-50%,0)}
+
+/* ───────── v2.0: aufgeräumtes Layout ───────── */
+/* Oben: Zeit seit letzter Mahlzeit */
+.feed{padding:10px 14px 10px}
+.feed .fmain{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:2px 0 8px}
+.feed .fclock{font-size:38px;margin:0;line-height:1}
+.feed .fclock small{font-size:17px;font-weight:700;color:var(--t3);margin-left:1px}
+.feed .fright{text-align:right;min-width:0}
+.feed .fstate{margin:0;font-size:16px;font-weight:800;white-space:nowrap}
+.feed .fnext{font-size:12.5px;color:var(--t2);font-weight:600;white-space:nowrap}
+.feed .flast{margin-top:6px}
+.feed.ok .fclock{color:var(--t1)}
+/* Letzte Windel + Vitamin D */
+.keyrow{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px}
+.kd{padding:8px 12px;min-width:0}
+.kd small{display:block;font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.03em}
+.kd b{display:block;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;margin:1px 0}
+.kd .kd-sub{display:block;font-size:12.5px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vitbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:78px;padding:6px 4px;border:1.5px dashed var(--acc);box-shadow:none;background:var(--card)}
+.vitbtn .ck{width:24px;height:24px;border-radius:50%;border:2px solid var(--acc)}
+.vitbtn b{font-size:13px;font-weight:800;color:var(--acc-t)}
+.vitbtn small{font-size:11px;color:var(--t2);font-weight:600}
+.vitbtn.on{border:1.5px solid var(--ok);background:var(--ok-soft)}
+.vitbtn.on .ck{border-color:var(--ok);background:var(--ok) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center/15px no-repeat}
+.vitbtn.on b{color:var(--ok)}
+/* Neuer Eintrag – kompakt, Eintragen unten groß */
+.form{gap:10px}
+.form-h{align-items:center;margin:0 0 2px}
+.tpill{display:flex;align-items:center;gap:2px;background:var(--card2);border-radius:999px;padding:2px 3px 2px 12px}
+.tpill input{background:transparent;border:0;padding:4px 0;width:auto;min-width:64px;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--t1)}
+.tpill input:focus{background:transparent}
+.tpill input::-webkit-calendar-picker-indicator{display:none}
+.tpill button{font-size:12px;font-weight:800;color:var(--acc-t);text-transform:uppercase;padding:7px 10px;border-radius:999px}
+.tpill.live button{background:var(--acc-soft)}
+.dpick{width:auto;padding:7px 12px;border-radius:999px;font-size:16px;font-weight:700}
+.frow{display:flex;align-items:center;gap:8px}
+.feedtg{flex:1;display:flex;align-items:center;gap:8px;min-height:46px;padding:0 12px;border-radius:13px;background:var(--card2);font-size:16px;font-weight:700;color:var(--t2)}
+.feedtg .e{font-size:22px}
+.feedtg .ck{margin-left:auto;width:22px;height:22px;border-radius:50%;border:2px solid var(--t3)}
+.feedtg.on{background:var(--acc-soft);color:var(--acc-t)}
+.feedtg.on .ck{border-color:var(--acc);background:var(--acc) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center/14px no-repeat}
+.sides{display:flex;align-items:center;gap:5px}
+.sides small{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-right:1px}
+.sd{width:40px;height:40px;border-radius:11px;background:var(--card2);font-size:16px;font-weight:900;color:var(--t2)}
+.sd.on{background:var(--acc);color:var(--on-acc)}
+.sd.sug:not(.on){box-shadow:inset 0 0 0 2px var(--acc);color:var(--acc-t)}
+.recipe{background:var(--card2);border-radius:13px;overflow:hidden}
+.rc-head{display:flex;align-items:baseline;gap:7px;width:100%;padding:10px 12px;text-align:left}
+.rc-head .lbl{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.03em}
+.rc-head b{font-size:16px;font-weight:800}
+.rc-head .rc-sub{font-size:14px;color:var(--t2);font-weight:600;white-space:nowrap}
+.rc-head .rc-edit{margin-left:auto;font-size:13px;font-weight:800;color:var(--acc-t)}
+.rc-body{display:grid;grid-template-columns:1fr;gap:6px;padding:0 8px 8px}
+.rc-body .mini{background:var(--card);min-height:42px}
+.rc-body .mini b{min-width:34px;text-align:center}
+.rc-reset{justify-self:start;font-size:13px;font-weight:700;color:var(--acc-t);padding:4px 6px}
+.amt{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px}
+.amt .lbl{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.03em}
+.amt .stepper{min-height:46px}
+.amt .chip.all{padding:10px 11px}
+.btn.save{min-height:54px;font-size:17px;margin-top:2px}
+/* Unten: Tageszahlen */
+.daysum{display:grid;grid-template-columns:repeat(4,1fr);padding:10px 4px;margin-bottom:8px}
+.daysum div{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0}
+.daysum div+div{border-left:1px solid var(--line)}
+.daysum b{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.15}
+.daysum span{font-size:11.5px;color:var(--t2);font-weight:600;white-space:nowrap}
+.daysum-x{font-size:13px;color:var(--t2);font-weight:600;text-align:center;margin:-2px 0 8px}
+/* Protokoll */
+.lrow,.lhead{grid-template-columns:50px 1fr 50px 62px 46px}
+.lt{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums}
+.lk{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;letter-spacing:0;color:var(--t2)}
+.lk i{font-style:normal;font-size:19px}
+.lk small.mix{display:block;font-size:11.5px;color:#e67700;font-weight:600}
+/* Statistik */
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.kpi{padding:10px 12px}
+.kpi small{display:block;font-size:11.5px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.03em}
+.kpi b{display:block;font-size:26px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1.2;margin-top:2px}
+.kpi b i{font-style:normal;font-size:13px;font-weight:700;color:var(--t2);margin-left:3px;letter-spacing:0}
+.kpi span{display:block;font-size:12.5px;color:var(--t2)}
+.kpi-note{font-size:12px;color:var(--t3);text-align:center;margin:6px 0 10px}
+.charts{margin-bottom:10px}
+.charts.two{grid-template-columns:1fr 1fr}
+.chart.sm .bars{height:64px}
+.chart.sm .ch-v{font-size:20px;margin-bottom:6px}
+.bars{position:relative}
+.avgline{position:absolute;left:0;right:0;border-top:1.5px dashed var(--t3);opacity:.7;pointer-events:none;z-index:1}
+.avgline span{position:absolute;right:0;top:-17px;font-size:10.5px;font-weight:700;color:var(--t2);background:var(--card);padding:0 3px;border-radius:4px}
+.chart.sm .avgline span{display:none}
+.tbl-wrap{margin-top:14px}
+.tbl-wrap summary{cursor:pointer;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t2);padding:6px 4px 10px}
+@media (max-width:360px){.sides small{display:none}.sd{width:36px}.amt{grid-template-columns:1fr auto}.amt .lbl{display:none}.daysum b{font-size:19px}}
+/* Rezept anpassen: drei Felder nebeneinander, kompakt */
+.rc-body{grid-template-columns:repeat(3,minmax(0,1fr))}
+.rc-body .mini{flex-wrap:wrap;justify-content:center;gap:0;padding:4px 2px 2px;min-height:0}
+.rc-body .mini span{width:100%;text-align:center;margin:0;font-size:10px}
+.rc-body .mini b{min-width:30px;font-size:17px}
+.rc-body .mini button{width:30px;height:32px}
+.rc-reset{grid-column:1/-1}
+.rc-head b,.rc-head .rc-edit{white-space:nowrap}
+@media (max-width:380px){
+  .rc-head .lbl{display:none}
+  .rc-body{gap:4px;padding:0 6px 6px}
+  .rc-body .mini button{width:24px}
+  .rc-body .mini b{min-width:24px;font-size:16px}
+  .form-h b{font-size:16px}
+}
+
+/* Zubereitung: Milchautomat / per Hand */
+.rc-body{grid-template-columns:repeat(2,minmax(0,1fr))}
+.rc-how{grid-column:1/-1;background:var(--card)}
+.rc-how button{font-size:13.5px;padding:8px 4px}
+.rc-how button.on{background:var(--acc);color:var(--on-acc)}
+.lk small.mix.std{color:var(--t2);font-weight:600}
