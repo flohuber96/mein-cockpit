@@ -1148,7 +1148,7 @@ function viewMore() {
     <span class="muted small">Die App startet dann im Vollbild und funktioniert auch ohne Netz. Mit der Online-Datenbank ${online ? 'sind' : 'wären'} alle Geräte automatisch auf demselben Stand.</span>
   </div>
   </div></div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte (${allRecipes().filter(isMainDish).length} Hauptgerichte) · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Essensplaner v${APP_VERSION} · <button class="tlink" data-act="diag">Diagnose</button> · <button class="tlink" data-act="credits">Bildnachweise</button><br>Nährwerte, Nutri-Score und Allergene sind automatisch aus den Zutaten geschätzt und ersetzen keine Packungsangaben.</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte (${allRecipes().filter(isMainDish).length} Hauptgerichte) · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Haushalt v${APP_VERSION} · <button class="tlink" data-act="diag">Diagnose</button> · <button class="tlink" data-act="credits">Bildnachweise</button><br>Nährwerte, Nutri-Score und Allergene sind automatisch aus den Zutaten geschätzt und ersetzen keine Packungsangaben.</p>`;
 }
 
 function openDeptOrder() {
@@ -1830,7 +1830,7 @@ const ACT = {
   diag() {
     const st = window.Cloud ? (Cloud.isOn() ? Cloud.status().label : 'nicht angemeldet') : 'nicht geladen';
     const size = k => { const v = lsGet(k); return v ? Math.round(v.length / 1024) + ' kB' : '–'; };
-    const lines = [`Essensplaner v${APP_VERSION}`, `Online-Datenbank: ${st}`, `Speicher: Daten ${size(KEY)} · Sicherungen ${size(BAK_KEY)} · Abgleich ${size('cloud.essen')}`,
+    const lines = [`Haushalt v${APP_VERSION}`, `Online-Datenbank: ${st}`, `Speicher: Daten ${size(KEY)} · Sicherungen ${size(BAK_KEY)} · Abgleich ${size('cloud.essen')}`,
       `Inhalt: ${snapInfo(S)}`, `Gerät: ${navigator.userAgent}`, `Fenster: ${innerWidth}×${innerHeight}`, '', 'Letzte Fehler:', ...(errorLog().length ? errorLog().slice().reverse() : ['keine'])];
     openSheet({
       title: 'Diagnose', left: '<button class="lnk" data-act="closeSheet">Schließen</button>',

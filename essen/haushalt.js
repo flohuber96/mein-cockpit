@@ -114,13 +114,13 @@ function openKnow(id) {
 }
 
 /* ───────── Routinen: anlegen, bearbeiten, erledigen ───────── */
-// Neue Routinen gleichmäßig verteilen, damit nicht alles am ersten Tag fällig ist
-function spreadLast(t) {
+// Neue Routinen gleichmäßig verteilen, damit nicht alles am ersten Tag fällig ist: erste Fälligkeit
+// zufällig innerhalb des ersten Intervalls (tägliche sofort). Als „verschoben auf“ gespeichert – zuletzt erledigt bleibt leer.
+function firstDue(t) {
   const span = Math.max(1, Math.round((addInterval(dkey(new Date()), t.every, t.unit) - startOfDay(new Date())) / 864e5));
-  const off = t.unit === 'd' && t.every === 1 ? span : 1 + Math.floor(Math.random() * span);
-  return dkey(addDays(new Date(), off - span));
+  return dkey(addDays(new Date(), Math.floor(Math.random() * Math.min(span, 60))));
 }
-const routineFrom = t => ({ id: uid(), tid: t.tid, n: t.n, a: t.a, every: t.every, unit: t.unit, mins: t.mins, who: '', last: spreadLast(t), hist: [] });
+const routineFrom = t => ({ id: uid(), tid: t.tid, n: t.n, a: t.a, every: t.every, unit: t.unit, mins: t.mins, who: '', last: null, snooze: firstDue(t), hist: [] });
 function openCatalog() {
   const have = new Set(S.routines.map(r => r.tid).filter(Boolean));
   const sh = openSheet({
@@ -141,7 +141,7 @@ function openRoutine(id) {
     title: r ? 'Routine' : 'Neue Routine', guard: true,
     right: '<button class="lnk r" data-act="rtSave">Sichern</button>',
     body: `<form data-form="rtSave" autocomplete="off">
-      ${r ? `<div class="rt-status ${daysFromToday(due) < 0 ? 'late' : ''}"><b>Nächstes Mal: ${esc(dueText(due))}</b><span>${fmtDay(fromKey(due))}${r.last ? ` · zuletzt ${esc(dueText(r.last).replace('seit ', 'vor ').replace('heute', 'heute'))}` : ''}</span></div>
+      ${r ? `<div class="rt-status ${daysFromToday(due) < 0 ? 'late' : ''}"><b>Nächstes Mal: ${esc(dueText(due))}</b><span>${fmtDay(fromKey(due))}${r.last ? ` · zuletzt erledigt ${esc(fmtDay(fromKey(r.last)))}` : ' · noch nie erledigt'}</span></div>
       <div class="row" style="margin-bottom:12px"><button type="button" class="btn primary" data-act="rtDoneSheet">✓ Erledigt</button><button type="button" class="btn plain" data-act="rtSnooze" data-n="1">Morgen</button><button type="button" class="btn plain" data-act="rtSnooze" data-n="7">+1 Woche</button></div>` : ''}
       ${tpl && tpl.tip ? `<div class="tipbox">💡 ${esc(tpl.tip)}</div>` : ''}
       <div class="field"><label for="r-n">Aufgabe</label><input id="r-n" required value="${esc(v.n)}" placeholder="z. B. Pflanzen düngen"></div>
