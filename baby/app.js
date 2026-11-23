@@ -62,24 +62,39 @@ const kindNames = x => x.kinds.map(k => kind(k).name).join(' + ');
 const KEY = 'baby.v1';
 function fresh() {
   return {
-    v: 1, log: [], todos: [], growth: [], vitd: {},
+    v: 1, sid: uid(), log: [], todos: [], growth: [], vitd: {},
     settings: { name: '', birth: '', theme: 'auto', vitd: true, feedInt: 180, feedFrom: 'start', nightOn: false, nightInt: 240, scoops: 3, water: 90 },
     ui: { view: 'today' },
   };
 }
 function migrate(s) {
-  const f = fresh();
-  return { ...f, ...s, settings: { ...f.settings, ...s.settings }, ui: { ...f.ui, ...s.ui } };
+  const f = fresh(), arr = v => Array.isArray(v) ? v : [];
+  const m = { ...f, ...s, settings: { ...f.settings, ...s.settings }, ui: { ...f.ui, ...s.ui } };
+  m.log = arr(m.log).filter(x => x && x.id && x.s).map(x => ({ ...x, kinds: arr(x.kinds), side: arr(x.side) }));
+  m.todos = arr(m.todos); m.growth = arr(m.growth);
+  if (!m.vitd || typeof m.vitd !== 'object') m.vitd = {};
+  if (!m.sid) m.sid = uid();
+  return m;
 }
+// boot.rebuilt: kein lesbarer Datenbestand beim Start → beim Abgleich gewinnt die Online-Datenbank,
+// statt dass ein leerer Stand dort alles löscht
+const boot = { rebuilt: false };
 function load() {
-  try { const raw = localStorage.getItem(KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) { /* ignore */ }
+  let raw = null;
+  try { raw = localStorage.getItem(KEY); } catch (e) { /* Speicher nicht lesbar */ }
+  if (raw) {
+    try { const s = JSON.parse(raw); if (s && typeof s === 'object') return migrate(s); } catch (e) { /* beschädigt */ }
+    try { localStorage.setItem(KEY + '.kaputt', raw.slice(0, 2000000)); } catch (e) { /* egal */ }
+    boot.rebuilt = true;
+  } else {
+    try { if (localStorage.getItem('cloud.baby')) boot.rebuilt = true; } catch (e) { /* egal */ }
+  }
   return fresh();
 }
 let S = load();
 function save(fromServer) {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { toast('Speichern fehlgeschlagen – Speicher voll?'); }
-  updateBadge();
   if (!fromServer && window.Cloud) Cloud.soon(); // Änderung an die Online-Datenbank schicken
 }
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
@@ -192,6 +207,22 @@ function draftFromEntry(x) {
 
 // Beim Eintragen: Flasche und Zusatz – Brust/Schlaf nur, wenn ein alter Eintrag sie schon hat
 const shownKinds = f => KINDS.filter(k => ENTRY_KINDS.includes(k) || f.kinds.includes(k.k));
+// Mischverhältnis prüfen: Standard (z. B. 3 Löffel : 90 ml) gibt das Verhältnis vor
+function mixHint(f) {
+  if (!f.kinds.includes('flasche')) return '';
+  const pu = f.pu ?? S.settings.scoops, wa = f.wa ?? S.settings.water, per = S.settings.water / S.settings.scoops;
+  const want = Math.round(wa / per * 2) / 2;
+  if (Math.abs(pu * per - wa) < per / 2) return '';
+  return `<div class="mixhint">⚠︎ Verhältnis prüfen: für ${wa} ml üblich ${num(want)} Löffel (1 Löffel je ${num(per)} ml)</div>`;
+}
+function askDrunk(x, before) {
+  const w = x.wa ?? S.settings.water;
+  const opts = [...new Set([w, 30, 50, 60, 70, 80, 90, 100, 120, 150].filter(Boolean))];
+  openSheet({ title: 'Wie viel getrunken?', body: `<p class="small muted" style="margin:0 4px 12px">${esc(kindNames(x))} ${hm(x.s)}–${hm(x.e)} · ${fmtDur(x.e - x.s)}</p>
+    <div class="drunk">${opts.map((n, i) => `<button class="btn ${i === 0 ? 'primary' : 'plain'}" data-act="drunk" data-id="${x.id}" data-n="${n}">${i === 0 ? `Ganze Flasche · ${n} ml` : `${n} ml`}</button>`).join('')}</div>
+    <button class="btn danger" style="width:100%;margin-top:8px" data-act="drunk" data-id="${x.id}" data-n="0">Ohne Menge speichern</button>` });
+  undoable(`Beendet · ${fmtDur(x.e - x.s)}`, before);
+}
 function formHTML(f, fid) {
   const main = fid === 'main';
   const von = main && !f.vonSet ? hm(Date.now()) : f.von;
@@ -215,7 +246,8 @@ function formHTML(f, fid) {
       <div class="mini"><span>Pulver</span><button type="button" data-act="puStep" data-n="-1" aria-label="Ein Löffel weniger">−</button><b>${num(f.pu ?? S.settings.scoops)}</b><small>Löffel</small><button type="button" data-act="puStep" data-n="1" aria-label="Ein Löffel mehr">+</button></div>
       <div class="mini"><span>Wasser</span><button type="button" data-act="waStep" data-n="-10" aria-label="10 ml weniger">−</button><b>${f.wa ?? S.settings.water}</b><small>ml</small><button type="button" data-act="waStep" data-n="10" aria-label="10 ml mehr">+</button></div>
     </div>` : ''}
-    <div class="chiprow"><span class="lbl">Getrunken</span>${[20, 30, 50, 60, 80, 90, 100, 120, 150].map(n => `<button type="button" class="chip ${f.ml === n ? 'on' : ''}" data-act="mlSet" data-n="${n}">${n}</button>`).join('')}</div>
+    ${mixHint(f)}
+    <div class="chiprow"><span class="lbl">Getrunken</span>${f.kinds.includes('flasche') ? `<button type="button" class="chip all ${f.ml && f.ml === (f.wa ?? S.settings.water) ? 'on' : ''}" data-act="mlAll">Ganze Flasche</button>` : ''}${[20, 30, 50, 60, 80, 90, 100, 120, 150].map(n => `<button type="button" class="chip ${f.ml === n ? 'on' : ''}" data-act="mlSet" data-n="${n}">${n}</button>`).join('')}</div>
     <div class="tgs k2">
       <button type="button" class="tg row ${f.poo ? 'on' : ''}" data-act="diaper" data-k="poo" aria-pressed="${f.poo}"><span class="e">💩</span>Groß</button>
       <button type="button" class="tg row ${f.pee ? 'on' : ''}" data-act="diaper" data-k="pee" aria-pressed="${f.pee}"><span class="e">💧</span>Klein</button>
@@ -238,6 +270,7 @@ function updateFormMarks(fid) {
   const von = fid === 'main' && !f.vonSet ? hm(Date.now()) : f.von, d = durOf(f, von);
   $$('[data-act=dur]', fe).forEach(c => c.classList.toggle('on', +c.dataset.n === d));
   $$('[data-act=mlSet]', fe).forEach(c => c.classList.toggle('on', +c.dataset.n === f.ml));
+  $('[data-act=mlAll]', fe)?.classList.toggle('on', !!f.ml && f.ml === (f.wa ?? S.settings.water));
   const bb = $('[data-in="bis"]', fe)?.closest('.tbox')?.querySelector('small button');
   if (bb) { bb.dataset.act = f.bis ? 'bisClr' : 'bisNow'; bb.textContent = f.bis ? 'leeren' : 'jetzt'; }
 }
@@ -280,9 +313,7 @@ function render() {
   if (v === 'today') { main.innerHTML = viewToday(); updateFeedCard(Date.now()); }
   if (v === 'stats') main.innerHTML = viewStats();
   if (v === 'more') main.innerHTML = viewMore();
-  updateBadge();
 }
-function updateBadge() { /* kein Tab-Abzeichen mehr (To-do entfernt) */ }
 
 /* ── Heute ── */
 function viewToday() {
@@ -318,7 +349,8 @@ function updateFeedCard(now) {
   const passed = now - ref, left = target - now;
   const state = left > 15 * MIN ? 'ok' : left > 0 ? 'soon' : 'due';
   if (!c.classList.contains(state)) { c.classList.toggle('ok', state === 'ok'); c.classList.toggle('soon', state === 'soon'); c.classList.toggle('due', state === 'due'); }
-  $('.fclock', c).textContent = fmtClock(passed);
+  const sec = Math.floor(passed / 1000);
+  $('.fclock', c).innerHTML = `${Math.floor(sec / 3600)}:${pad(Math.floor(sec / 60) % 60)}<small>:${pad(sec % 60)} Std.</small>`;
   $('.fbar i', c).style.width = Math.min(100, Math.max(0, passed / int * 100)) + '%';
   $('.fstate', c).textContent = left > 0 ? `noch ${fmtDur(left)} · nächste ca. ${hm(target)}` : left > -MIN ? 'Jetzt ist Mahlzeit-Zeit' : `Optimalzeit seit ${fmtDur(-left)} erreicht`;
   // Hinweis, wenn die Optimalzeit erreicht wird, während die App offen ist
@@ -369,7 +401,7 @@ function statusHTML() {
   const td = dayStats(dkey(new Date()));
   h += feedCardHTML(lf);
   h += `<div class="status">
-    <div class="card st"><small>🍼 Heute</small><b>${td.feeds}× gefüttert</b><span>${[td.ml ? td.ml + ' ml' : '', td.breastMin ? '🤱 ' + fmtDur(td.breastMin * MIN) : ''].filter(Boolean).join(' · ') || 'noch nichts'}</span></div>
+    <div class="card st"><small>🍼 Heute</small><b>${td.feeds}× gefüttert</b><span>${td.feeds ? [td.ml ? td.ml + ' ml getrunken' : 'ohne Mengenangabe', td.breastMin ? '🤱 ' + fmtDur(td.breastMin * MIN) : ''].filter(Boolean).join(' · ') : 'noch nichts'}</span></div>
     <div class="card st"><small>↔️ Nächste Seite</small>${sug ? `<b><span class="side">${sug}</span>${sug === 'L' ? 'links' : 'rechts'}</b><span>zuletzt ${lastSide.side.join(' → ')} um ${hm(lastSide.s)}</span>` : '<b>–</b><span>L/R beim Füttern wählen</span>'}</div>
     ${S.settings.vitd ? `<button class="card st vit ${vitOn ? 'on' : ''}" data-act="vitd"><small>☀️ Vitamin D</small><b>${vitOn ? 'Gegeben ✓' : 'Heute geben'}</b><span>${vitOn ? 'für heute erledigt' : 'antippen zum Abhaken'}</span></button>` : ''}
     <div class="card st"><small>🧷 Letzte Windel</small>${lastDiaper ? `<b data-ago="${lastDiaper.s}">${fmtDur(now - lastDiaper.s)}</b><span>${lpoo ? '💩 vor ' + fmtDur(now - lpoo.s) : '💩 –'}</span>` : '<b>–</b><span>noch keine</span>'}</div>
@@ -406,10 +438,9 @@ function logHTML() {
 }
 function rowHTML(x) {
   const run = x.run && !x.e;
-  const dur = x.e ? fmtDur(x.e - x.s) : run ? 'läuft' : '';
   return `<button class="lrow ${run ? 'isrun' : ''}" data-act="edit" data-id="${x.id}">
-    <span class="lt"><b>${hm(x.s)}</b>${x.e ? `<small>bis ${hm(x.e)}</small>` : ''}${dur ? `<small>${dur}</small>` : ''}</span>
-    <span class="lk">${x.kinds.map(k => kind(k).e).join('') || (x.poo || x.pee ? '🧷' : '📝')}<small>${esc(kindNames(x) || (x.poo || x.pee ? 'Windel' : 'Notiz'))}${x.pu ? ` · ${num(x.pu)} Lö./${x.wa} ml` : ''}</small></span>
+    <span class="lt"><b>${hm(x.s)}</b>${run ? '<small>läuft</small>' : x.e ? `<small>bis ${hm(x.e)}</small>` : ''}</span>
+    <span class="lk">${x.kinds.map(k => kind(k).e).join('') || (x.poo || x.pee ? '🧷' : '📝')}<small>${esc(kindNames(x) || (x.poo || x.pee ? 'Windel' : 'Notiz'))}</small>${x.pu && (x.pu !== S.settings.scoops || x.wa !== S.settings.water) ? `<small class="mix">${num(x.pu)} Lö. / ${x.wa} ml</small>` : ''}</span>
     <span class="ls">${x.side.map(s => `<i>${s}</i>`).join('')}</span>
     <span class="lm">${x.ml ? `${x.ml}<small> ml</small>` : ''}</span>
     <span class="ld">${x.poo ? '💩' : ''}${x.pee ? '💧' : ''}</span>
@@ -530,18 +561,30 @@ function viewMore() {
     • Eintrag antippen zum Bearbeiten oder Löschen.<br>
     • Uhrzeit nach Mitternacht? Eine spätere Uhrzeit als jetzt wird automatisch auf gestern gelegt.
   </div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.5</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${S.log.length} Einträge · Baby-Tagebuch v1.6</p>`;
 }
 
 /* ───────── Aktionen ───────── */
 function commit() { save(); refreshToday(); }
-function undoable(msg, before) {
-  toast(msg, { label: 'Rückgängig', fn: () => { S.log = before; save(); render(); } });
+const bulkOk = () => { if (window.Cloud && Cloud.allowBulkDelete) Cloud.allowBulkDelete(); }; // gewollte Massenänderung
+// Merkt sich nur die genannten Einträge – Rückgängig lässt alles andere (z. B. Einträge vom
+// anderen Handy, die inzwischen hereinkamen) unangetastet
+function remember(ids) {
+  const prev = new Map(ids.map(id => { const x = S.log.find(e => e.id === id); return [id, x ? JSON.parse(JSON.stringify(x)) : null]; }));
+  return () => {
+    for (const [id, p] of prev) {
+      const i = S.log.findIndex(e => e.id === id);
+      if (p) { if (i >= 0) S.log[i] = p; else S.log.push(p); } else if (i >= 0) S.log.splice(i, 1);
+    }
+  };
+}
+function undoable(msg, restore) {
+  toast(msg, { label: 'Rückgängig', fn: () => { restore(); save(); render(); } });
 }
 function saveDraft(f, main) {
   const x = draftToEntry(f, main);
   if (!hasContent(x)) { toast('Bitte erst etwas auswählen'); return null; }
-  const before = S.log.map(e => ({ ...e }));
+  const before = remember([x.id]);
   const i = S.log.findIndex(e => e.id === x.id);
   if (i >= 0) { x.run = S.log[i].run && !x.e; S.log[i] = x; } else S.log.push(x);
   save();
@@ -596,6 +639,12 @@ const ACT = {
     S.settings[k] = Math.max(lim[0], Math.min(lim[1], S.settings[k] + +el.dataset.n)); vib(); save(); render();
   },
   mlStep(el, f, fid) { f.ml = Math.max(0, Math.min(999, (f.ml || 0) + +el.dataset.n)); rerenderForm(fid); },
+  mlAll(el, f, fid) { const w = f.wa ?? S.settings.water; f.ml = f.ml === w ? 0 : w; vib(); rerenderForm(fid); },
+  drunk(el) {
+    const x = S.log.find(e => e.id === el.dataset.id); if (!x) return;
+    x.ml = +el.dataset.n || null; vib(); save(); closeSheet(); refreshToday();
+    toast(x.ml ? `${x.ml} ml eingetragen` : 'Ohne Menge gespeichert');
+  },
   mlSet(el, f, fid) { const n = +el.dataset.n; f.ml = f.ml === n ? 0 : n; vib(); rerenderForm(fid); },
   diaper(el, f, fid) { const k = el.dataset.k; f[k] = !f[k]; vib(); rerenderForm(fid); },
   dur(el, f, fid) {
@@ -618,7 +667,7 @@ const ACT = {
     if (!F.kinds.length) { toast('Erst Flasche oder Zusatz wählen'); return; }
     const x = draftToEntry({ ...F, bis: '' }, true);
     x.run = true;
-    const before = S.log.map(e => ({ ...e }));
+    const before = remember([x.id, ...running().map(r => r.id)]);
     // Ein neuer Timer derselben Art beendet einen alten
     for (const r of running()) if (isSleep(r) === isSleep(x)) r.e = Math.max(r.s, x.s);
     S.log.push(x); save();
@@ -627,10 +676,11 @@ const ACT = {
   },
   stop(el) {
     const x = S.log.find(e => e.id === el.dataset.id); if (!x) return;
-    const before = S.log.map(e => ({ ...e }));
+    const before = remember([x.id]);
     x.e = Date.now(); x.run = false; vib(15); commit();
     if (S.ui.view === 'today') rerenderForm('main');
-    undoable(`Beendet · ${fmtDur(x.e - x.s)}`, before);
+    // 4) Flasche/Zusatz ohne Menge: gleich fragen, wie viel getrunken wurde
+    if (isFeed(x) && !x.ml) askDrunk(x, before); else undoable(`Beendet · ${fmtDur(x.e - x.s)}`, before);
   },
   runSide(el) {
     const x = S.log.find(e => e.id === el.dataset.id); if (!x) return;
@@ -653,7 +703,7 @@ const ACT = {
   },
   stopEdit() { E.bis = hm(Date.now()); ACT.saveEdit(); },
   delEdit() {
-    const id = E.id, before = S.log.map(e => ({ ...e }));
+    const id = E.id, before = remember([E.id]);
     S.log = S.log.filter(e => e.id !== id); save(); closeSheet(); render();
     undoable('Eintrag gelöscht', before);
   },
@@ -709,8 +759,9 @@ const ACT = {
     exportFile(csv, `baby-protokoll-${dkey(new Date())}.csv`, 'text/csv', 'Baby-Protokoll');
   },
   resetAll() {
-    confirmSheet(window.Cloud && Cloud.isOn() ? 'Alle Einträge, To-dos und Einstellungen löschen – auch auf dem Server und auf allen verbundenen Handys? Das kann nicht rückgängig gemacht werden.' : 'Alle Einträge, To-dos und Einstellungen auf diesem Gerät löschen? Das kann nicht rückgängig gemacht werden.', 'Alles löschen', () => {
-      S = fresh(); S.ui.view = 'more'; F = newDraft(); save(); applyTheme(); render(); toast('Alle Daten gelöscht');
+    confirmSheet(window.Cloud && Cloud.isOn() ? 'Alle Einträge und Einstellungen löschen – auch online und auf allen verbundenen Handys? Das kann nicht rückgängig gemacht werden.' : 'Alle Einträge und Einstellungen auf diesem Gerät löschen? Das kann nicht rückgängig gemacht werden.', 'Alles löschen', () => {
+      const sid = S.sid; S = fresh(); S.sid = sid; S.ui.view = 'more'; F = newDraft();
+      bulkOk(); save(); applyTheme(); render(); toast('Alle Daten gelöscht');
     });
   },
 };
@@ -722,7 +773,8 @@ function importData(file) {
       const d = JSON.parse(rd.result);
       if (!Array.isArray(d.log)) throw new Error('bad');
       confirmSheet('Backup laden? Die aktuellen Daten auf diesem Gerät werden ersetzt.', 'Backup laden', () => {
-        const uiKeep = S.ui; S = migrate(d); S.ui = uiKeep; save(); applyTheme(); render(); toast('Backup geladen');
+        const keep = { ui: S.ui, sid: S.sid }; S = migrate(d); S.ui = keep.ui; S.sid = keep.sid;
+        bulkOk(); save(); applyTheme(); render(); toast('Backup geladen');
       });
     } catch (e) { toast('Datei ist kein gültiges Backup'); }
   };
@@ -826,6 +878,11 @@ if (window.Cloud) Cloud.init({
   },
   persist() { save(true); },
   refresh() { const y = window.scrollY; render(); window.scrollTo(0, y); },
+  // Kennung des lokalen Bestands: wurde er nach einem Defekt neu aufgebaut, gewinnt die Online-Datenbank
+  storeId: () => S.sid, rebuilt: boot.rebuilt,
+  // Sicherheitsnetz: sollen auf einen Schlag viele Einträge verschwinden (mehr als übrig bleiben),
+  // wird erst nachgefragt, bevor online gelöscht wird
+  guardDeletes(dels) { const gone = dels.filter(d => d.kind === 'log' || d.kind === 'growth').length; return gone >= 10 && gone > S.log.length; },
   toast, confirm: confirmSheet, badgeHost: '#hact',
   openSettings() { closeAllSheets(); S.ui.view = 'more'; save(true); render(); setTimeout(() => $('#cloudBox')?.scrollIntoView({ behavior: 'smooth' }), 50); },
 });
