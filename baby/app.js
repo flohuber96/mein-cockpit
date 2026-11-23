@@ -101,7 +101,7 @@ function applyTheme() {
   const t = S.settings.theme, root = document.documentElement;
   if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('meta[name="theme-color"]').content = dark ? '#111014' : '#f5f3fa';
+  $('meta[name="theme-color"]').content = dark ? '#191812' : '#f3eee3';
 }
 applyTheme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
