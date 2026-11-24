@@ -1,0 +1,72 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Mein Cockpit – gemeinsames Farbschema & App-Rahmen für alle Apps
+   Palette: #D0F1BF Minze · #B6D7B9 Salbei hell · #9ABD97 Salbei
+            #646536 Oliv · #483D03 Erdbraun
+   Wird in jeder App NACH app.css geladen.
+   ═══════════════════════════════════════════════════════════════════ */
+:root{
+  --p-mint:#D0F1BF;--p-sage-l:#B6D7B9;--p-sage:#9ABD97;--p-olive:#646536;--p-umber:#483D03;
+
+  --bg:#eef4e7;--card:#fbfdf8;--card2:#e2ecda;--line:rgba(72,61,3,.12);
+  --t1:#2a2605;--t2:#5c5d33;--t3:#8f9879;
+  --acc:#646536;--acc-soft:rgba(100,101,54,.13);--acc-t:#483D03;--on-acc:#f7fbf2;
+  --hi:#D0F1BF;--hi-t:#483D03;
+  --ok:#4c7a39;--ok-soft:rgba(76,122,57,.14);
+  --warn:#94680f;--warn-b:#c09a3c;--warn-soft:rgba(192,154,60,.17);
+  --run:#a5622b;--run-soft:rgba(165,98,43,.13);
+  --red:#a8432c;--red-t:#a3402a;--red-soft:rgba(168,67,44,.09);
+  --shadow:0 1px 2px rgba(72,61,3,.06),0 2px 10px rgba(72,61,3,.06);
+  --blur:rgba(238,244,231,.88);
+  --r:16px;--rs:11px;
+  --top:env(safe-area-inset-top,0px);--bot:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#13150c;--card:#1d2014;--card2:#292d1d;--line:rgba(208,241,191,.09);
+    --t1:#ebf4e3;--t2:#b3c4a9;--t3:#7a866e;
+    --acc:#9ABD97;--acc-soft:rgba(154,189,151,.16);--acc-t:#D0F1BF;--on-acc:#171a0d;
+    --hi:#3a4a2c;--hi-t:#D0F1BF;
+    --ok:#9fcd84;--ok-soft:rgba(159,205,132,.15);
+    --warn:#e0b45c;--warn-b:#d4a24a;--warn-soft:rgba(224,180,92,.14);
+    --run:#e39a64;--run-soft:rgba(227,154,100,.15);
+    --red:#ec8e76;--red-t:#ec8e76;--red-soft:rgba(236,142,118,.11);
+    --shadow:none;--blur:rgba(19,21,12,.88);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#13150c;--card:#1d2014;--card2:#292d1d;--line:rgba(208,241,191,.09);
+  --t1:#ebf4e3;--t2:#b3c4a9;--t3:#7a866e;
+  --acc:#9ABD97;--acc-soft:rgba(154,189,151,.16);--acc-t:#D0F1BF;--on-acc:#171a0d;
+  --hi:#3a4a2c;--hi-t:#D0F1BF;
+  --ok:#9fcd84;--ok-soft:rgba(159,205,132,.15);
+  --warn:#e0b45c;--warn-b:#d4a24a;--warn-soft:rgba(224,180,92,.14);
+  --run:#e39a64;--run-soft:rgba(227,154,100,.15);
+  --red:#ec8e76;--red-t:#ec8e76;--red-soft:rgba(236,142,118,.11);
+  --shadow:none;--blur:rgba(19,21,12,.88);
+  color-scheme:dark;
+}
+html,body{background:var(--bg)}
+::selection{background:var(--p-mint);color:var(--p-umber)}
+
+/* ── Einheitlicher Kopf: Cockpit-Knopf · Titel · Aktionen · Einstellungen ── */
+.top{align-items:center!important;gap:10px!important}
+.top .ttl,.top>h1{flex:1;min-width:0}
+.top h1{font-size:28px!important;font-weight:800;letter-spacing:-.02em;line-height:1.1;color:var(--t1)}
+.top small{color:var(--t2)}
+.hact{display:flex;align-items:center;gap:6px}
+.hbtn{background:var(--acc-soft)!important;color:var(--acc-t)!important}
+.cockpit-btn,.gear-btn{flex:0 0 auto;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:var(--acc-t);background:var(--card);box-shadow:var(--shadow);border:1px solid var(--line);text-decoration:none;-webkit-tap-highlight-color:transparent}
+.gear-btn{border-radius:50%}
+.cockpit-btn svg,.gear-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.cockpit-btn:active,.gear-btn:active{transform:scale(.94)}
+.gear-btn.on{background:var(--acc);color:var(--on-acc);border-color:transparent}
+.top .backbtn:not([hidden])~.cockpit-btn{display:none}
+
+/* ── Einheitliche Tab-Leiste ── */
+.tabbar{grid-template-columns:none!important;grid-auto-flow:column;grid-auto-columns:minmax(0,132px);justify-content:center;column-gap:4px;background:var(--blur);border-top:1px solid var(--line)}
+.tabbar>button[data-view]{color:var(--t3);font-size:11px!important;font-weight:650;gap:4px!important}
+.tabbar>button[data-view].on{color:var(--acc-t)!important}
+.tabbar>button[data-view] svg{border-radius:10px;transition:background .15s,box-shadow .15s}
+.tabbar>button[data-view].on svg{background:var(--hi);box-shadow:0 0 0 4px var(--hi)}

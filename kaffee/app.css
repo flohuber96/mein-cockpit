@@ -1,44 +1,17 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#f6f1ec;--card:#ffffff;--card2:#efe8e1;--line:rgba(60,35,15,.1);
-  --t1:#231a14;--t2:#6f6259;--t3:#a89a8f;
-  --acc:#8a5a36;--acc-soft:rgba(138,90,54,.13);--acc-t:#7a4c2b;--on-acc:#fff;
-  --ok:#2f9e44;--ok-soft:rgba(47,158,68,.14);
-  --warn:#d9480f;--warn-soft:rgba(217,72,15,.12);
-  --bad:#c92a2a;--bad-soft:rgba(201,42,42,.11);
-  --red-t:#c92a2a;
-  --grid:rgba(60,35,15,.08);--axis:rgba(60,35,15,.22);
-  --shadow:0 1px 2px rgba(50,25,5,.05),0 2px 10px rgba(50,25,5,.05);
-  --blur:rgba(246,241,236,.85);
-  --r:16px;--rs:11px;
-  --top:env(safe-area-inset-top,0px);--bot:env(safe-area-inset-bottom,0px);
-  color-scheme:light;
+  --bad:#a3402a;--bad-soft:rgba(168,67,44,.1);
+  --grid:rgba(72,61,3,.08);--axis:rgba(72,61,3,.24);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#13100e;--card:#1f1a17;--card2:#2c2622;--line:rgba(255,255,255,.09);
-    --t1:#f2ece7;--t2:#b3a69c;--t3:#776b62;
-    --acc:#d5a274;--acc-soft:rgba(213,162,116,.16);--acc-t:#e2b78f;--on-acc:#1c130c;
-    --ok:#51cf66;--ok-soft:rgba(81,207,102,.15);
-    --warn:#ff8a4c;--warn-soft:rgba(255,138,76,.15);
-    --bad:#ff6b6b;--bad-soft:rgba(255,107,107,.14);
-    --red-t:#ff8787;
-    --grid:rgba(255,255,255,.07);--axis:rgba(255,255,255,.22);
-    --shadow:none;--blur:rgba(19,16,14,.85);
-    color-scheme:dark;
+    --bad:#ec8e76;--bad-soft:rgba(236,142,118,.13);
+    --grid:rgba(208,241,191,.07);--axis:rgba(208,241,191,.22);
   }
 }
 :root[data-theme="dark"]{
-  --bg:#13100e;--card:#1f1a17;--card2:#2c2622;--line:rgba(255,255,255,.09);
-  --t1:#f2ece7;--t2:#b3a69c;--t3:#776b62;
-  --acc:#d5a274;--acc-soft:rgba(213,162,116,.16);--acc-t:#e2b78f;--on-acc:#1c130c;
-  --ok:#51cf66;--ok-soft:rgba(81,207,102,.15);
-  --warn:#ff8a4c;--warn-soft:rgba(255,138,76,.15);
-  --bad:#ff6b6b;--bad-soft:rgba(255,107,107,.14);
-  --red-t:#ff8787;
-  --grid:rgba(255,255,255,.07);--axis:rgba(255,255,255,.22);
-  --shadow:none;--blur:rgba(19,16,14,.85);
-  color-scheme:dark;
+  --bad:#ec8e76;--bad-soft:rgba(236,142,118,.13);
+  --grid:rgba(208,241,191,.07);--axis:rgba(208,241,191,.22);
 }
 html{-webkit-text-size-adjust:100%;background:var(--bg)}
 body{background:var(--bg);color:var(--t1);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}

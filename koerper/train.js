@@ -9,13 +9,14 @@ const getTemplate = id => id === 't_plan' ? planTemplate() : X.TEMPLATES.find(t 
 const tplMin = t => t.min || Math.round(t.items.reduce((a, it) => a + it.s * ((it.sec || 40) + (it.rest || 60)), 0) / 60);
 const targetTxt = it => `${it.s} × ${it.sec ? it.sec + ' s' : it.r || '–'}`;
 
+const modeSw = v => `<div class="modesw">${[['train', '🏋️ Kraft'], ['mob', '🧘 Mobility']].map(([k, n]) => `<button data-act="tab" data-view="${k}" class="${v === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
 VIEWS.train = {
   title: 'Kraft',
   sub() { const w = weekStart(), st = periodStats(w.getTime(), w.getTime() + 7 * DAY); return `${st.kraft}/${S.settings.goalK} Krafteinheiten diese Woche`; },
   actions: () => '<button class="hbtn" data-act="timer" aria-label="Timer">⏱</button>',
   render() {
     const t = ui.train;
-    return `<div class="seg">${[['start', 'Start'], ['lib', 'Übungen'], ['log', 'Verlauf']].map(([k, n]) => `<button data-act="tSub" data-v="${k}" class="${t.sub === k ? 'on' : ''}">${n}</button>`).join('')}</div>` +
+    return modeSw('train') + `<div class="seg">${[['start', 'Start'], ['lib', 'Übungen'], ['log', 'Verlauf']].map(([k, n]) => `<button data-act="tSub" data-v="${k}" class="${t.sub === k ? 'on' : ''}">${n}</button>`).join('')}</div>` +
       (t.sub === 'start' ? tStart() : t.sub === 'lib' ? libWrap('train', tLib) : tLog());
   }
 };

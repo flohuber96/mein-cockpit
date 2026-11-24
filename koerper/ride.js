@@ -55,7 +55,7 @@ function pmc() {
 }
 const FZ = [[25, '#d9a400', 'Übergang', 'Sehr frisch – du verlierst gerade Fitness. Gut vor einem Event, sonst wieder mehr trainieren.'],
   [5, '#3b82f6', 'Frisch', 'Erholt und leistungsbereit – guter Moment für harte Einheiten oder ein Rennen.'],
-  [-10, '#9aa5a2', 'Neutral', 'Belastung und Erholung halten sich die Waage – hier entsteht wenig neuer Reiz.'],
+  [-10, '#9aa58a', 'Neutral', 'Belastung und Erholung halten sich die Waage – hier entsteht wenig neuer Reiz.'],
   [-30, '#2f9e44', 'Optimal', 'Produktiver Aufbau: du trainierst mehr als gewohnt und wirst fitter. Schlaf und Ernährung im Blick behalten.'],
   [-1e9, '#e5484d', 'Hohes Risiko', 'Sehr hohe Ermüdung. Plane 2–3 lockere Tage ein – das Risiko für Überlastung und Infekte steigt.']];
 const fzone = v => FZ.find(z => v > z[0]);
@@ -97,7 +97,7 @@ const PROF = {
 };
 function level(v, th) { if (v < th[0]) return v / th[0]; for (let i = 0; i < th.length - 1; i++) if (v < th[i + 1]) return i + 1 + (v - th[i]) / (th[i + 1] - th[i]); return th.length; }
 const ZN = ['Z1 Erholung', 'Z2 Grundlage', 'Z3 Tempo', 'Z4 Schwelle', 'Z5 VO₂max', 'Z6 Anaerob', 'Z7 Sprint'];
-const ZC = ['#9aa5a2', '#3b82f6', '#2f9e44', '#d9a400', '#f08c00', '#e5484d', '#8b5cf6'];
+const ZC = ['#9aa58a', '#3b82f6', '#2f9e44', '#d9a400', '#f08c00', '#e5484d', '#8b5cf6'];
 const ZLIM = [0.55, 0.75, 0.9, 1.05, 1.2, 1.5];
 // Zeit in Zonen (Sekunden) aus der Leistungsverteilung (20-W-Stufen); Rollphasen unter 20 W zählen nicht mit
 function zonesOf(rides, ftp) {
@@ -175,7 +175,7 @@ function barsSVG(items, unit) {
 VIEWS.ride = {
   title: 'Rad',
   sub() { const w = weekStart().getTime(), s = sumRides(ridesIn(w, w + 7 * DAY)); return s.n ? `Diese Woche ${num(s.km, 0)} km · ${hTxt(s.min)} h · Belastung ${Math.round(s.tss)}` : 'Analyse, Belastung und Ausgleich'; },
-  actions: () => '<button class="hbtn" data-act="perfEdit" aria-label="Leistungsdaten">⚙︎</button><button class="hbtn" data-act="fitPick" aria-label="Fahrten importieren">⬆︎</button>',
+  actions: () => '<button class="hbtn" data-act="perfEdit" aria-label="Leistungsdaten (FTP, Puls)" title="Leistungsdaten">⚡︎</button><button class="hbtn" data-act="fitPick" aria-label="Fahrten importieren">⬆︎</button>',
   render() {
     const r = ui.ride;
     if (!S.rides.length) return rEmpty();
@@ -497,7 +497,7 @@ Object.assign(ACT, {
 
 
 /* ── Puls-Zonen (nach Friel, Anteil am Schwellenpuls) ── */
-const HZN = ['Z1 Erholung', 'Z2 Grundlage', 'Z3 Tempo', 'Z4 Schwelle', 'Z5 Maximal'], HZL = [0.81, 0.9, 0.94, 1.0], HZC = ['#9aa5a2', '#3b82f6', '#2f9e44', '#d9a400', '#e5484d'];
+const HZN = ['Z1 Erholung', 'Z2 Grundlage', 'Z3 Tempo', 'Z4 Schwelle', 'Z5 Maximal'], HZL = [0.81, 0.9, 0.94, 1.0], HZC = ['#9aa58a', '#3b82f6', '#2f9e44', '#d9a400', '#e5484d'];
 function hrZonesOf(rides, lthr) {
   const z = [0, 0, 0, 0, 0];
   rides.forEach(r => (r.hh || []).forEach((sec, i) => { if (!sec) return; const f = (i * 5 + 2.5) / lthr; let k = 0; while (k < 4 && f >= HZL[k]) k++; z[k] += sec; }));

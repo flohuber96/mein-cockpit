@@ -1,6 +1,6 @@
 // Offline-Cache für das Kaffee-Logbuch. Bei Änderungen VERSION erhöhen.
-const VERSION = 'kaffee-v6';
-const FILES = ['./', 'index.html', 'app.css', 'app.js', 'advice.js', 'charts.js', 'wissen.js', 'notizbuch.json', '../shared/cloud.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+const VERSION = 'kaffee-v7';
+const FILES = ['./', 'index.html', 'app.css', 'app.js', 'advice.js', 'charts.js', 'wissen.js', 'notizbuch.json', '../shared/cloud.js', '../shared/ui.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION)

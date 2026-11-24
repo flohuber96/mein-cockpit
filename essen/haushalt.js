@@ -26,9 +26,13 @@ const homeDueCount = () => routineDue().length;
 const todoDueCount = () => { const t = dkey(new Date()); return S.todos.filter(x => !x.done && x.d && x.d <= t).length; };
 
 /* ───────── Haushalt: Ansicht ───────── */
+// Haushalt-Bereiche: Heute · Routinen · To-dos · Wissen (To-dos sind eine eigene Ansicht, aber derselbe Tab)
+const hhSeg = tab => `<div class="seg hhseg" style="margin-bottom:12px">${[['today', 'Heute'], ['all', 'Routinen'], ['todo', 'To-dos'], ['know', 'Wissen']].map(([k, l]) => k === 'todo'
+  ? `<button data-act="tab" data-view="todo" class="${tab === k ? 'on' : ''}">${l}</button>`
+  : `<button data-act="hhTab" data-v="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
 function viewHome() {
-  const tab = S.ui.hh || 'today';
-  return `<div class="seg hhseg" style="margin-bottom:12px">${[['today', '✅ Heute'], ['all', '🔁 Routinen'], ['know', '📚 Wissen']].map(([k, l]) => `<button data-act="hhTab" data-v="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  const tab = S.ui.hh === 'all' || S.ui.hh === 'know' ? S.ui.hh : 'today';
+  return `${hhSeg(tab)}
     <div id="hharea">${tab === 'all' ? homeAllHTML() : tab === 'know' ? homeKnowHTML() : homeTodayHTML()}</div>`;
 }
 const whoChips = () => `<div class="whoseg">${HH_WHO.map(w => `<button class="chip${(S.ui.hhWho || '') === w ? ' on' : ''}" data-act="hhWho" data-v="${w}">${w ? (w === 'Fee' ? '👩 ' : '👨 ') + w : '👫 Alle'}</button>`).join('')}</div>`;
@@ -222,7 +226,7 @@ function viewTodo() {
   add('Irgendwann', open.filter(x => !x.d).sort(order));
   const doneRecent = S.todos.filter(x => x.done && (x.doneAt || 0) > Date.now() - 14 * 864e5).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
   const imp = S.ui.babyHide ? [] : babyImportable();
-  let h = `<form class="addbar" data-form="todo"><input id="tdText" placeholder="Neue Aufgabe …" autocomplete="off" enterkeyhint="done" aria-label="Neue Aufgabe"><button class="btn primary" aria-label="Hinzufügen" style="font-size:24px">+</button></form>
+  let h = hhSeg('todo') + `<form class="addbar" data-form="todo"><input id="tdText" placeholder="Neue Aufgabe …" autocomplete="off" enterkeyhint="done" aria-label="Neue Aufgabe"><button class="btn primary" aria-label="Hinzufügen" style="font-size:24px">+</button></form>
     <div class="chips tdchips">${dateChips(sel, 'todoDate')}</div>`;
   if (imp.length) h += `<div class="hint"><span style="font-size:22px">🍼</span><div><b>${imp.length} offene ${imp.length === 1 ? 'Aufgabe' : 'Aufgaben'} aus dem Baby-Tagebuch</b>Die To-do-Liste ist jetzt hier. Übernehmen kopiert sie – im Baby-Tagebuch wird nichts gelöscht.<div class="row" style="margin-top:8px"><button class="btn primary" data-act="babyImport">Übernehmen</button><button class="btn plain" data-act="babyHide">Nein danke</button></div></div></div>`;
   h += groups.join('') || `<div class="empty"><div class="big">📝</div><b>Keine offenen Aufgaben</b>Oben eintippen – mit Tag oder für „Irgendwann“.</div>`;
@@ -248,7 +252,7 @@ function openTodo(id) {
 
 /* ───────── Aktionen ───────── */
 Object.assign(ACT, {
-  hhTab(el) { S.ui.hh = el.dataset.v; saveUI(); render(); window.scrollTo(0, 0); },
+  hhTab(el) { S.ui.hh = el.dataset.v; S.ui.view = 'home'; saveUI(); render(); window.scrollTo(0, 0); },
   hhWho(el) { S.ui.hhWho = el.dataset.v; saveUI(); render(); },
   hhSoon(el, e) { e.preventDefault(); const d = el.closest('details'); d.open = !d.open; S.ui.hhSoon = d.open; saveUI(); },
   rtStarter() {

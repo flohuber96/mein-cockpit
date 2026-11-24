@@ -82,7 +82,7 @@ function applyTheme() {
   const t = S.settings.theme, root = document.documentElement;
   if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('meta[name="theme-color"]').content = dark ? '#0f1415' : '#f2f6f7';
+  $('meta[name="theme-color"]').content = dark ? '#13150c' : '#eef4e7';
 }
 applyTheme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
@@ -193,12 +193,12 @@ function confirmSheet(text, okLabel, onOk) {
 }
 
 /* ───────── Ansichten ───────── */
-const TITLES = { heute: 'Heute', woche: 'Woche', verlauf: 'Verlauf', mehr: 'Mehr' };
+const TITLES = { heute: 'Heute', woche: 'Woche', verlauf: 'Verlauf', mehr: 'Einstellungen' };
 function render() {
   const v = S.ui.view, now = new Date();
   $('#title').textContent = TITLES[v];
   $('#sub').textContent = v === 'heute' ? `${DAYS[now.getDay()]}, ${fmtDate(now)} · KW ${isoWeek(now)}` : '';
-  $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v)); $$('.gear-btn').forEach(b => b.classList.toggle('on', b.dataset.view === v));
   $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'heute' || v === 'woche' ? `<button class="hbtn" data-act="unitAdd" aria-label="Einheit eintragen"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>` : '');
   const main = $('#main');
   if (v === 'heute') main.innerHTML = viewHeute();

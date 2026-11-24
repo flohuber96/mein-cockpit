@@ -32,7 +32,6 @@ function recos() {
 VIEWS.home = {
   title: 'Heute',
   sub() { const d = new Date(); return `${DAYS[d.getDay()]}, ${fmtDate(d)}`; },
-  actions: () => '<button class="hbtn" data-act="settings" aria-label="Einstellungen">⚙︎</button>',
   render() {
     const w0 = weekStart().getTime(), wk = periodStats(w0, w0 + 7 * DAY), sc = scoreOf(S.tests), pains = activePains(), P = buildPlan();
     const list = acts(), rec = recos(), empty = !list.length && sc == null && !pains.length;
@@ -79,7 +78,6 @@ function settingsBody() {
     <div class="section-t">Daten</div>
     <div class="card menu"><button data-act="dataExport"><span class="ico">⬇️</span>Sicherung herunterladen</button><button data-act="dataImport"><span class="ico">⬆️</span>Sicherung einspielen</button><button data-act="dataWipe" class="red"><span class="ico">🗑️</span>Alles löschen</button></div>
     <input type="file" id="impFile" accept=".json,application/json" hidden>
-    <div class="card menu"><a href="../" style="display:flex;align-items:center;gap:12px;padding:15px 16px;color:inherit;text-decoration:none"><span class="ico">⚡</span>Zum Performance Cockpit</a></div>
     <p class="note">Körper-Coach · Inhalte sind allgemeines Trainingswissen und ersetzen keine ärztliche oder physiotherapeutische Untersuchung.</p>`;
 }
 function openSettings() { openSheet({ title: 'Einstellungen', body: settingsBody() }); }

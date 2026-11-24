@@ -124,7 +124,7 @@ function applyTheme() {
   const t = S.settings.theme, root = document.documentElement;
   if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('meta[name="theme-color"]').content = dark ? '#0f1311' : '#f3f5f0';
+  $('meta[name="theme-color"]').content = dark ? '#13150c' : '#eef4e7';
 }
 applyTheme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
@@ -489,15 +489,15 @@ function render() {
   }
   else if (nav.view === 'gassi') { title = 'Gassi'; sub = WALK ? 'Spaziergang läuft' : 'Challenges & Protokoll'; html = viewGassi(); }
   else if (nav.view === 'wissen') { title = 'Wissen'; sub = 'Lernen, Verhalten, Gesundheit, Alltag'; html = viewWissen(); }
-  else if (nav.view === 'erfolge') { const c = C(); title = 'Erfolge'; sub = `Level ${c.level} · ${lvlTitle(c.level)}`; html = viewErfolge(); }
-  else if (nav.view === 'mehr') { const p = PAGES[nav.page]; title = p ? p.t : 'Mehr'; sub = p ? p.sub() : 'Profil, Werkzeuge, Daten'; html = p ? p.v() : viewMore(); }
+  else if (nav.view === 'erfolge') { nav.view = 'mehr'; nav.page = 'erfolge'; return render(); } // Erfolge liegen jetzt unter Einstellungen
+  else if (nav.view === 'mehr') { const p = PAGES[nav.page]; title = p ? p.t : 'Einstellungen'; sub = p ? p.sub() : 'Profil, Erfolge, Werkzeuge, Daten'; html = p ? p.v() : viewMore(); }
   $('#title').textContent = title;
   $('#sub').textContent = sub;
   const nested = nav.ex || nav.cat || nav.page;
   $('#back').hidden = !nested;
   document.body.classList.toggle('nested', !!nested);
-  $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') +
-    (nav.view === 'mehr' ? '' : `<button class="hbtn" data-act="tab" data-view="mehr" aria-label="Mehr">${ICON.gear}</button>`);
+  $('#hact').innerHTML = window.Cloud ? Cloud.badge() : '';
+  $$('.gear-btn').forEach(b => b.classList.toggle('on', nav.view === 'mehr' && !nav.page));
   $('#main').innerHTML = html;
   tick();
 }
@@ -1238,6 +1238,7 @@ function viewMore() {
   return h;
 }
 const PAGES = {
+  erfolge: { e: '🏆', t: 'Erfolge', sub: () => { const c = C(); return `Level ${c.level} · ${lvlTitle(c.level)} · Serie & Statistik`; }, v: viewErfolge },
   review: { e: '📊', t: 'Auswertung', sub: () => `${pl(S.comments.length, 'Kommentar', 'Kommentare')} · Monatsrückblick & Export`, v: viewReview },
   routines: { e: '🗓️', t: 'Routinen anpassen', sub: () => `${(S.settings.routines || []).length} von ${H.routines.length} aktiv`, v: viewRoutinesCfg },
   sync: { e: '📲', t: 'Auf mehreren Handys nutzen', sub: () => window.Cloud && Cloud.isOn() ? 'Online-Abgleich ist aktiv ✓' : 'Einrichten in 3 Schritten', v: viewSync },
@@ -1326,10 +1327,10 @@ function viewSync() {
   return `<div class="card pad sync"><p><b>${on ? '✓ Dieses Handy ist mit der Online-Datenbank verbunden.' : 'So nutzt ihr die App auf mehreren iPhones (z. B. iPhone 15 und 16) mit denselben Daten:'}</b></p>
     <ol>
       <li><b>Online-Datenbank einrichten:</b> unten anmelden bzw. Konto erstellen. Es ist dasselbe Konto wie bei euren anderen Apps (Baby, Essen …).</li>
-      <li><b>Zweites iPhone:</b> diese Seite in Safari öffnen → Teilen → „Zum Home-Bildschirm“. Dann in der App unter Mehr mit <b>demselben Konto</b> anmelden – oder unten „Weiteres Gerät verbinden“ nutzen und den Link aufs andere Handy schicken.</li>
+      <li><b>Zweites iPhone:</b> diese Seite in Safari öffnen → Teilen → „Zum Home-Bildschirm“. Dann in der App unter Einstellungen (Zahnrad) mit <b>demselben Konto</b> anmelden – oder unten „Weiteres Gerät verbinden“ nutzen und den Link aufs andere Handy schicken.</li>
       <li><b>Fertig:</b> Übungen, Häkchen, Gassi, Kommentare und Einstellungen gleichen sich beim Öffnen und alle 20 Sekunden ab. Ohne Netz wird gespeichert und später nachgeholt.</li>
     </ol>
-    <p class="small muted">Tipp: Tragt unter „Mehr → Wer nutzt dieses Handy?“ euren Namen ein – dann seht ihr bei Häkchen und Kommentaren, wer was gemacht hat. Häkchen werden einzeln gespeichert, deshalb könnt ihr gleichzeitig abhaken, ohne euch zu überschreiben.</p>
+    <p class="small muted">Tipp: Tragt unter „Einstellungen → Wer nutzt dieses Handy?“ euren Namen ein – dann seht ihr bei Häkchen und Kommentaren, wer was gemacht hat. Häkchen werden einzeln gespeichert, deshalb könnt ihr gleichzeitig abhaken, ohne euch zu überschreiben.</p>
     <p class="small muted">Wichtig: Beide Handys müssen mit demselben Konto angemeldet sein. Mit zwei verschiedenen Konten hat jeder seine eigenen Daten.</p></div>
     ${window.Cloud ? Cloud.section() : ''}`;
 }
