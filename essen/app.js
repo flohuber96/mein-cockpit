@@ -27,9 +27,10 @@ const MEALS = [
   { k: 's', name: 'Snack / Nachtisch', short: 'Snack' },
 ];
 const meal = k => MEALS.find(m => m.k === k) || MEALS[2];
-const VIEWS = ['plan', 'recipes', 'swipe', 'shop', 'more'];
+const VIEWS = ['plan', 'recipes', 'swipe', 'shop', 'home', 'todo', 'more'];
+const TAB_ORDER = ['plan', 'recipes', 'shop', 'home', 'todo', 'more'];
 const SORTS = ['name', 'time', 'kcal', 'protein', 'pp', 'ns', 'veg'];
-const APP_VERSION = '5.1';
+const APP_VERSION = '6.0';
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 const isStr = x => typeof x === 'string' && x !== '';
 const isNum = x => typeof x === 'number' && isFinite(x);
@@ -202,7 +203,7 @@ const boot = { notice: '', saveWarned: false, rebuilt: false };
 const newSid = () => 's' + uid();
 function fresh() {
   return {
-    v: 2, sid: newSid(), recipes: [], over: {}, hidden: [], favs: [], plan: {}, shop: [], recent: [], votes: { Fee: {}, Flo: {} },
+    v: 2, sid: newSid(), recipes: [], over: {}, hidden: [], favs: [], plan: {}, shop: [], recent: [], votes: { Fee: {}, Flo: {} }, todos: [], routines: [],
     settings: { meals: ['m', 'a'], servings: 2, pantry: 'Salz\nPfeffer\nWasser\nÖl\nOlivenöl' },
     ui: { view: 'plan', hideHint: false, open: {}, sort: 'name' },
   };
@@ -304,6 +305,24 @@ function cleanPlan(plan) {
   return out;
 }
 const uniqStrs = a => Array.isArray(a) ? [...new Set(a.filter(isStr))] : [];
+const isDay = x => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
+function cleanTodo(x) {
+  if (!isObj(x) || !isStr(x.id) || !isStr(x.t)) return null;
+  if (typeof x.done === 'boolean' && (x.d == null || isDay(x.d)) && (x.who === undefined || ['', 'Fee', 'Flo'].includes(x.who)) && (x.notes === undefined || typeof x.notes === 'string')) return x;
+  return { ...x, done: !!x.done, d: isDay(x.d) ? x.d : null, who: ['Fee', 'Flo'].includes(x.who) ? x.who : undefined, notes: typeof x.notes === 'string' ? x.notes : undefined };
+}
+function cleanRoutine(r) {
+  if (!isObj(r) || !isStr(r.id) || !isStr(r.n)) return null;
+  const ok = isNum(r.every) && r.every >= 1 && ['d', 'w', 'm', 'y'].includes(r.unit) && isStr(r.a) && (r.last == null || isDay(r.last))
+    && (r.snooze === undefined || isDay(r.snooze)) && (r.mins === undefined || isNum(r.mins)) && (r.who === undefined || ['', 'Fee', 'Flo'].includes(r.who))
+    && (r.hist === undefined || (Array.isArray(r.hist) && r.hist.every(h => isObj(h) && isDay(h.d))));
+  if (ok) return r;
+  const o = { ...r, every: isNum(+r.every) && +r.every >= 1 ? Math.round(+r.every) : 1, unit: ['d', 'w', 'm', 'y'].includes(r.unit) ? r.unit : 'w', a: isStr(r.a) ? r.a : 'sonst',
+    last: isDay(r.last) ? r.last : null, mins: isNum(+r.mins) ? +r.mins : 0, who: ['Fee', 'Flo'].includes(r.who) ? r.who : '',
+    hist: Array.isArray(r.hist) ? r.hist.filter(h => isObj(h) && isDay(h.d)) : [] };
+  if (!isDay(r.snooze)) delete o.snooze;
+  return o;
+}
 function sanitize(s) {
   const f = fresh();
   if (!isObj(s)) return f;
@@ -312,6 +331,8 @@ function sanitize(s) {
   s.recipes = cleanList(s.recipes, r => { const c = cleanRecipe(r); return c && isStr(c.id) ? c : null; });
   s.shop = cleanList(s.shop, cleanItem);
   s.plan = cleanPlan(s.plan);
+  s.todos = cleanList(s.todos, cleanTodo);
+  s.routines = cleanList(s.routines, cleanRoutine);
   s.over = isObj(s.over) ? s.over : {};
   for (const id of Object.keys(s.over)) { const c = cleanRecipe(s.over[id]); if (c) s.over[id] = c; else delete s.over[id]; }
   s.hidden = uniqStrs(s.hidden); s.favs = uniqStrs(s.favs);
@@ -340,7 +361,7 @@ function sanitize(s) {
   s.ui = u;
   return s;
 }
-const hasContent = s => !!(s.recipes.length || s.shop.length || Object.keys(s.plan).length || s.favs.length || s.hidden.length || Object.keys(s.over).length || Object.values(s.votes).some(v => Object.keys(v).length));
+const hasContent = s => !!((s.todos || []).length || (s.routines || []).length || s.recipes.length || s.shop.length || Object.keys(s.plan).length || s.favs.length || s.hidden.length || Object.keys(s.over).length || Object.values(s.votes).some(v => Object.keys(v).length));
 
 /* Sicherungen auf dem Gerät: einmal täglich automatisch und vor jedem großen Eingriff. */
 function snapshots() {
@@ -368,7 +389,7 @@ function snapInfo(d) {
   const n = (x, one, many) => `${x} ${x === 1 ? one : many}`;
   const meals = Object.values(d.plan || {}).reduce((a, day) => a + Object.keys(day || {}).length, 0);
   const votes = Object.values(d.votes || {}).reduce((a, v) => a + Object.keys(v || {}).length, 0);
-  return [n((d.recipes || []).length, 'eigenes Rezept', 'eigene Rezepte'), n(meals, 'geplantes Essen', 'geplante Essen'), n((d.shop || []).length, 'Artikel', 'Artikel'), votes ? n(votes, 'Bewertung', 'Bewertungen') : ''].filter(Boolean).join(' · ');
+  return [n((d.recipes || []).length, 'eigenes Rezept', 'eigene Rezepte'), n(meals, 'geplantes Essen', 'geplante Essen'), n((d.shop || []).length, 'Artikel', 'Artikel'), votes ? n(votes, 'Bewertung', 'Bewertungen') : '', (d.todos || []).length ? n(d.todos.length, 'To-do', 'To-dos') : '', (d.routines || []).length ? n(d.routines.length, 'Routine', 'Routinen') : ''].filter(Boolean).join(' · ');
 }
 
 function load() {
@@ -578,7 +599,7 @@ function confirmSheet(text, okLabel, onOk) {
 }
 
 /* ───────── Rendering ───────── */
-const TITLES = { plan: 'Essensplan', recipes: 'Rezepte', swipe: 'Essens-Tinder', shop: 'Einkaufsliste', more: 'Mehr' };
+const TITLES = { home: 'Haushalt', todo: 'To-dos', plan: 'Essensplan', recipes: 'Rezepte', swipe: 'Essens-Tinder', shop: 'Einkaufsliste', more: 'Mehr' };
 function render() {
   try { renderView(); }
   catch (e) { // eine Ansicht mit Fehler darf die App nicht leer lassen
@@ -591,11 +612,14 @@ function render() {
 function renderView() {
   const v = VIEWS.includes(S.ui.view) ? S.ui.view : (S.ui.view = 'plan');
   $('#title').textContent = TITLES[v];
+  const tabV = v === 'swipe' ? 'recipes' : v; // Tindern gehört zu den Rezepten
   $$('#tabbar button[data-view]').forEach(b => {
-    const on = b.dataset.view === v; b.classList.toggle('on', on);
+    const on = b.dataset.view === tabV; b.classList.toggle('on', on);
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
-  $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'recipes' ? `<button class="hbtn" data-act="recipeNew" aria-label="Neues Rezept" title="Neues Rezept">${ICON.plus}</button>`
+  $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'recipes' ? `<button class="hbtn" data-act="tab" data-view="swipe" aria-label="Essens-Tinder" title="Essens-Tinder: Rezepte bewerten">🔥</button><button class="hbtn" data-act="recipeNew" aria-label="Neues Rezept" title="Neues Rezept">${ICON.plus}</button>`
+    : v === 'home' ? `<button class="hbtn" data-act="rtNew" aria-label="Neue Routine" title="Neue Routine">${ICON.plus}</button>`
+    : v === 'swipe' ? `<button class="hbtn" data-act="tab" data-view="recipes" aria-label="Zu den Rezepten" title="Zu den Rezepten">📖</button><button class="hbtn" data-act="swSync" aria-label="Bewertungen übertragen" title="Bewertungen übertragen">⇄</button>`
     : v === 'shop' ? `<button class="hbtn" data-act="shopShare" aria-label="Liste teilen" title="Liste teilen">${ICON.share}</button>`
     : v === 'swipe' ? `<button class="hbtn" data-act="swSync" aria-label="Bewertungen übertragen" title="Bewertungen übertragen">⇄</button>` : '');
   const main = $('#main');
@@ -604,12 +628,14 @@ function renderView() {
   if (v === 'shop') { main.innerHTML = viewShop(); renderShop(); }
   if (v === 'swipe') { main.innerHTML = viewSwipe(); renderSwipe(); }
   if (v === 'more') main.innerHTML = viewMore();
+  if (v === 'home') main.innerHTML = viewHome();
+  if (v === 'todo') { main.innerHTML = viewTodo(); loadBabyCloud(); }
   updateBadge();
 }
 function updateBadge() {
-  const b = $('#shopBadge'); if (!b) return;
-  const n = S.shop.length;
-  b.hidden = !n; b.textContent = n;
+  const set = (id, n) => { const b = $(id); if (b) { b.hidden = !n; b.textContent = n; } };
+  set('#shopBadge', S.shop.length);
+  try { set('#homeBadge', homeDueCount()); set('#todoBadge', todoDueCount()); } catch (e) { /* Haushalt-Modul noch nicht geladen */ }
 }
 
 /* ── Plan ── */
@@ -1095,6 +1121,12 @@ function viewMore() {
     <div class="setting"><span><span class="lbl">Standard-Portionen</span><br><span class="sub">für neue Einträge im Plan</span></span>
       <span class="stepper"><button data-act="defServ" data-n="-1" aria-label="Weniger">−</button><output>${st.servings}</output><button data-act="defServ" data-n="1" aria-label="Mehr">+</button></span></div>
   </div>
+  <div class="section-t">Haushalt</div>
+  <div class="card">
+    <div class="setting col"><span><span class="lbl">Wer nutzt dieses Gerät?</span><br><span class="sub">Erledigte Routinen werden dieser Person zugerechnet (Übersicht „wer hat was gemacht“)</span></span>
+      <div class="seg">${['', 'Fee', 'Flo'].map(w => `<button type="button" data-act="setMe" data-v="${w}" class="${(S.ui.who || '') === w ? 'on' : ''}">${w || 'Keine Angabe'}</button>`).join('')}</div></div>
+    <button class="setting setbtn" data-act="rtCatalog"><span><span class="lbl">Routinen aus Vorschlägen wählen</span><br><span class="sub">${S.routines.length} Routinen aktiv · ${ROUTINE_TEMPLATES.length} Vorschläge</span></span><span class="chev">›</span></button>
+  </div>
   <div class="section-t">Einkaufsliste</div>
   <div class="card">
     <label class="setting"><span><span class="lbl">Gericht unter der Zutat anzeigen</span><br><span class="sub">z. B. „Shakshuka · Linsensuppe“</span></span><span class="switch"><input type="checkbox" data-change="showDish" ${showDish() ? 'checked' : ''}><i></i></span></label>
@@ -1116,7 +1148,7 @@ function viewMore() {
     <span class="muted small">Die App startet dann im Vollbild und funktioniert auch ohne Netz. Mit der Online-Datenbank ${online ? 'sind' : 'wären'} alle Geräte automatisch auf demselben Stand.</span>
   </div>
   </div></div>
-  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte (${allRecipes().filter(isMainDish).length} Hauptgerichte) · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Essensplaner v${APP_VERSION} · <button class="tlink" data-act="diag">Diagnose</button> · <button class="tlink" data-act="credits">Bildnachweise</button><br>Nährwerte, Nutri-Score und Allergene sind automatisch aus den Zutaten geschätzt und ersetzen keine Packungsangaben.</p>`;
+  <p class="small muted" style="text-align:center;margin:24px 0 0">${allRecipes().length} Rezepte (${allRecipes().filter(isMainDish).length} Hauptgerichte) · ${allRecipes().filter(r => nutr(r).fish).length} mit Fisch · Haushalt v${APP_VERSION} · <button class="tlink" data-act="diag">Diagnose</button> · <button class="tlink" data-act="credits">Bildnachweise</button><br>Nährwerte, Nutri-Score und Allergene sind automatisch aus den Zutaten geschätzt und ersetzen keine Packungsangaben.</p>`;
 }
 
 function openDeptOrder() {
@@ -1753,6 +1785,7 @@ const ACT = {
   },
 
   deptOrder() { openDeptOrder(); },
+  setMe(el) { S.ui.who = el.dataset.v; saveUI(); $$('button', el.parentElement).forEach(b => b.classList.toggle('on', b === el)); },
   deptMove(el) {
     const order = deptOrder().map(d => d.k), i = order.indexOf(el.dataset.k), j = i + +el.dataset.n;
     if (i < 0 || j < 0 || j >= order.length) return;
@@ -1797,7 +1830,7 @@ const ACT = {
   diag() {
     const st = window.Cloud ? (Cloud.isOn() ? Cloud.status().label : 'nicht angemeldet') : 'nicht geladen';
     const size = k => { const v = lsGet(k); return v ? Math.round(v.length / 1024) + ' kB' : '–'; };
-    const lines = [`Essensplaner v${APP_VERSION}`, `Online-Datenbank: ${st}`, `Speicher: Daten ${size(KEY)} · Sicherungen ${size(BAK_KEY)} · Abgleich ${size('cloud.essen')}`,
+    const lines = [`Haushalt v${APP_VERSION}`, `Online-Datenbank: ${st}`, `Speicher: Daten ${size(KEY)} · Sicherungen ${size(BAK_KEY)} · Abgleich ${size('cloud.essen')}`,
       `Inhalt: ${snapInfo(S)}`, `Gerät: ${navigator.userAgent}`, `Fenster: ${innerWidth}×${innerHeight}`, '', 'Letzte Fehler:', ...(errorLog().length ? errorLog().slice().reverse() : ['keine'])];
     openSheet({
       title: 'Diagnose', left: '<button class="lnk" data-act="closeSheet">Schließen</button>',
@@ -1936,7 +1969,7 @@ document.addEventListener('keydown', e => {
   }
   if (top) return;
   if (e.key === '/') { const inp = $('#rq') || $('#sq'); if (inp) { e.preventDefault(); inp.focus(); } }
-  else if (/^[1-5]$/.test(e.key)) { const b = $(`#tabbar button[data-view="${VIEWS[+e.key - 1]}"]`); if (b) guard(() => ACT.tab(b), 'tabkey'); }
+  else if (/^[1-6]$/.test(e.key)) { const b = $(`#tabbar button[data-view="${TAB_ORDER[+e.key - 1]}"]`); if (b) guard(() => ACT.tab(b), 'tabkey'); }
 });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
@@ -1963,10 +1996,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ───────── Online-Datenbank (../shared/cloud.js) ───────── */
-const CLOUD_LIST = { recipe: ['r:', 'recipes'], shop: ['s:', 'shop'] };
+const CLOUD_LIST = { recipe: ['r:', 'recipes'], shop: ['s:', 'shop'], todo: ['t:', 'todos'], routine: ['u:', 'routines'] };
 const CLOUD_SET = { hidden: ['h:', 'hidden'], fav: ['f:', 'favs'] };
 if (window.Cloud) Cloud.init({
   app: 'essen',
+  kinds: ['recipe', 'shop', 'todo', 'routine', 'hidden', 'fav', 'over', 'plan', 'vote', 'recent', 'settings'],
+  protect: ['todo', 'routine'], // ältere App-Versionen kennen sie nicht – deren Löschungen nicht übernehmen
   records() {
     const m = {};
     for (const [k, [p, arr]] of Object.entries(CLOUD_LIST)) for (const x of S[arr]) m[p + x.id] = { kind: k, data: x };
@@ -2008,7 +2043,7 @@ if (window.Cloud) Cloud.init({
   // Sicherheitsnetz: verschwindet (ohne Einkaufsliste) mehr, als übrig bleibt, wird erst nachgefragt
   guardDeletes(dels) {
     const gone = dels.filter(d => d.kind !== 'shop').length;
-    const left = S.recipes.length + S.favs.length + S.hidden.length + Object.keys(S.over).length
+    const left = S.recipes.length + S.favs.length + S.hidden.length + Object.keys(S.over).length + S.todos.length + S.routines.length
       + Object.values(S.plan).reduce((a, d) => a + Object.keys(d).length, 0) + Object.values(S.votes).reduce((a, v) => a + Object.keys(v).length, 0);
     return gone >= 25 && gone > left;
   },
