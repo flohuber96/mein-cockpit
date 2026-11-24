@@ -22,6 +22,7 @@ function rideTss(r) {
   if (ftp && n) return { v: h * 3600 * n * (n / ftp) / (ftp * 3600) * 100, src: 'ftp', if: n / ftp };
   if (r.tssDev) return { v: r.tssDev, src: 'dev' };
   if (r.hr && S.settings.lthr) { const f = r.hr / S.settings.lthr; return { v: h * f * f * 100, src: 'hr', if: f }; }
+  if (r.rpe) { const f = 0.5 + r.rpe * 0.05; return { v: h * f * f * 100, src: 'rpe', if: f }; } // RPE 6 ≈ IF 0,8
   return { v: h * 45, src: 'est' };
 }
 

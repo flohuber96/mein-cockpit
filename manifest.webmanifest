@@ -1,7 +1,7 @@
 {
   "name": "Mein Cockpit",
   "short_name": "Cockpit",
-  "description": "Alle Apps auf einen Blick: Haushalt, Baby, Hund, Körper, Training und Kaffee",
+  "description": "Alle Apps auf einen Blick: Haushalt, Baby, Hund, Körper und Kaffee",
   "lang": "de",
   "start_url": "./",
   "scope": "./",

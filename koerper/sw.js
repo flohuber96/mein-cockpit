@@ -1,7 +1,7 @@
 // Offline-Cache für den Körper-Coach. Bei Änderungen VERSION erhöhen.
-const VERSION = 'koerper-v8';
+const VERSION = 'koerper-v9';
 const FILES = ['./', 'index.html', 'app.css', 'data.js', 'moves-data.js', 'moves.js', 'core.js', 'gear.js', 'body.js', 'train.js', 'mob.js', 'fit.js', 'ride.js', 'well.js', 'plan.js', 'home.js',
-  'koerper-data.js', '../shared/cloud.js', '../shared/ui.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+  'koerper-data.js', 'import-training.js', '../shared/cloud.js', '../shared/ui.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

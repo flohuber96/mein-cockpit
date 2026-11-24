@@ -1,26 +1,11 @@
-// Offline-Cache für die Trainings-App. Bei Änderungen VERSION erhöhen.
-const VERSION = 'training-v2';
-const FILES = ['./', 'index.html', 'app.css', 'app.js', '../shared/cloud.js', '../shared/ui.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
-
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
-});
-
-// Nur eigene alte Caches löschen (Essen und Baby liegen auf derselben Domain)
+// Die Training-App ist im Körper-Coach aufgegangen.
+// Dieser Service Worker ersetzt den alten, löscht dessen Offline-Cache und meldet sich ab,
+// damit alte Home-Bildschirm-Icons die Weiterleitung (index.html) aus dem Netz laden.
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k.startsWith('training-') && k !== VERSION).map(k => caches.delete(k))))
-    .then(() => self.clients.claim()));
-});
-
-// Erst Netz (damit Updates sofort ankommen), sonst Cache (offline).
-self.addEventListener('fetch', e => {
-  const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  e.respondWith(
-    fetch(req).then(res => {
-      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
-      return res;
-    }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
-  );
+    .then(keys => Promise.all(keys.filter(k => k.startsWith('training-')).map(k => caches.delete(k))))
+    .then(() => self.registration.unregister())
+    .then(() => self.clients.matchAll({ type: 'window' }))
+    .then(cs => cs.forEach(c => c.navigate('../koerper/').catch(() => {}))));
 });

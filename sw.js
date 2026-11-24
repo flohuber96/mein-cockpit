@@ -1,8 +1,8 @@
 // Offline-Cache für die Cockpit-Übersicht. Bei Änderungen VERSION erhöhen.
 // Die Apps in den Unterordnern haben eigene Service Worker (genauerer Scope gewinnt).
-const VERSION = 'cockpit-v1';
+const VERSION = 'cockpit-v2';
 const FILES = ['./', 'index.html', 'shared/ui.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png',
-  'essen/icon-192.png', 'baby/icon-192.png', 'hund/icon-192.png', 'koerper/icon-192.png', 'training/icon-192.png', 'kaffee/icon-192.png'];
+  'essen/icon-192.png', 'baby/icon-192.png', 'hund/icon-192.png', 'koerper/icon-192.png', 'kaffee/icon-192.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

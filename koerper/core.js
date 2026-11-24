@@ -38,7 +38,7 @@ const boot = { rebuilt: false };
 function fresh() {
   return {
     v: 1, sid: uid(), pains: {}, tests: {}, snaps: [], sessions: [], routines: [], templates: [], rides: [], favs: {}, well: {}, testv: {}, painLog: {},
-    settings: { theme: 'auto', rest: 90, sound: true, vib: true, prep: 5, goalK: 2, goalM: 4, ftp: null },
+    settings: { theme: 'auto', rest: 90, sound: true, vib: true, prep: 5, goalK: 2, goalM: 4, goalR: 0, ftp: null },
     active: null, ui: { view: 'home' }
   };
 }
