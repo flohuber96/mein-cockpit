@@ -1,44 +1,17 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#f3f5f0;--card:#ffffff;--card2:#e8ece3;--line:rgba(30,50,30,.1);
-  --t1:#18201b;--t2:#5d6a61;--t3:#9aa69d;
-  --acc:#2e7d5b;--acc-soft:rgba(46,125,91,.13);--acc-t:#24684b;--on-acc:#fff;
-  --xp:#e09b12;--xp-soft:rgba(224,155,18,.15);
-  --ok:#2f9e44;--ok-soft:rgba(47,158,68,.13);
-  --bad:#d6336c;--bad-soft:rgba(214,51,108,.11);
-  --warn:#e8590c;--warn-soft:rgba(232,89,12,.12);
-  --red-t:#c92a2a;
-  --shadow:0 1px 2px rgba(20,40,20,.05),0 2px 10px rgba(20,40,20,.05);
-  --blur:rgba(243,245,240,.86);
-  --r:16px;--rs:11px;
-  --top:env(safe-area-inset-top,0px);--bot:env(safe-area-inset-bottom,0px);
-  color-scheme:light;
+  --xp:#a07a12;--xp-soft:rgba(192,154,60,.17);
+  --bad:#a3402a;--bad-soft:rgba(168,67,44,.1);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#0f1311;--card:#1a1f1c;--card2:#262d29;--line:rgba(255,255,255,.09);
-    --t1:#edf2ee;--t2:#a7b3aa;--t3:#6c7a70;
-    --acc:#5cc391;--acc-soft:rgba(92,195,145,.15);--acc-t:#7fd4aa;--on-acc:#0b1a12;
-    --xp:#f5b83d;--xp-soft:rgba(245,184,61,.15);
-    --ok:#51cf66;--ok-soft:rgba(81,207,102,.14);
-    --bad:#f06595;--bad-soft:rgba(240,101,149,.14);
-    --warn:#ff8a4c;--warn-soft:rgba(255,138,76,.14);
-    --red-t:#ff8787;
-    --shadow:none;--blur:rgba(15,19,17,.86);
-    color-scheme:dark;
+    --xp:#e0b45c;--xp-soft:rgba(224,180,92,.15);
+    --bad:#ec8e76;--bad-soft:rgba(236,142,118,.13);
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0f1311;--card:#1a1f1c;--card2:#262d29;--line:rgba(255,255,255,.09);
-  --t1:#edf2ee;--t2:#a7b3aa;--t3:#6c7a70;
-  --acc:#5cc391;--acc-soft:rgba(92,195,145,.15);--acc-t:#7fd4aa;--on-acc:#0b1a12;
-  --xp:#f5b83d;--xp-soft:rgba(245,184,61,.15);
-  --ok:#51cf66;--ok-soft:rgba(81,207,102,.14);
-  --bad:#f06595;--bad-soft:rgba(240,101,149,.14);
-  --warn:#ff8a4c;--warn-soft:rgba(255,138,76,.14);
-  --red-t:#ff8787;
-  --shadow:none;--blur:rgba(15,19,17,.86);
-  color-scheme:dark;
+  --xp:#e0b45c;--xp-soft:rgba(224,180,92,.15);
+  --bad:#ec8e76;--bad-soft:rgba(236,142,118,.13);
 }
 html{-webkit-text-size-adjust:100%;background:var(--bg)}
 body{background:var(--bg);color:var(--t1);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}

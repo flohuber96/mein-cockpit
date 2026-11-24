@@ -218,7 +218,7 @@ create trigger app_items_touch before insert or update on public.app_items
         pushed += part.length;
       }
       if (!hold) delete p.allow;
-      if (hold && !sy.hold && C.toast) C.toast('Abgleich angehalten – bitte unter „Mehr“ prüfen');
+      if (hold && !sy.hold && C.toast) C.toast('Abgleich angehalten – bitte in den Einstellungen prüfen');
       sy.hold = hold;
       p.last = Date.now(); sy.err = ''; sy.since = 0;
       if (manual) C.toast(hold ? 'Abgleich angehalten – bitte prüfen' : pushed || changed ? 'Synchronisiert' : 'Alles aktuell');
@@ -329,7 +329,7 @@ create trigger app_items_touch before insert or update on public.app_items
           <li>Dort den Link öffnen – die Server-Daten sind dann schon eingetragen.</li>
           <li>Mit derselben E-Mail und demselben Passwort anmelden. Fertig.</li>
         </ol>
-        <p class="small muted" style="margin:0 0 10px">Als App auf dem Home-Bildschirm: stattdessen in der App unter „Mehr → Online-Datenbank“ den Link in das Feld „Verbindungscode“ einfügen. Der Link enthält kein Passwort.</p>
+        <p class="small muted" style="margin:0 0 10px">Als App auf dem Home-Bildschirm: stattdessen in der App unter „Einstellungen (Zahnrad) → Online-Datenbank“ den Link in das Feld „Verbindungscode“ einfügen. Der Link enthält kein Passwort.</p>
         <div class="cloud-acts"><button type="button" class="btn primary" data-cloud="linkShare">Link senden</button><button type="button" class="btn plain" data-cloud="linkCopy">Link kopieren</button></div>
       </details>
       <p class="small muted" style="margin:10px 4px 0">Deine Daten liegen online und zusätzlich auf diesem Gerät. Änderungen erscheinen auf allen angemeldeten Geräten beim Öffnen und alle 20 Sekunden – ohne Netz wird später automatisch nachgeholt.</p>`;

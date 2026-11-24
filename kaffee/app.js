@@ -52,7 +52,7 @@ function applyTheme() {
   const t = S.settings.theme, root = document.documentElement;
   if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('meta[name="theme-color"]').content = dark ? '#13100e' : '#f6f1ec';
+  $('meta[name="theme-color"]').content = dark ? '#13150c' : '#eef4e7';
 }
 applyTheme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
@@ -130,7 +130,7 @@ function render() {
   const swH = v === 'coffee' && b ? beanSweet(b.id) : null;
   $('#sub').textContent = v === 'coffee' ? (b ? [b.roaster, `${shotsOf(b.id).length} Shots`, swH && swH.range && !swH.extrap ? `Sweet Spot ${rangeTxt(swH.range)}` : ''].filter(Boolean).join(' · ') : 'Lege deine erste Sorte an') : v === 'know' ? 'Ziele, Stellschrauben, Tipps' : `${T().machine} · ${T().grinder}`;
   $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'coffee' && b ? `<button class="hbtn" data-act="editBean" data-id="${b.id}" aria-label="Sorte bearbeiten"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>` : '');
-  $$('#tabbar button').forEach(x => x.classList.toggle('on', x.dataset.view === v));
+  $$('#tabbar button').forEach(x => x.classList.toggle('on', x.dataset.view === v)); $$('.gear-btn').forEach(b => b.classList.toggle('on', b.dataset.view === v));
   $('#main').innerHTML = v === 'coffee' ? viewCoffee() : v === 'know' ? Wissen.html(T(), activeBeans().map(b => { const sw = beanSweet(b.id); return { name: b.name, range: sw.range && !sw.extrap ? sw.range : null }; })) : viewSettings();
   if (v === 'coffee') updateLive($('[data-form="new"]'));
 }

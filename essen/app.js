@@ -27,10 +27,10 @@ const MEALS = [
   { k: 's', name: 'Snack / Nachtisch', short: 'Snack' },
 ];
 const meal = k => MEALS.find(m => m.k === k) || MEALS[2];
-const VIEWS = ['plan', 'recipes', 'swipe', 'shop', 'home', 'todo', 'more'];
-const TAB_ORDER = ['plan', 'recipes', 'shop', 'home', 'todo', 'more'];
+const VIEWS = ['plan', 'recipes', 'shop', 'home', 'todo', 'more'];
+const TAB_ORDER = ['plan', 'recipes', 'shop', 'home'];
 const SORTS = ['name', 'time', 'kcal', 'protein', 'pp', 'ns', 'veg'];
-const APP_VERSION = '6.0';
+const APP_VERSION = '6.1';
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 const isStr = x => typeof x === 'string' && x !== '';
 const isNum = x => typeof x === 'number' && isFinite(x);
@@ -599,34 +599,32 @@ function confirmSheet(text, okLabel, onOk) {
 }
 
 /* ───────── Rendering ───────── */
-const TITLES = { home: 'Haushalt', todo: 'To-dos', plan: 'Essensplan', recipes: 'Rezepte', swipe: 'Essens-Tinder', shop: 'Einkaufsliste', more: 'Mehr' };
+const TITLES = { home: 'Haushalt', todo: 'Haushalt', plan: 'Essensplan', recipes: 'Rezepte', shop: 'Einkaufsliste', more: 'Einstellungen' };
 function render() {
   try { renderView(); }
   catch (e) { // eine Ansicht mit Fehler darf die App nicht leer lassen
     logError(e, 'render');
     $('#main').innerHTML = `<div class="empty"><div class="big">🛠️</div><b>Diese Ansicht konnte nicht angezeigt werden</b>Deine Daten sind weiterhin gespeichert.
-      <div class="stack" style="max-width:320px;margin:18px auto 0"><button class="btn primary" data-act="reload">Neu laden</button><button class="btn" data-act="exportData">💾 Backup exportieren</button><button class="btn plain" data-act="tab" data-view="more">Zu „Mehr“</button></div>
+      <div class="stack" style="max-width:320px;margin:18px auto 0"><button class="btn primary" data-act="reload">Neu laden</button><button class="btn" data-act="exportData">💾 Backup exportieren</button><button class="btn plain" data-act="tab" data-view="more">Zu den Einstellungen</button></div>
       <p class="small muted" style="margin-top:14px">${esc((e && e.message) || e)}</p></div>`;
   }
 }
 function renderView() {
   const v = VIEWS.includes(S.ui.view) ? S.ui.view : (S.ui.view = 'plan');
   $('#title').textContent = TITLES[v];
-  const tabV = v === 'swipe' ? 'recipes' : v; // Tindern gehört zu den Rezepten
+  const tabV = v === 'todo' ? 'home' : v; // To-dos gehören zum Haushalt
   $$('#tabbar button[data-view]').forEach(b => {
     const on = b.dataset.view === tabV; b.classList.toggle('on', on);
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
-  $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'recipes' ? `<button class="hbtn" data-act="tab" data-view="swipe" aria-label="Essens-Tinder" title="Essens-Tinder: Rezepte bewerten">🔥</button><button class="hbtn" data-act="recipeNew" aria-label="Neues Rezept" title="Neues Rezept">${ICON.plus}</button>`
+  $$('.gear-btn').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'recipes' ? `<button class="hbtn" data-act="recipeNew" aria-label="Neues Rezept" title="Neues Rezept">${ICON.plus}</button>`
     : v === 'home' ? `<button class="hbtn" data-act="rtNew" aria-label="Neue Routine" title="Neue Routine">${ICON.plus}</button>`
-    : v === 'swipe' ? `<button class="hbtn" data-act="tab" data-view="recipes" aria-label="Zu den Rezepten" title="Zu den Rezepten">📖</button><button class="hbtn" data-act="swSync" aria-label="Bewertungen übertragen" title="Bewertungen übertragen">⇄</button>`
-    : v === 'shop' ? `<button class="hbtn" data-act="shopShare" aria-label="Liste teilen" title="Liste teilen">${ICON.share}</button>`
-    : v === 'swipe' ? `<button class="hbtn" data-act="swSync" aria-label="Bewertungen übertragen" title="Bewertungen übertragen">⇄</button>` : '');
+    : v === 'shop' ? `<button class="hbtn" data-act="shopShare" aria-label="Liste teilen" title="Liste teilen">${ICON.share}</button>` : '');
   const main = $('#main');
   if (v === 'plan') main.innerHTML = viewPlan();
   if (v === 'recipes') { main.innerHTML = viewRecipes(); renderRecipeList(); }
   if (v === 'shop') { main.innerHTML = viewShop(); renderShop(); }
-  if (v === 'swipe') { main.innerHTML = viewSwipe(); renderSwipe(); }
   if (v === 'more') main.innerHTML = viewMore();
   if (v === 'home') main.innerHTML = viewHome();
   if (v === 'todo') { main.innerHTML = viewTodo(); loadBabyCloud(); }
@@ -891,7 +889,7 @@ function openFilters() {
       <div class="card">
         <label class="setting"><span><span class="lbl">Nur passende Rezepte</span><br><span class="sub">${esc(DIETS[dietOf()])}${av.length ? ' · ohne ' + av.map(a => ALLERGENS[a].short).join(', ') : ''}</span></span><span class="switch"><input type="checkbox" data-change="strict" ${ui.strict ? 'checked' : ''}><i></i></span></label>
       </div>
-      <p class="small muted" style="margin:8px 4px 0">Ernährungsweise und gemiedene Allergene stellst du unter „Mehr → Ziele & Ernährung“ ein. Sie gelten auch für Vorschläge und „Auffüllen“.</p>
+      <p class="small muted" style="margin:8px 4px 0">Ernährungsweise und gemiedene Allergene stellst du unter „Einstellungen (Zahnrad) → Ziele & Ernährung“ ein. Sie gelten auch für Vorschläge und „Auffüllen“.</p>
       <button class="btn soft" data-act="goalsOpen" style="width:100%;margin-top:12px">Ziele & Ernährung bearbeiten</button>
       <p class="small muted filter-count" style="text-align:center;margin-top:14px"></p>`,
     onClose: () => { if (S.ui.view === 'recipes') renderRecipeList(); },
@@ -1003,7 +1001,7 @@ function renderShop() {
   // Links: was zu kaufen ist · Rechts (auf großen Bildschirmen daneben): zuletzt verwendet und Katalog
   let left = '', right = '';
   if (S.shop.length) {
-    // Nach Abteilungen gruppiert – in der Reihenfolge des eigenen Supermarkts (einstellbar unter „Mehr“)
+    // Nach Abteilungen gruppiert – in der Reihenfolge des eigenen Supermarkts (einstellbar in den Einstellungen)
     left += `<div class="shead"><b>Zu kaufen</b><span>${S.shop.length} Artikel · <button class="tlink" data-act="shopClear">Liste leeren</button></span></div>`;
     const dish = showDish();
     for (const d of deptOrder()) {
@@ -1681,7 +1679,7 @@ const ACT = {
   },
   recipeDelete(el) {
     const r = recipeById(el.dataset.id); if (!r) { closeAllSheets(); render(); return; }
-    confirmSheet(r.builtin ? `„${r.name}“ ausblenden? Du kannst es unter „Mehr“ zurückholen.` : `„${r.name}“ löschen?`, r.builtin ? 'Ausblenden' : 'Löschen', () => {
+    confirmSheet(r.builtin ? `„${r.name}“ ausblenden? Du kannst es in den Einstellungen zurückholen.` : `„${r.name}“ löschen?`, r.builtin ? 'Ausblenden' : 'Löschen', () => {
       const own = S.recipes.find(x => x.id === r.id), wasFav = isFav(r.id), slots = [];
       if (r.builtin) { if (!S.hidden.includes(r.id)) S.hidden.push(r.id); }
       else S.recipes = S.recipes.filter(x => x.id !== r.id);
@@ -1806,7 +1804,7 @@ const ACT = {
       snapshot('Vor „Alle Daten löschen“');
       const keep = { sid: S.sid, view: S.ui.view };
       S = fresh(); S.sid = keep.sid; S.ui.view = keep.view;
-      bulkOk(); invalidate(); save(); render(); toast('Alle Daten gelöscht – Sicherung liegt unter „Mehr“');
+      bulkOk(); invalidate(); save(); render(); toast('Alle Daten gelöscht – Sicherung liegt in den Einstellungen');
     });
   },
   snapNow() { toast(snapshot('Manuell') ? 'Sicherung angelegt' : hasContent(S) ? 'Der aktuelle Stand ist schon gesichert' : 'Noch keine Daten zum Sichern'); render(); },
@@ -1969,7 +1967,7 @@ document.addEventListener('keydown', e => {
   }
   if (top) return;
   if (e.key === '/') { const inp = $('#rq') || $('#sq'); if (inp) { e.preventDefault(); inp.focus(); } }
-  else if (/^[1-6]$/.test(e.key)) { const b = $(`#tabbar button[data-view="${TAB_ORDER[+e.key - 1]}"]`); if (b) guard(() => ACT.tab(b), 'tabkey'); }
+  else if (/^[1-4]$/.test(e.key)) { const b = $(`#tabbar button[data-view="${TAB_ORDER[+e.key - 1]}"]`); if (b) guard(() => ACT.tab(b), 'tabkey'); }
 });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Kaffee-Logbuch</title>
 <meta name="description" content="Espresso-Shots tracken, Rezepte vergleichen und Empfehlungen zum Einstellen bekommen.">
-<meta name="theme-color" content="#f6f1ec">
+<meta name="theme-color" content="#eef4e7">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -14,6 +14,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="../shared/ui.css">
 <script>
   // Theme vor dem ersten Zeichnen setzen (kein Aufblitzen)
   try { var t = JSON.parse(localStorage.getItem('kaffee.v1') || '{}').settings; if (t && t.theme && t.theme !== 'auto') document.documentElement.dataset.theme = t.theme; } catch (e) {}
@@ -22,8 +23,10 @@
 <body>
 <noscript><p style="padding:24px;font:16px sans-serif">Das Kaffee-Logbuch braucht JavaScript.</p></noscript>
 <header class="top">
+  <a class="cockpit-btn" href="../" aria-label="Zum Cockpit" title="Zum Cockpit"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></a>
   <div class="ttl"><h1 id="title">Kaffee</h1><small id="sub"></small></div>
   <div id="hact" class="hact"></div>
+  <button class="gear-btn" data-act="tab" data-view="settings" aria-label="Einstellungen" title="Einstellungen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </header>
 
 <main id="main"></main>
@@ -36,10 +39,6 @@
   <button data-act="tab" data-view="know">
     <svg viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 4 5v13c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5V5c-3-.5-6 0-8 1.5zM12 6.5v13"/></svg>
     <span>Wissen</span>
-  </button>
-  <button data-act="tab" data-view="settings">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
-    <span>Einstellungen</span>
   </button>
 </nav>
 

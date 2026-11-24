@@ -15,7 +15,7 @@ HUND.ex = (HUND.ex || []).concat([
   st: ['Reiz in großem Abstand (z. B. 50 m)', 'Ruhiger Reiz, 30 m', 'Ruhiger Reiz, 15 m', 'Bewegter Reiz, 30 m', 'Bewegter Reiz, 15 m', 'Im Alltag spontan'],
   k: 'Er schaut zum Reiz und dreht sich danach sofort und locker zu dir – 8 von 10 Mal.',
   f: ['Zu nah', 'Zu spät markern (erst, wenn er fixiert)', 'Den Hund zwingen, wegzusehen'],
-  t: ['Gut kombinierbar mit dem „Engage–Disengage“-Spiel: erst das Hinschauen markern, später das selbstständige Wegschauen.', 'Ehrlich: Für LAT, BAT (Grisha Stewart) und Engage–Disengage gibt es keine direkten Vergleichsstudien. Das Grundprinzip – Gegenkonditionierung unterhalb der Reizschwelle – ist in der Verhaltensmedizin aber gut etabliert. Wähle, was bei deinem Hund funktioniert.', 'Schreib dir in der Trigger-Liste (unter „Mehr“) die Wohlfühlabstände auf.'],
+  t: ['Gut kombinierbar mit dem „Engage–Disengage“-Spiel: erst das Hinschauen markern, später das selbstständige Wegschauen.', 'Ehrlich: Für LAT, BAT (Grisha Stewart) und Engage–Disengage gibt es keine direkten Vergleichsstudien. Das Grundprinzip – Gegenkonditionierung unterhalb der Reizschwelle – ist in der Verhaltensmedizin aber gut etabliert. Wähle, was bei deinem Hund funktioniert.', 'Schreib dir in der Trigger-Liste (unter „Einstellungen“) die Wohlfühlabstände auf.'],
   r: 'Auch bei Wild an der Schleppleine einsetzbar: „Schau mal“ statt hetzen.' },
 
 { id: 'so-bogen', c: 'sozial', n: 'Begegnungen im Bogen & mit Abstand', l: 1, d: 'beim Gassi', w: 1,
@@ -700,7 +700,7 @@ HUND.ex = (HUND.ex || []).concat([
 
 { id: 'me-belohnung', c: 'mensch', n: 'Belohnungen richtig wählen & platzieren', l: 1, d: '10 Min',
   g: 'Du kennst die Lieblingsbelohnungen deines Hundes und setzt sie gezielt ein: richtige Art, richtiger Ort, richtiger Wert.',
-  m: ['5–6 Futtersorten', 'Spielzeug', 'Belohnungs-Hitliste (unter „Mehr“)'],
+  m: ['5–6 Futtersorten', 'Spielzeug', 'Belohnungs-Hitliste (unter „Einstellungen“)'],
   s: ['Futter-Test: Leg zwei Sorten in die Hände, lass ihn wählen. Wiederhole mit allen Kombinationen. So entsteht eine Rangliste.',
     'Leichte Übung = einfache Belohnung, schwere Übung/hohe Ablenkung = Top-Belohnung.',
     'Belohnungsplatzierung: Die Belohnung bestimmt, was der Hund lernt. Bei Leine: an der Hosennaht. Bei Bleib: in der Position. Bei Rückruf: nah an dir. Ruhe: ruhig, langsam.',
@@ -727,7 +727,7 @@ HUND.ex = (HUND.ex || []).concat([
 
 { id: 'me-signal', c: 'mensch', n: 'Signale nur 1× – und klar', l: 1, d: 'im Alltag',
   g: 'Du gibst jedes Signal nur einmal. Wenn es nicht klappt, machst du die Situation leichter, statt lauter zu werden.',
-  m: ['Signal-Lexikon (unter „Mehr“)'],
+  m: ['Signal-Lexikon (unter „Einstellungen“)'],
   s: ['Ein Signal = ein Wort. Nicht „Sitz, Sitz, SITZ“. Sonst lernt er, dass erst das dritte gilt.',
     'Reagiert er nicht: 3 Sekunden warten. Dann ist die Situation zu schwer. Hilf ihm (Körperhilfe, Abstand, leichterer Ort) und übe dort später nach.',
     'Signale nicht in Sätze einbauen („Kannst du jetzt mal bitte Sitz machen?“).',
@@ -793,7 +793,7 @@ HUND.ex = (HUND.ex || []).concat([
 
 { id: 'me-familie', c: 'mensch', n: 'Familienregeln & Signal-Lexikon', l: 1, d: '20 Min',
   g: 'Alle Menschen im Haushalt nutzen dieselben Wörter und Regeln. Inkonsequenz verwirrt Hunde mehr als alles andere.',
-  m: ['Signal-Lexikon in der App (unter „Mehr“)'],
+  m: ['Signal-Lexikon in der App (unter „Einstellungen“)'],
   s: ['Setzt euch zusammen und legt fest: Welches Wort bedeutet was? (Rückruf, Markerwort, Auflösung, Ende, „Lass es“…)',
     'Hausregeln: Sofa ja oder nein (Dackel: mit Rampe)? Füttern vom Tisch? Wer geht wann Gassi?',
     'Trage alles im Signal-Lexikon ein. Hängt es aus (z. B. am Kühlschrank).',

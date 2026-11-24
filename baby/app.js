@@ -101,7 +101,7 @@ function applyTheme() {
   const t = S.settings.theme, root = document.documentElement;
   if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('meta[name="theme-color"]').content = dark ? '#191812' : '#f3eee3';
+  $('meta[name="theme-color"]').content = dark ? '#13150c' : '#eef4e7';
 }
 applyTheme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
@@ -290,14 +290,14 @@ function draftToEntry(f, main) {
 const hasContent = x => x.kinds.length || x.poo || x.pee || x.ml || x.note;
 
 /* ───────── Rendering ───────── */
-const TITLES = { today: 'Heute', stats: 'Statistik', more: 'Mehr' };
+const TITLES = { today: 'Heute', stats: 'Statistik', more: 'Einstellungen' };
 function render() {
   if (!TITLES[S.ui.view]) S.ui.view = 'today'; // z. B. früher geöffnete To-do-Seite
   const v = S.ui.view;
   $('#title').textContent = v === 'today' && S.settings.name ? S.settings.name : TITLES[v];
   const age = fmtAge(S.settings.birth);
   $('#sub').textContent = v === 'today' ? [DAYS[new Date().getDay()] + ', ' + fmtDate(new Date()), age].filter(Boolean).join(' · ') : (S.settings.name ? S.settings.name + (age ? ' · ' + age : '') : '');
-  $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v)); $$('.gear-btn').forEach(b => b.classList.toggle('on', b.dataset.view === v));
   $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (v === 'today' ? `<button class="hbtn" data-act="shareDay" aria-label="Tag teilen"><svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button>` : '');
   const main = $('#main');
   if (v === 'today') { main.innerHTML = viewToday(); updateFeedCard(Date.now()); }

@@ -1,44 +1,17 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#f3f6f5;--card:#ffffff;--card2:#e8eeec;--line:rgba(20,40,35,.1);
-  --t1:#17201e;--t2:#5d6966;--t3:#98a4a1;
-  --acc:#0f9d88;--acc-soft:rgba(15,157,136,.12);--acc-t:#0b7d6c;--on-acc:#fff;
-  --ok:#2f9e44;--ok-soft:rgba(47,158,68,.13);
-  --run:#e8590c;--run-soft:rgba(232,89,12,.12);
-  --red-t:#c92a2a;--red-soft:rgba(229,72,77,.12);
-  --c-pain:#e5484d;--c-tight:#d99a00;--c-weak:#3b82f6;--c-syn:#0ea5a4;--c-ant:#8b5cf6;--c-mob:#5c9e31;--c-sel:#17201e;
-  --m-sil:#e2e9e7;--m-fill:#cdd7d4;--m-st:#a3b0ac;--m-j:#ffffff;--fig:#22302d;--fig2:#9aa7a3;--prop:#dfe6e4;--prop-st:#a3b0ac;
-  --shadow:0 1px 2px rgba(10,30,25,.05),0 2px 10px rgba(10,30,25,.05);
-  --blur:rgba(243,246,245,.86);
-  --r:16px;--rs:11px;
-  --top:env(safe-area-inset-top,0px);--bot:env(safe-area-inset-bottom,0px);
-  color-scheme:light;
+  --c-pain:#c4473a;--c-tight:#b98a14;--c-weak:#4f7fb8;--c-syn:#5e8f63;--c-ant:#7d6aa8;--c-mob:#7d8a2e;--c-sel:#2a2605;
+  --m-sil:#e2ecda;--m-fill:#cddfc5;--m-st:#9fb396;--m-j:#fbfdf8;--fig:#2f3a1c;--fig2:#9aa58a;--prop:#dde8d5;--prop-st:#a3b29a;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#0e1211;--card:#1a201f;--card2:#262e2c;--line:rgba(255,255,255,.09);
-    --t1:#eaf1ef;--t2:#9fada9;--t3:#66726f;
-    --acc:#2dd4bf;--acc-soft:rgba(45,212,191,.15);--acc-t:#5eead4;--on-acc:#06231f;
-    --ok:#51cf66;--ok-soft:rgba(81,207,102,.15);
-    --run:#ff8a4c;--run-soft:rgba(255,138,76,.15);
-    --red-t:#ff8787;--red-soft:rgba(248,81,73,.15);
-    --c-pain:#f85149;--c-tight:#e3b341;--c-weak:#58a6ff;--c-syn:#2dd4bf;--c-ant:#a371f7;--c-mob:#84cc16;--c-sel:#f4f8f7;
-    --m-sil:#151b1a;--m-fill:#26302e;--m-st:#42504c;--m-j:#0e1211;--fig:#e8f0ee;--fig2:#5f6d6a;--prop:#262e2c;--prop-st:#4a5754;
-    --shadow:none;--blur:rgba(14,18,17,.86);
-    color-scheme:dark;
+    --c-pain:#ec7a64;--c-tight:#e0b45c;--c-weak:#7fa9dc;--c-syn:#9ABD97;--c-ant:#a99ad0;--c-mob:#b9c46a;--c-sel:#ebf4e3;
+    --m-sil:#171a0f;--m-fill:#283020;--m-st:#47553f;--m-j:#13150c;--fig:#e3eedb;--fig2:#66725a;--prop:#292d1d;--prop-st:#4d5744;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0e1211;--card:#1a201f;--card2:#262e2c;--line:rgba(255,255,255,.09);
-  --t1:#eaf1ef;--t2:#9fada9;--t3:#66726f;
-  --acc:#2dd4bf;--acc-soft:rgba(45,212,191,.15);--acc-t:#5eead4;--on-acc:#06231f;
-  --ok:#51cf66;--ok-soft:rgba(81,207,102,.15);
-  --run:#ff8a4c;--run-soft:rgba(255,138,76,.15);
-  --red-t:#ff8787;--red-soft:rgba(248,81,73,.15);
-  --c-pain:#f85149;--c-tight:#e3b341;--c-weak:#58a6ff;--c-syn:#2dd4bf;--c-ant:#a371f7;--c-mob:#84cc16;--c-sel:#f4f8f7;
-  --m-sil:#151b1a;--m-fill:#26302e;--m-st:#42504c;--m-j:#0e1211;--fig:#e8f0ee;--fig2:#5f6d6a;--prop:#262e2c;--prop-st:#4a5754;
-  --shadow:none;--blur:rgba(14,18,17,.86);
-  color-scheme:dark;
+  --c-pain:#ec7a64;--c-tight:#e0b45c;--c-weak:#7fa9dc;--c-syn:#9ABD97;--c-ant:#a99ad0;--c-mob:#b9c46a;--c-sel:#ebf4e3;
+  --m-sil:#171a0f;--m-fill:#283020;--m-st:#47553f;--m-j:#13150c;--fig:#e3eedb;--fig2:#66725a;--prop:#292d1d;--prop-st:#4d5744;
 }
 html{-webkit-text-size-adjust:100%;background:var(--bg)}
 body{background:var(--bg);color:var(--t1);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
@@ -498,3 +471,8 @@ a.btn{text-decoration:none}
 .ms span{text-align:center;line-height:1.15}
 .ms b{display:block;font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ms small{display:block;font-size:10.5px;font-weight:700;color:var(--t2);white-space:nowrap}
+
+/* Training-Tab: Umschalter Kraft / Mobility */
+.modesw{display:flex;gap:8px;margin:2px 0 12px}
+.modesw button{flex:1;padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-weight:700;font-size:15px;color:var(--t2);box-shadow:var(--shadow);text-align:center}
+.modesw button.on{background:var(--acc);color:var(--on-acc);border-color:transparent}

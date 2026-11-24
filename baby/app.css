@@ -1,43 +1,5 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  /* Farbpalette: Oliv & Beige */
-  --bg:#f3eee3;--card:#fffcf5;--card2:#ebe4d3;--line:rgba(70,60,30,.11);
-  --t1:#2a2a1f;--t2:#6b6853;--t3:#a39e86;
-  --acc:#6b7b3a;--acc-soft:rgba(107,123,58,.14);--acc-t:#55632b;--on-acc:#fffcf5;
-  --ok:#427a33;--ok-soft:rgba(66,122,51,.14);
-  --warn:#92601a;--warn-b:#c4913a;--warn-soft:rgba(196,145,58,.15);
-  --run:#b8622f;--run-soft:rgba(184,98,47,.12);
-  --red-t:#a8432c;--red-soft:rgba(168,67,44,.08);
-  --shadow:0 1px 2px rgba(60,50,20,.06),0 2px 10px rgba(60,50,20,.06);
-  --blur:rgba(243,238,227,.86);
-  --r:16px;--rs:11px;
-  --top:env(safe-area-inset-top,0px);--bot:env(safe-area-inset-bottom,0px);
-  color-scheme:light;
-}
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --bg:#191812;--card:#23221a;--card2:#2f2d23;--line:rgba(255,248,225,.09);
-    --t1:#f0ebdc;--t2:#b3ac94;--t3:#78735e;
-    --acc:#a7b868;--acc-soft:rgba(167,184,104,.17);--acc-t:#bccb80;--on-acc:#191812;
-    --ok:#8fc06a;--ok-soft:rgba(143,192,106,.16);
-    --warn:#e0b45c;--warn-b:#d4a24a;--warn-soft:rgba(224,180,92,.14);
-    --run:#e39a64;--run-soft:rgba(227,154,100,.15);
-    --red-t:#ec8e76;--red-soft:rgba(236,142,118,.1);
-    --shadow:none;--blur:rgba(25,24,18,.86);
-    color-scheme:dark;
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#191812;--card:#23221a;--card2:#2f2d23;--line:rgba(255,248,225,.09);
-  --t1:#f0ebdc;--t2:#b3ac94;--t3:#78735e;
-  --acc:#a7b868;--acc-soft:rgba(167,184,104,.17);--acc-t:#bccb80;--on-acc:#191812;
-  --ok:#8fc06a;--ok-soft:rgba(143,192,106,.16);
-  --warn:#e0b45c;--warn-b:#d4a24a;--warn-soft:rgba(224,180,92,.14);
-  --run:#e39a64;--run-soft:rgba(227,154,100,.15);
-  --red-t:#ec8e76;--red-soft:rgba(236,142,118,.1);
-  --shadow:none;--blur:rgba(25,24,18,.86);
-  color-scheme:dark;
-}
+
 html{-webkit-text-size-adjust:100%;background:var(--bg)}
 body{background:var(--bg);color:var(--t1);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
 body.locked{overflow:hidden}
@@ -104,7 +66,7 @@ main{padding:4px 14px calc(96px + var(--bot));max-width:1100px;margin:0 auto}
 .running .ri b{display:block;font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.15}
 .running .rs{display:flex;gap:6px}
 .running .rs .tg{width:40px;height:44px;min-height:0;padding:0;font-size:17px}
-.running .stop{min-height:44px;padding:0 12px;flex:none;background:var(--run);color:#fff;border-radius:12px;font-weight:800;box-shadow:none}
+.running .stop{min-height:44px;padding:0 12px;flex:none;background:var(--run);color:var(--on-acc);border-radius:12px;font-weight:800;box-shadow:none}
 
 /* Vitamin D */
 .vitd{display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;margin-bottom:10px;text-align:left;font-weight:600;font-size:15px}

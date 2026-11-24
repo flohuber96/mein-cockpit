@@ -1,7 +1,7 @@
 // Offline-Cache für den Essensplaner. Bei Änderungen VERSION erhöhen.
-const VERSION = 'essen-v13';
+const VERSION = 'essen-v14';
 const IMG_CACHE = 'essenimg-v1'; // Rezeptfotos: eigener Cache, bleibt bei App-Updates erhalten
-const FILES = ['./', 'index.html', 'app.css', 'app.js', 'tinder.js', 'extras.js', 'photos.js', 'haushalt-data.js', 'haushalt.js', '../shared/cloud.js', 'foods.js', 'nutri.js', 'depts.js', 'curation.js', 'recipes.js', 'recipes2.js', 'recipes3.js', 'recipes4.js', 'recipes5.js', 'recipes6.js', 'recipes7.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+const FILES = ['./', 'index.html', 'app.css', 'app.js', 'tinder.js', 'extras.js', 'photos.js', 'haushalt-data.js', 'haushalt.js', '../shared/cloud.js', '../shared/ui.css', 'foods.js', 'nutri.js', 'depts.js', 'curation.js', 'recipes.js', 'recipes2.js', 'recipes3.js', 'recipes4.js', 'recipes5.js', 'recipes6.js', 'recipes7.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 const TIMEOUT = 3000; // so lange aufs Netz warten, dann den gespeicherten Stand zeigen
 let slowUntil = 0;    // war das Netz gerade zäh, kommen die nächsten Dateien sofort aus dem Cache
 

@@ -333,7 +333,7 @@ HUND.wissen = [
   'Zecken übertragen Krankheiten (z. B. Borreliose, Anaplasmose, Babesiose). In der Zeckensaison (die in milden Wintern fast ganzjährig dauert) einen wirksamen Schutz verwenden und nach jedem Spaziergang absuchen.',
   '## Jährlicher Check',
   'Allgemeinuntersuchung, Zähne, Gewicht, Herz, Gelenke. Ab dem mittleren Alter ggf. Blutbild.',
-  '! Trage Termine unter „Mehr → Gesundheit“ ein, mit Datum für den nächsten Termin. Die App erinnert dich auf dem Heute-Bildschirm.'] },
+  '! Trage Termine unter „Einstellungen → Gesundheit“ ein, mit Datum für den nächsten Termin. Die App erinnert dich auf dem Heute-Bildschirm.'] },
 
 { id: 'w-notfall', g: 'gesund', e: '🚨', n: 'Giftiges & Notfälle', min: 5, sum: 'Was giftig ist, welche Symptome Alarm bedeuten und wie du im Notfall reagierst.',
   b: ['## Giftig für Hunde (Auswahl)',
@@ -458,7 +458,7 @@ HUND.wissen = [
   '- Ferienunterkunft: Hundegerecht? Garten eingezäunt? Wildgebiet?',
   '## Betreuung',
   '- Hundesitter oder Pension vorher kennenlernen, Probetag einplanen.',
-  '- Signal-Lexikon und Regeln mitgeben (in der App unter „Mehr“).',
+  '- Signal-Lexikon und Regeln mitgeben (in der App unter „Einstellungen“).',
   '- Notfallnummern, Tierarzt, Futterplan, Medikamente.',
   '- Bei jagdlich motivierten Hunden ausdrücklich: Schleppleine am Geschirr, kein Freilauf.',
   '! Neue Orte sind für den Hund anstrengend. Plane in den ersten Tagen viel Ruhe ein.'] },

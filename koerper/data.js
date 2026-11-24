@@ -1,7 +1,7 @@
 'use strict';
 /* ═══════════════════════════════════════════════════════════════════════════
    KÖRPER-COACH · Inhalte
-   Baut auf ../koerper-data.js (Muskeln, Gelenke, Themen, Selbsttests, Basis-
+   Baut auf koerper-data.js (Muskeln, Gelenke, Themen, Selbsttests, Basis-
    Übungen) auf und ergänzt: Tier-Ranking, weitere Übungen, Dehnroutinen,
    Trainingsvorlagen, Anatomie-Details, Rad-Ratgeber.
    Allgemeines Trainingswissen – keine medizinische Diagnose.

@@ -12,7 +12,7 @@ VIEWS.mob = {
   actions: () => '<button class="hbtn" data-act="timer" aria-label="Timer">⏱</button>',
   render() {
     const m = ui.mob;
-    return `<div class="seg">${[['routines', 'Routinen'], ['lib', 'Dehnübungen'], ['log', 'Verlauf']].map(([k, n]) => `<button data-act="mSub" data-v="${k}" class="${m.sub === k ? 'on' : ''}">${n}</button>`).join('')}</div>` + (m.sub === 'routines' ? mRoutines() : m.sub === 'log' ? mLog() : libWrap('mob', mLib));
+    return modeSw('mob') + `<div class="seg">${[['routines', 'Routinen'], ['lib', 'Dehnübungen'], ['log', 'Verlauf']].map(([k, n]) => `<button data-act="mSub" data-v="${k}" class="${m.sub === k ? 'on' : ''}">${n}</button>`).join('')}</div>` + (m.sub === 'routines' ? mRoutines() : m.sub === 'log' ? mLog() : libWrap('mob', mLib));
   }
 };
 

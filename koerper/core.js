@@ -30,7 +30,7 @@ const vib = p => { if (S.settings.vib !== false && navigator.vibrate) navigator.
 const nm = id => (D.M[id] || D.J[id] || {}).n || id;
 const info = id => D.M[id] ? Object.assign({ kind: 'm', id }, D.M[id]) : D.J[id] ? Object.assign({ kind: 'j', id }, D.J[id]) : null;
 const ul = (arr, dot) => arr && arr.length ? `<ul class="ul"${dot ? ` style="--dot:${dot}"` : ''}>${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
-const painCol = l => l >= 7 ? '#e5484d' : l >= 4 ? '#d99a00' : '#2f9e44';
+const painCol = l => l >= 7 ? '#c4473a' : l >= 4 ? '#b98a14' : '#4c7a39';
 
 /* ───────── Zustand ───────── */
 const KEY = 'koerper.v1';
@@ -38,7 +38,7 @@ const boot = { rebuilt: false };
 function fresh() {
   return {
     v: 1, sid: uid(), pains: {}, tests: {}, snaps: [], sessions: [], routines: [], templates: [], rides: [], favs: {}, well: {}, testv: {}, painLog: {},
-    settings: { theme: 'auto', rest: 90, sound: true, vib: true, prep: 5, goalK: 2, goalM: 4, ftp: null },
+    settings: { theme: 'auto', rest: 90, sound: true, vib: true, prep: 5, goalK: 2, goalM: 4, goalR: 0, ftp: null },
     active: null, ui: { view: 'home' }
   };
 }
@@ -83,7 +83,7 @@ function applyTheme() {
   const t = S.settings.theme, root = document.documentElement;
   if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('meta[name="theme-color"]').content = dark ? '#0e1211' : '#f3f6f5';
+  $('meta[name="theme-color"]').content = dark ? '#13150c' : '#eef4e7';
 }
 applyTheme();
 { const mq = matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', applyTheme); }
@@ -249,7 +249,7 @@ function render() {
   $('#sub').textContent = V.sub ? V.sub() : '';
   $('#hact').innerHTML = (window.Cloud ? Cloud.badge() : '') + (V.actions ? V.actions() : '');
   $('#main').innerHTML = V.render();
-  $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v || (v === 'mob' && b.dataset.view === 'train')));
   renderDock();
 }
 function go(view, patch) {
